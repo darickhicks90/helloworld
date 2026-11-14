@@ -13,6 +13,14 @@ or with just your screen and computer keyboard.
 | 🦷 **Teeth** | Rhythmic audio mangler: pitch, delay and modulation mixed on faders, controlled with an XY touchpad and cut up by a 16-step "bite" pattern | A jaw full of teeth |
 | 🦊 **Den** | Mixer, MIDI device setup and help | |
 
+## The look
+
+FoxBox is drawn in a 16-bit, cottagecore pixel-art style using four colours:
+orange, aqua, off-white and brown. It has wooden panels, gingham
+tablecloths, pixel flowers and mushrooms, and a little pixel fox. The pixel
+fonts come from Google Fonts. Without internet, FoxBox uses a plain
+monospace font instead.
+
 ## How to run it
 
 FoxBox is just files. You don't need to install or build anything.

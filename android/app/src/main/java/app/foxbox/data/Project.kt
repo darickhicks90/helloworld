@@ -5,6 +5,7 @@ import android.content.Context
 import android.os.Environment
 import android.provider.MediaStore
 import app.foxbox.audio.Audio
+import app.foxbox.fx.Flower
 import app.foxbox.seq.Clip
 import org.json.JSONArray
 import org.json.JSONObject
@@ -30,6 +31,8 @@ class Project(val dir: File) {
     val clips = mutableListOf<Clip>()
     /** Valley links between clip ids (or "fox"). */
     val links = mutableListOf<Pair<String, String>>()
+    /** Effects the player has designed (Flowers). */
+    val flowers = mutableListOf<Flower>()
     var engineState = JSONObject()
 
     val samplesDir get() = File(dir, "samples")
@@ -41,6 +44,7 @@ class Project(val dir: File) {
         put("seventh", seventh); put("octave", octave); put("loopBars", loopBars)
         put("metronome", metronome); put("quantize", quantize); put("modified", modified)
         put("clips", JSONArray().apply { clips.forEach { put(it.toJson()) } })
+        put("flowers", JSONArray().apply { flowers.forEach { put(it.toJson()) } })
         put("links", JSONArray().apply { links.forEach { put(JSONArray(listOf(it.first, it.second))) } })
         put("engines", engineState)
     }
@@ -51,7 +55,9 @@ class Project(val dir: File) {
         octave = o.optInt("octave"); loopBars = o.optInt("loopBars", 4)
         metronome = o.optBoolean("metronome", true); quantize = o.optBoolean("quantize", true)
         modified = o.optLong("modified", modified)
-        clips.clear(); o.optJSONArray("clips")?.let { a -> for (i in 0 until a.length()) clips += Clip.fromJson(a.getJSONObject(i)) }
+        val known = Audio.engines.map { it.id }.toSet()
+        clips.clear(); o.optJSONArray("clips")?.let { a -> for (i in 0 until a.length()) Clip.fromJson(a.getJSONObject(i)).let { if (it.engine in known) clips += it } }
+        flowers.clear(); o.optJSONArray("flowers")?.let { a -> for (i in 0 until a.length()) flowers += Flower.fromJson(a.getJSONObject(i)) }
         links.clear(); o.optJSONArray("links")?.let { a -> for (i in 0 until a.length()) a.getJSONArray(i).let { links += it.getString(0) to it.getString(1) } }
         engineState = o.optJSONObject("engines") ?: JSONObject()
     }
@@ -59,20 +65,22 @@ class Project(val dir: File) {
     /** Capture every engine's params + extra state. */
     fun captureEngines() {
         engineState = JSONObject().apply {
-            Audio.all.forEach { e -> put(e.id, JSONObject().apply { put("params", e.p.save()); e.saveExtra(this) }) }
+            Audio.engines.forEach { e -> put(e.id, JSONObject().apply { put("params", e.p.save()); e.saveExtra(this) }) }
         }
     }
 
     /** Push this project's settings into the engines. */
     fun applyEngines() {
-        Audio.all.forEach { e ->
+        Audio.engines.forEach { e ->
             val o = engineState.optJSONObject(e.id)
             e.p.load(o?.optJSONObject("params"))
             e.loadExtra(o)
         }
-        Audio.reflections.setSample(AudioFiles.readWav(File(samplesDir, "reflections.wav")) ?: app.foxbox.engines.Reflections.droplet(),
-            engineState.optJSONObject("reflections")?.optString("sampleName", "Droplet") ?: "Droplet")
-        Audio.leaves.loaded = AudioFiles.readWav(File(samplesDir, "leaves.wav"))
+        listOf(Audio.reflections, Audio.leaves).forEach { e ->
+            val data = AudioFiles.readWav(File(samplesDir, "${e.id}.wav"))
+            if (data != null) e.setSample(data, engineState.optJSONObject(e.id)?.optString("sampleName", "Sample") ?: "Sample")
+            else e.resetSample()
+        }
         Audio.transport.bpm = bpm; Audio.transport.metronome = metronome; Audio.transport.quantize = quantize
     }
 }
@@ -95,7 +103,7 @@ object ProjectStore {
         val p = Project(File(root, UUID.randomUUID().toString().take(12)))
         p.name = name.ifBlank { "New Song" }
         p.dir.mkdirs()
-        Audio.all.forEach { e -> e.p.load(null); e.loadExtra(null) }
+        Audio.engines.forEach { e -> e.p.load(null); e.loadExtra(null) }
         p.captureEngines()
         save(p)
         return p
@@ -123,7 +131,7 @@ object ProjectStore {
 
     /** Write a clip's MIDI file into the project and to Music/FoxBox. */
     fun saveClipMidi(p: Project, clip: Clip) {
-        val bytes = clip.toMidiFile(p.bpm, channel = Audio.all.indexOfFirst { it.id == clip.engine }.coerceAtLeast(0))
+        val bytes = clip.toMidiFile(p.bpm, channel = Audio.engines.indexOfFirst { it.id == clip.engine }.coerceAtLeast(0))
         val name = safe("${clip.name}.mid")
         File(p.midiDir.apply { mkdirs() }, name).writeBytes(bytes)
         exportToMusic(p, "MIDI", name, "audio/midi", bytes)

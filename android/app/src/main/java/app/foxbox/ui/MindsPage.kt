@@ -25,10 +25,12 @@ class MindsPage(c: Context) : LinearLayout(c) {
         addView(grid, lp(0, MATCH, 1f))
         val side = LinearLayout(c).apply { orientation = VERTICAL; setPadding(Px.dp(6), 0, 0, 0) }
         onBtn.onClick = { minds.enabled.set(if (minds.enabled.on) 0f else 1f); Studio.save(); refresh() }
-        val gen = Btn(c, "Generate", Pal.AQUA).apply { onClick = { minds.generate(Random.nextInt(1, 99999)); Studio.save(); grid.invalidate() } }
+        val gen = Btn(c, "New layer", Pal.AQUA).apply { onClick = { minds.generate(Random.nextInt(1, 99999)); Studio.save(); grid.invalidate() } }
+        val keep = Btn(c, "Keep", Pal.AQUA).apply { onClick = { minds.keepGenerated(); Studio.save(); grid.invalidate() } }
         val clear = Btn(c, "Clear").apply { onClick = { minds.clear(); Studio.save(); grid.invalidate() } }
+        val btns = LinearLayout(c).apply { orientation = VERTICAL; addView(gen, lp(MATCH, Px.dp(40))); addView(row(c, keep, clear).apply { keep.layoutParams = lp(0, Px.dp(40), 1f); clear.layoutParams = lp(0, Px.dp(40), 1f) }, lp(MATCH, WRAP)) }
         side.addView(onBtn, lp(MATCH, Px.dp(44)))
-        side.addView(row(c, gen, clear).apply { gen.layoutParams = lp(0, Px.dp(40), 1f); clear.layoutParams = lp(0, Px.dp(40), 1f) }, lp(MATCH, WRAP))
+        side.addView(row(c, Knob(c, minds.generative, Pal.ORANGE), btns).apply { btns.layoutParams = lp(0, WRAP, 1f) }, lp(MATCH, WRAP))
         side.addView(drumPanel, lp(MATCH, 0, 1f))
         addView(side, lp(Px.dp(250), MATCH))
         onStudio { refresh() }
@@ -90,6 +92,9 @@ class MindsPage(c: Context) : LinearLayout(c) {
                     val v = minds.pattern[r][s]
                     val base = if (s / 4 % 2 == 0) Pal.BROWN else 0xFF8A5733.toInt()
                     c.fill(l + u, t + u, l + cw - u, t + rh - u, if (v > 0f) Pal.alpha(colors[r], 0.4f + v * 0.6f) else base)
+                    // The generative layer shows as a small dot, brighter the more it is mixed in.
+                    if (minds.generated[r][s] > 0f && minds.generative.value > 0.01f)
+                        c.fill(l + cw / 2 - u, t + rh / 2 - u, l + cw / 2 + u, t + rh / 2 + u, Pal.alpha(Pal.CREAM, 0.25f + minds.generative.value * 0.75f))
                     if (s == step) c.fill(l + u, t + u, l + cw - u, t + u * 2, Pal.CREAM)
                 }
             }

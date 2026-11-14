@@ -39,6 +39,12 @@ class Param(
         listeners.forEach { it() }
     }
 
+    /** The value this param would have at normalised position n (0..1). */
+    fun valueAt(n: Float): Float {
+        val c = n.coerceIn(0f, 1f)
+        return if (exp) min * (max / min).pow(c) else min + c * (max - min)
+    }
+
     var norm: Float
         get() = if (exp) (ln(value / min) / ln(max / min)) else (value - min) / (max - min)
         set(n) {

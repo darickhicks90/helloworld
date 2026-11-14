@@ -15,7 +15,10 @@ import android.view.WindowManager
 import android.widget.EditText
 import android.widget.Toast
 import app.foxbox.audio.Audio
-import app.foxbox.audio.Engine
+import app.foxbox.audio.DeviceAudio
+import app.foxbox.audio.XyState
+import app.foxbox.engines.SampleEngine
+import app.foxbox.fx.Flower
 import app.foxbox.data.AudioFiles
 import app.foxbox.data.Project
 import app.foxbox.data.ProjectStore
@@ -33,14 +36,16 @@ class MainActivity : Activity(), Host {
     private lateinit var midi: MidiInput
     private var screen = 0 // 0 projects, 1 studio, 2 valley
     private var studio: StudioScreen? = null
-    private var pickFor: Engine? = null
+    private var pickFor: SampleEngine? = null
     private var mic: AudioFiles.Mic? = null
-    override val micOn get() = mic != null
+    private var micFor: SampleEngine? = null
+    override fun micOn(e: SampleEngine) = mic != null && micFor === e
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         volumeControlStream = android.media.AudioManager.STREAM_MUSIC
+        DeviceAudio.configure(this) // before anything creates the engines
         Px.init(this)
         ProjectStore.init(this)
         Studio.onMessage = { Toast.makeText(this, it, Toast.LENGTH_SHORT).show() }
@@ -136,7 +141,7 @@ class MainActivity : Activity(), Host {
         AlertDialog.Builder(this).setTitle(clip.name).setItems(items) { _, which ->
             when (which) {
                 0 -> Studio.toggleClip(clip)
-                1 -> if (clip.inValley) Studio.removeFromValley(clip) else Studio.sendToValley(clip)
+                1 -> if (clip.inValley) Studio.removeFromValley(clip.id) else Studio.sendToValley(clip)
                 2 -> {
                     val opts = arrayOf(1, 2, 3, 4, 6, 8, 12, 16)
                     AlertDialog.Builder(this).setTitle("Length (now ${clip.lengthTicks / Ticks.BAR} bars)")
@@ -164,7 +169,25 @@ class MainActivity : Activity(), Host {
         }.setNegativeButton("Close", null).show()
     }
 
-    override fun pickAudio(e: Engine) {
+    override fun chooseXyTarget(xy: XyState, isX: Boolean) {
+        val choice = if (isX) xy.xTarget else xy.yTarget
+        AlertDialog.Builder(this).setTitle(if (isX) "X axis controls…" else "Y axis controls…")
+            .setSingleChoiceItems(xy.targets.map { it.name }.toTypedArray(), choice.index) { d, i -> choice.set(i.toFloat()); Studio.save(); Studio.changed(); d.dismiss() }
+            .setNegativeButton("Cancel", null).show()
+    }
+
+    override fun flowerMenu(f: Flower) {
+        AlertDialog.Builder(this).setTitle(f.name).setItems(arrayOf(if (f.inValley) "Remove from Valley" else "Plant in Valley", "Rename", "Duplicate", "Delete")) { _, which ->
+            when (which) {
+                0 -> if (f.inValley) Studio.removeFromValley(f.id) else Studio.plantFlower(f)
+                1 -> textDialog("Rename flower", f.name) { Studio.renameFlower(f, it) }
+                2 -> Studio.duplicateFlower(f)
+                3 -> Studio.deleteFlower(f)
+            }
+        }.show()
+    }
+
+    override fun pickAudio(e: SampleEngine) {
         pickFor = e
         val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply { addCategory(Intent.CATEGORY_OPENABLE); type = "audio/*" }
         @Suppress("DEPRECATION") startActivityForResult(i, REQ_FILE)
@@ -190,26 +213,28 @@ class MainActivity : Activity(), Host {
         }.start()
     }
 
-    override fun toggleMic() {
+    override fun toggleMic(e: SampleEngine) {
         val m = mic
         if (m != null) {
-            mic = null
-            Thread { val data = m.stop(); runOnUiThread { Studio.setSample(Audio.reflections, data, "Mic recording"); Studio.changed() } }.start()
+            val target = micFor ?: e
+            mic = null; micFor = null
+            Thread { val data = m.stop(); runOnUiThread { Studio.setSample(target, data, "Mic recording") } }.start()
             Studio.changed(); return
         }
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQ_MIC); return
+            micWaiting = e; requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQ_MIC); return
         }
-        mic = AudioFiles.Mic()
-        Studio.message("Recording from the microphone… tap Stop mic when done")
+        mic = AudioFiles.Mic(); micFor = e
+        Studio.message("Recording into ${e.title} from the microphone… tap Stop mic when done")
         Studio.changed()
     }
+    private var micWaiting: SampleEngine? = null
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         val ok = grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }
         when (requestCode) {
-            REQ_MIC -> if (ok) toggleMic() else Studio.message("FoxBox needs the microphone to record samples")
+            REQ_MIC -> if (ok) micWaiting?.let { toggleMic(it) } else Studio.message("FoxBox needs the microphone to record samples")
             REQ_BT -> if (ok) midi.pairBluetooth() else Studio.message("FoxBox needs Bluetooth permission to find controllers")
         }
     }

@@ -6,7 +6,6 @@ import app.foxbox.audio.EventRing
 import app.foxbox.audio.Fmt
 import app.foxbox.audio.Param
 import app.foxbox.audio.Rng
-import app.foxbox.audio.SR
 import app.foxbox.audio.SRF
 import app.foxbox.audio.Svf
 import app.foxbox.audio.TAU
@@ -14,32 +13,41 @@ import app.foxbox.audio.semis
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.math.exp
+import kotlin.math.pow
 import kotlin.math.round
 import kotlin.math.sin
 
 /**
- * Minds — glitchy generative drums. Eight synthesized drums play a 16-step
- * pattern you can draw by hand or grow from a seed; Chaos, Glitch and
- * Mutate bend it while it plays. The sequencer can be switched off.
+ * Minds — drums with a generative brain. You draw a 16-step pattern; the
+ * Generative knob (0–100%) blends in an evolving, seeded pattern plus
+ * chaos, glitches and mutation. 0% plays exactly what you drew.
  */
 class Minds : Engine("minds", "Minds") {
-    override val xName = ""
-    override val yName = ""
-
     companion object {
         val DRUMS = listOf("Kick", "Snare", "Hat", "Click", "Zap", "Crunch", "Metal", "Ghost")
         const val STEPS = 16
         private val DENSITY = floatArrayOf(0.28f, 0.16f, 0.6f, 0.3f, 0.13f, 0.15f, 0.1f, 0.16f)
+        private val BASE_DECAY = floatArrayOf(0.11f, 0.06f, 0.025f, 0.006f, 0.04f, 0.04f, 0.07f, 0.09f)
     }
 
     init { p.section("Sequencer") }
     val enabled = p.toggle("on", "Sequencer", true)
+    val generative = p.num("generative", "Generative", 0f, 1f, 0.5f, Fmt.PCT)
     val density = p.num("density", "Density", 0f, 1f, 0.5f, Fmt.PCT)
     val swing = p.num("swing", "Swing", 0f, 0.6f, 0f, Fmt.PCT)
-    val mutate = p.num("mutate", "Mutation", 0f, 1f, 0f, Fmt.PCT)
-    val chaos = p.num("chaos", "Chaos", 0f, 1f, 0.2f, Fmt.PCT)
-    val glitch = p.num("glitch", "Glitch", 0f, 1f, 0.15f, Fmt.PCT)
-    val crush = p.num("crush", "Bitcrush", 0f, 1f, 0f, Fmt.PCT)
+    val mutate = p.num("mutate", "Mutation", 0f, 1f, 0.3f, Fmt.PCT)
+    val chaos = p.num("chaos", "Chaos", 0f, 1f, 0.3f, Fmt.PCT)
+    val glitch = p.num("glitch", "Glitch", 0f, 1f, 0.25f, Fmt.PCT)
+
+    init { p.section("Amp Envelope") }
+    private val ampAttack = p.num("attack", "Amp Attack", 0.0005f, 0.05f, 0.0008f, Fmt.SEC, exp = true)
+    private val ampDecay = p.num("decay", "Amp Decay", 0.25f, 3f, 1f, Fmt.X, exp = true)
+    init { p.section("Filter") }
+    private val cutoff = p.num("cutoff", "Cutoff", 80f, 18000f, 14000f, Fmt.HZ, exp = true)
+    private val res = p.num("res", "Resonance", 0f, 1f, 0.1f, Fmt.PCT)
+    private val envAmt = p.num("envAmt", "Filter Env Amount", -1f, 1f, 0f)
+    private val fDecay = p.num("fDecay", "Filter Decay", 0.005f, 1f, 0.08f, Fmt.SEC, exp = true)
+    private val crush = p.num("crush", "Bitcrush", 0f, 1f, 0f, Fmt.PCT)
 
     class DrumParams(val tune: Param, val decay: Param, val tone: Param, val level: Param)
     val drumParams: List<DrumParams> = DRUMS.mapIndexed { i, name ->
@@ -51,43 +59,40 @@ class Minds : Engine("minds", "Minds") {
             p.num("d${i}level", "$name Level", 0f, 1f, 0.8f, Fmt.PCT),
         )
     }
-    init { mixParams(0.85f, 0.08f) }
+    init { finishParams("chaos", "glitch", 0.85f, 0.08f) }
 
-    /** pattern[drum][step] = velocity (0 = off). Edited from the UI. */
+    /** Your hand-drawn pattern: pattern[drum][step] = velocity (0 = off). */
     val pattern = Array(DRUMS.size) { FloatArray(STEPS) }
+    /** The generative layer, grown from a seed and mutated as it plays. */
+    val generated = Array(DRUMS.size) { FloatArray(STEPS) }
     @Volatile var seed = 1234
     @Volatile var currentStep = -1
-    /** Hit events for the UI: a = drum index, b = velocity. */
     val hits = EventRing(64)
 
     private val rng = Rng(31)
     private val drums = List(DRUMS.size) { Drum(it) }
 
-    init { generate(seed) }
+    init { fill(pattern, 1234); generate(4321) }
 
-    // ------------------------------------------------------------------ patterns
-
-    fun generate(newSeed: Int) {
-        seed = newSeed
-        val r = Rng(newSeed * 7919 + 1)
+    private fun fill(target: Array<FloatArray>, s: Int) {
+        val r = Rng(s * 7919 + 1)
         val d = density.value
-        for (v in DRUMS.indices) for (s in 0 until STEPS) {
+        for (v in DRUMS.indices) for (st in 0 until STEPS) {
             var pr = DENSITY[v] * (0.3f + d * 1.6f)
-            if (v == 0 && s % 4 == 0) pr += 0.35f
-            if (v == 1 && (s == 4 || s == 12)) pr += 0.6f
-            if (v == 2 && s % 2 == 0) pr += 0.2f
-            pattern[v][s] = if (r.next() < pr) round((0.35f + r.next() * 0.65f) * 100f) / 100f else 0f
+            if (v == 0 && st % 4 == 0) pr += 0.35f
+            if (v == 1 && (st == 4 || st == 12)) pr += 0.6f
+            if (v == 2 && st % 2 == 0) pr += 0.2f
+            target[v][st] = if (r.next() < pr) round((0.35f + r.next() * 0.65f) * 100f) / 100f else 0f
         }
-        pattern[0][0] = 1f
+        target[0][0] = 1f
     }
 
+    /** Grow a new generative layer. */
+    fun generate(newSeed: Int) { seed = newSeed; fill(generated, newSeed) }
+    /** Copy the generative layer into your grid. */
+    fun keepGenerated() { for (v in DRUMS.indices) generated[v].copyInto(pattern[v]) }
     fun toggleStep(drum: Int, step: Int) { pattern[drum][step] = if (pattern[drum][step] > 0f) 0f else 0.9f }
     fun clear() = pattern.forEach { it.fill(0f) }
-
-    private fun mutateNow(amount: Float) {
-        for (v in DRUMS.indices) for (s in 0 until STEPS)
-            if (rng.next() < amount * 0.15f) pattern[v][s] = if (pattern[v][s] > 0f) 0f else 0.3f + rng.next() * 0.6f
-    }
 
     // ------------------------------------------------------------------ sequencing
 
@@ -105,13 +110,14 @@ class Minds : Engine("minds", "Minds") {
         val idx = (step % STEPS).toInt()
         currentStep = idx
         if (!enabled.on) return
+        val gen = generative.value
         val stepFrames = SRF * 60f / Audio.transport.bpm / 4f
         val swingDelay = if (idx % 2 == 1) swing.value * stepFrames * 0.5f else 0f
-        val ch = chaos.value; val gl = glitch.value
+        val ch = chaos.value * gen; val gl = glitch.value * gen
         if (stutterLeft <= 0 && rng.next() < gl * 0.06f) { stutterLeft = 1 + (rng.next() * 3).toInt(); stutterSrc = (idx + 15) % STEPS; stutterDiv = 2 + (rng.next() * 4).toInt() }
         val src = if (stutterLeft > 0) stutterSrc else idx
         for (v in DRUMS.indices) {
-            var vel = pattern[v][src]
+            var vel = if (rng.next() < gen) generated[v][src] else pattern[v][src]
             if (vel > 0f && rng.next() < ch * 0.18f) vel = 0f
             if (vel == 0f && rng.next() < ch * 0.05f) vel = 0.25f + rng.next() * 0.3f
             if (vel <= 0f) continue
@@ -125,14 +131,12 @@ class Minds : Engine("minds", "Minds") {
             }
         }
         if (stutterLeft > 0) stutterLeft--
-        if (idx == STEPS - 1 && mutate.value > 0f) mutateNow(mutate.value)
+        val m = mutate.value * gen
+        if (idx == STEPS - 1 && m > 0f) for (v in DRUMS.indices) for (s in 0 until STEPS)
+            if (rng.next() < m * 0.15f) generated[v][s] = if (generated[v][s] > 0f) 0f else 0.3f + rng.next() * 0.6f
     }
 
-    /** Live and clip-playback hits (recording of live hits is done by the caller). */
-    override fun noteOn(key: Int, note: Int, vel: Float) {
-        val v = Math.floorMod(note - 36, DRUMS.size)
-        fire(v, vel, 0f, record = false)
-    }
+    override fun noteOn(key: Int, note: Int, vel: Float) = fire(Math.floorMod(note - 36, DRUMS.size), vel, 0f, record = false)
     override fun noteOff(key: Int) {}
     override fun allOff() { pending = 0; drums.forEach { it.active = false } }
 
@@ -145,8 +149,9 @@ class Minds : Engine("minds", "Minds") {
 
     // ------------------------------------------------------------------ audio
 
-    private var crushHoldL = 0f; private var crushCount = 0
+    private var crushHold = 0f; private var crushCount = 0
     override fun render(l: FloatArray, r: FloatArray, n: Int) {
+        xy.begin()
         var i = 0
         while (i < pending) {
             pendDelay[i] -= n
@@ -156,35 +161,33 @@ class Minds : Engine("minds", "Minds") {
                 pendDrum[i] = pendDrum[pending]; pendVel[i] = pendVel[pending]; pendDelay[i] = pendDelay[pending]; pendPitch[i] = pendPitch[pending]
             } else i++
         }
-        val c = crush.value
-        val levels = if (c > 0.01f) Math.pow(2.0, (16f - c * 13f).toDouble()).toFloat() / 2f else 0f
+        val c = v(crush)
+        val levels = if (c > 0.01f) 2f.pow(16f - c * 13f) / 2f else 0f
         val down = 1 + (c * c * 30f).toInt()
-        var count = 0
+        for (d in drums) if (d.active) d.prepare()
         for (s in 0 until n) {
             var o = 0f
-            for (d in drums) if (d.active) o += d.next()
-            if (levels > 0f) {
-                if (crushCount++ % down == 0) crushHoldL = round(o * levels) / levels
-                o = crushHoldL
-            }
+            for (d in drums) if (d.active) o += d.next(s)
+            if (levels > 0f) { if (crushCount++ % down == 0) crushHold = round(o * levels) / levels; o = crushHold }
             l[s] += o; r[s] += o
         }
-        for (d in drums) if (d.active) count++
-        activeVoices = count
+        activeVoices = drums.count { it.active }
     }
 
     private inner class Drum(val type: Int) {
         var active = false
-        private var t = 0; private var env = 0f; private var dec = 0.999f
+        private var t = 0; private var env = 0f; private var peak = 0f; private var dec = 0.999f; private var atkInc = 1f; private var attacking = false
+        private var fenv = 0f; private var fdec = 0.99f
         private var ph = 0f; private var ph2 = 0f; private var tune = 1f; private var tone = 0.5f
-        private val f = Svf(); private var hold = 0f; private var holdN = 8; private var gain = 1f
+        private val f = Svf(); private val lp = Svf(); private var hold = 0f; private var holdN = 8; private var gain = 1f
 
         fun trigger(vel: Float, pitch: Float) {
             val dp = drumParams[type]
             tune = semis(dp.tune.value + pitch); tone = dp.tone.value; gain = dp.level.value
-            val base = floatArrayOf(0.11f, 0.06f, 0.025f, 0.006f, 0.04f, 0.04f, 0.07f, 0.09f)[type]
-            dec = exp(-1f / (base * dp.decay.value * SRF))
-            t = 0; env = vel; ph = 0f; ph2 = 0f; active = true
+            dec = exp(-1f / (BASE_DECAY[type] * dp.decay.value * v(ampDecay) * SRF))
+            atkInc = 1f / (v(ampAttack) * SRF); attacking = true
+            fdec = exp(-1f / (v(fDecay) * SRF)); fenv = 1f
+            t = 0; env = 0f; peak = vel; ph = 0f; ph2 = 0f; active = true
             when (type) {
                 1 -> f.set(1300f + tone * 3000f, 0.2f)
                 2 -> f.set(5000f + tone * 6000f, 0.3f)
@@ -195,51 +198,57 @@ class Minds : Engine("minds", "Minds") {
             }
         }
 
-        fun next(): Float {
+        /** Control-rate: update the drum's filter from the filter envelope. */
+        fun prepare() { lp.set(v(cutoff) * 2f.pow(v(envAmt) * fenv * 6f), v(res) * 0.9f) }
+
+        fun next(@Suppress("UNUSED_PARAMETER") s: Int): Float {
             val nz = rng.bi()
             val out = when (type) {
-                0 -> { // Kick: pitch-swept sine plus click
+                0 -> {
                     val fr = 45f * tune * (1f + 3.5f * exp(-t / (0.025f * SRF)))
                     ph += fr / SRF; if (ph >= 1f) ph -= 1f
-                    val s = sin(TAU * ph) * (1f + tone * 2f)
-                    s / (1f + kotlin.math.abs(s) * 0.5f) + nz * exp(-t / (0.002f * SRF)) * tone * 0.5f
+                    val x = sin(TAU * ph) * (1f + tone * 2f)
+                    x / (1f + kotlin.math.abs(x) * 0.5f) + nz * exp(-t / (0.002f * SRF)) * tone * 0.5f
                 }
-                1 -> { // Snare: tone body + filtered noise
-                    ph += 190f * tune / SRF; if (ph >= 1f) ph -= 1f
-                    f.process(nz); f.high * (0.4f + tone * 0.6f) + sin(TAU * ph) * (1f - tone) * 0.8f
-                }
-                2 -> { f.process(nz); f.high * 0.6f } // Hat: high-passed noise
-                3 -> { f.process(nz); f.band * 3f } // Click: resonant noise ping
-                4 -> { // Zap: fast falling sine
+                1 -> { ph += 190f * tune / SRF; if (ph >= 1f) ph -= 1f; f.process(nz); f.high * (0.4f + tone * 0.6f) + sin(TAU * ph) * (1f - tone) * 0.8f }
+                2 -> { f.process(nz); f.high * 0.6f }
+                3 -> { f.process(nz); f.band * 3f }
+                4 -> {
                     val fr = 70f * tune + 2400f * tune * exp(-t / (0.015f * SRF * (0.5f + tone)))
                     ph += fr / SRF; if (ph >= 1f) ph -= 1f; sin(TAU * ph) * 0.6f
                 }
-                5 -> { if (t % holdN == 0) hold = round(nz * 3f) / 3f; f.process(hold) * 0.5f } // Crunch: sample & hold noise
-                6 -> { // Metal: ring-modulated squares
+                5 -> { if (t % holdN == 0) hold = round(nz * 3f) / 3f; f.process(hold) * 0.5f }
+                6 -> {
                     ph += 540f * tune / SRF; if (ph >= 1f) ph -= 1f
                     ph2 += 805f * tune / SRF; if (ph2 >= 1f) ph2 -= 1f
                     f.process((if (ph < 0.5f) 1f else -1f) * (if (ph2 < 0.5f) 1f else -1f)); f.band * 0.8f
                 }
-                else -> { f.process(nz); f.band * 4f } // Ghost: resonant noise tom
+                else -> { f.process(nz); f.band * 4f }
             }
             t++
-            env *= dec
-            if (env < 0.0005f) active = false
-            return out * env * gain * 0.45f
+            if (attacking) { env += atkInc * peak; if (env >= peak) { env = peak; attacking = false } } else env *= dec
+            fenv *= fdec
+            if (!attacking && env < 0.0005f) active = false
+            return lp.process(out) * env * gain * 0.45f
         }
     }
 
     override fun saveExtra(o: JSONObject) {
         o.put("seed", seed)
         o.put("pattern", JSONArray().apply { pattern.forEach { row -> put(JSONArray(row.map { it.toDouble() })) } })
+        o.put("generated", JSONArray().apply { generated.forEach { row -> put(JSONArray(row.map { it.toDouble() })) } })
     }
     override fun loadExtra(o: JSONObject?) {
-        val a = o?.optJSONArray("pattern")
-        if (a == null) { generate(1234); return }
-        seed = o.optInt("seed", 1234)
-        for (v in 0 until minOf(a.length(), DRUMS.size)) {
-            val row = a.getJSONArray(v)
-            for (s in 0 until minOf(row.length(), STEPS)) pattern[v][s] = row.getDouble(s).toFloat()
+        fun read(key: String, into: Array<FloatArray>): Boolean {
+            val a = o?.optJSONArray(key) ?: return false
+            for (v in 0 until minOf(a.length(), DRUMS.size)) {
+                val row = a.getJSONArray(v)
+                for (s in 0 until minOf(row.length(), STEPS)) into[v][s] = row.getDouble(s).toFloat()
+            }
+            return true
         }
+        seed = o?.optInt("seed", 4321) ?: 4321
+        if (!read("pattern", pattern)) fill(pattern, 1234)
+        if (!read("generated", generated)) generate(seed)
     }
 }

@@ -12,8 +12,10 @@ import kotlin.math.tan
 
 /** Small, allocation-free DSP building blocks shared by all engines. */
 
-const val SR = 48000
-const val SRF = 48000f
+/** Sample rate: set once from the device's native rate before audio starts (see Audio.configure). */
+var SR = 48000; private set
+var SRF = 48000f; private set
+fun setSampleRate(rate: Int) { SR = rate; SRF = rate.toFloat() }
 const val TAU = (2 * PI).toFloat()
 
 fun mtof(note: Float) = 440f * 2f.pow((note - 69f) / 12f)

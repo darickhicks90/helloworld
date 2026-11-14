@@ -3,7 +3,6 @@ package app.foxbox.ui
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Canvas
-import android.view.MotionEvent
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.HorizontalScrollView
@@ -11,6 +10,9 @@ import android.widget.LinearLayout
 import app.foxbox.Studio
 import app.foxbox.audio.Audio
 import app.foxbox.audio.Engine
+import app.foxbox.audio.XyState
+import app.foxbox.engines.SampleEngine
+import app.foxbox.fx.Flower
 import app.foxbox.seq.Clip
 import app.foxbox.seq.Ticks
 import app.foxbox.seq.Transport
@@ -19,22 +21,23 @@ import app.foxbox.seq.Transport
 interface Host {
     fun showProjects()
     fun showValley()
-    fun pickAudio(e: Engine)
-    fun toggleMic()
-    val micOn: Boolean
+    fun pickAudio(e: SampleEngine)
+    fun toggleMic(e: SampleEngine)
+    fun micOn(e: SampleEngine): Boolean
     fun clipMenu(clip: Clip)
+    fun flowerMenu(f: Flower)
+    fun chooseXyTarget(xy: XyState, isX: Boolean)
     fun midiMenu()
     fun bpmDialog()
 }
 
-/** The writing screen: rail of engines, project transport, engine page, engine transport. */
+/** The writing screen: rail of pages, project transport, page, page transport. */
 @SuppressLint("ViewConstructor")
 class StudioScreen(c: Context, private val host: Host) : LinearLayout(c) {
-    private val pages = HashMap<Engine, View>()
+    private val pages = HashMap<String, View>()
     private val content = FrameLayout(c)
     private val drawer = FrameLayout(c)
-    private val rail = LinearLayout(c)
-    private val tabBtns = HashMap<Engine, Btn>()
+    private val tabBtns = HashMap<String, Btn>()
     private val clipBar = LinearLayout(c)
     private val chips = LinearLayout(c)
     private var drawerOpen = false
@@ -42,11 +45,10 @@ class StudioScreen(c: Context, private val host: Host) : LinearLayout(c) {
     init {
         orientation = HORIZONTAL
         setBackgroundColor(Pal.BROWN)
-        rail.orientation = VERTICAL
-        rail.setPadding(Px.dp(4), Px.dp(4), Px.dp(2), Px.dp(4))
-        Studio.tabs.forEach { e ->
-            val b = Btn(c, "", Pal.accent(e.id)).apply { icon = Sprites.icon(e.id); onClick = { select(e) } }
-            tabBtns[e] = b
+        val rail = LinearLayout(c).apply { orientation = VERTICAL; setPadding(Px.dp(4), Px.dp(4), Px.dp(2), Px.dp(4)) }
+        Studio.pages.forEach { id ->
+            val b = Btn(c, "", Pal.accent(id)).apply { icon = Sprites.icon(id); onClick = { select(id) } }
+            tabBtns[id] = b
             rail.addView(b, lp(Px.dp(56), 0, 1f))
         }
         rail.addView(Btn(c, "", Pal.ORANGE).apply { icon = Sprites.fox; onClick = { host.showValley() } }, lp(Px.dp(56), 0, 1.3f))
@@ -61,7 +63,7 @@ class StudioScreen(c: Context, private val host: Host) : LinearLayout(c) {
         clipBar.gravity = android.view.Gravity.CENTER_VERTICAL
         main.addView(clipBar, lp(MATCH, Px.dp(48)))
         addView(main, lp(0, MATCH, 1f))
-        select(Studio.current)
+        select(Studio.page)
         onStudio { refresh() }
     }
 
@@ -79,7 +81,7 @@ class StudioScreen(c: Context, private val host: Host) : LinearLayout(c) {
         val name = Btn(c, Studio.project.name, Pal.BROWN).apply { onClick = { host.showProjects() } }
         playBtn = Btn(c, "▶", Pal.AQUA, 48).apply { onClick = { Studio.togglePlay() } }
         recBtn = Btn(c, "● Rec All", Pal.ORANGE_D).apply { onClick = { Studio.recordProject() } }
-        val bars = Stepper(c, "Loop", 84, { "${Studio.project.loopBars} bar" }) { Studio.setLoopBars(Studio.project.loopBars * (if (it > 0) 2 else 1) / (if (it < 0) 2 else 1)) }
+        val bars = Stepper(c, "Loop", 84, { "${Studio.project.loopBars} bar" }) { Studio.setLoopBars(if (it > 0) Studio.project.loopBars * 2 else Studio.project.loopBars / 2) }
         metroBtn = Btn(c, "Metronome", Pal.AQUA).apply { onClick = { Studio.setMetronome(!t.metronome) } }
         quantBtn = Btn(c, "Quantize", Pal.AQUA).apply { onClick = { Studio.setQuantize(!t.quantize) } }
         val bpm = Stepper(c, "BPM", 96, { Studio.project.bpm.toInt().toString() }) { Studio.setBpm(Studio.project.bpm + it) }
@@ -93,7 +95,7 @@ class StudioScreen(c: Context, private val host: Host) : LinearLayout(c) {
 
     /** Bar.beat counter with record / count-in status. */
     private inner class Position(c: Context) : PixelView(c) {
-        private val p = Px.text(13f, headFont = false)
+        private val p = Px.text(13f, Pal.CREAM)
         init { animated = true }
         override fun onMeasure(w: Int, h: Int) = setMeasuredDimension(Px.dp(96), Px.dp(44))
         override fun paint(c: Canvas) {
@@ -101,7 +103,6 @@ class StudioScreen(c: Context, private val host: Host) : LinearLayout(c) {
             val counting = t.rec == Transport.Rec.ARMED && t.tick < t.recStart
             val bg = when { t.rec == Transport.Rec.RECORDING -> Pal.ORANGE_D; counting -> Pal.ORANGE_L; else -> Pal.BROWN_D }
             c.pixelBox(u, u, width - u, height - u, bg)
-            p.color = Pal.CREAM
             val s = when {
                 counting -> "count ${t.beat + 1}"
                 !t.playing -> "stopped"
@@ -113,9 +114,9 @@ class StudioScreen(c: Context, private val host: Host) : LinearLayout(c) {
 
     // ------------------------------------------------------------------ pages
 
-    private fun select(e: Engine) {
-        Studio.select(e)
-        val page = pages.getOrPut(e) { buildPage(e) }
+    private fun select(id: String) {
+        Studio.select(id)
+        val page = pages.getOrPut(id) { buildPage(id) }
         for (i in 0 until content.childCount) content.getChildAt(i).let { if (it !== drawer) it.visibility = GONE }
         if (page.parent == null) content.addView(page, 0, FrameLayout.LayoutParams(MATCH, MATCH))
         page.visibility = VISIBLE
@@ -123,49 +124,43 @@ class StudioScreen(c: Context, private val host: Host) : LinearLayout(c) {
         buildClipBar()
     }
 
-    private fun buildPage(e: Engine): View {
-        val c = context
-        if (e === Audio.minds) return MindsPage(c).apply { setPadding(Px.dp(4), Px.dp(4), Px.dp(4), Px.dp(4)) }
-        val panel = ChordPanel(c)
-        val strum = StrumPad(c, panel.chords)
-        val accent = Pal.accent(if (e === Audio.teeth) Studio.melodic.id else e.id)
-        panel.chords.accent = accent; strum.accent = accent
-        return LinearLayout(c).apply {
-            orientation = HORIZONTAL
-            setPadding(Px.dp(4), Px.dp(4), Px.dp(4), Px.dp(4))
-            addView(SquareBox(c, XyPad(c, e)), lp(WRAP, MATCH))
-            addView(panel, lp(Px.dp(200), MATCH).apply { leftMargin = Px.dp(6) })
-            addView(strum, lp(0, MATCH, 1f).apply { leftMargin = Px.dp(6) })
-        }
+    private fun buildPage(id: String): View = when (id) {
+        "minds" -> MindsPage(context).apply { setPadding(Px.dp(4), Px.dp(4), Px.dp(4), Px.dp(4)) }
+        "bumble" -> InstrumentPage(context, id, host) { chords -> BumbleRight(context, chords) }
+        Studio.FLOWERS -> FlowersPage(context, host)
+        else -> InstrumentPage(context, id, host)
     }
 
-    /** Keeps the XY pad square, at most 42% of the screen width. */
-    private class SquareBox(c: Context, child: View) : FrameLayout(c) {
-        init { addView(child, LayoutParams(MATCH, MATCH)) }
-        override fun onMeasure(w: Int, h: Int) {
-            val size = minOf(MeasureSpec.getSize(h), (resources.displayMetrics.widthPixels * 0.42f).toInt())
-            super.onMeasure(MeasureSpec.makeMeasureSpec(size, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(size, MeasureSpec.EXACTLY))
-        }
-    }
+    // ------------------------------------------------------------------ page transport + clips
 
-    // ------------------------------------------------------------------ engine transport + clips
-
-    private lateinit var clipRec: Btn
-    private lateinit var soundBtn: Btn
+    private var clipRec: Btn? = null
+    private var soundBtn: Btn? = null
     private var micBtn: Btn? = null
+    private var auditionBtn: Btn? = null
+
+    private fun bar(v: View) = clipBar.addView(v, lp(WRAP, Px.dp(44)))
 
     private fun buildClipBar() {
         val c = context
-        val e = Studio.current
         clipBar.removeAllViews()
-        clipRec = Btn(c, "● Rec ${e.title}", Pal.ORANGE_D).apply { onClick = { Studio.recordEngine(e) } }
-        val len = Stepper(c, "Clip length", 110, { "${Studio.barsFor(e)} bar" + if (Studio.barsFor(e) > 1) "s" else "" }) { Studio.setBarsFor(e, Studio.barsFor(e) + it) }
-        soundBtn = Btn(c, "Sound", Pal.accent(e.id)).apply { onClick = { if (drawerOpen) closeDrawer() else openDrawer(e) } }
-        listOf(clipRec, len, soundBtn).forEach { clipBar.addView(it, lp(WRAP, Px.dp(44))) }
-        if (e === Audio.reflections || e === Audio.leaves) clipBar.addView(Btn(c, "Load", Pal.AQUA).apply { onClick = { host.pickAudio(e) } }, lp(WRAP, Px.dp(44)))
-        micBtn = if (e === Audio.reflections) Btn(c, "Mic", Pal.ORANGE_D).apply { onClick = { host.toggleMic() }; clipBar.addView(this, lp(WRAP, Px.dp(44))) } else null
-        chips.orientation = HORIZONTAL
+        clipRec = null; soundBtn = null; micBtn = null; auditionBtn = null
         (chips.parent as? android.view.ViewGroup)?.removeView(chips)
+        if (Studio.page == Studio.FLOWERS) {
+            auditionBtn = Btn(c, "Audition", Pal.AQUA).apply { onClick = { Studio.setAudition(!Studio.auditioning) } }.also { bar(it) }
+            bar(Btn(c, "✿ Plant in Valley", Pal.GREEN).apply { onClick = { Studio.flower?.let { Studio.plantFlower(it) } } })
+            bar(Btn(c, "+ New flower", Pal.ORANGE).apply { onClick = { Studio.newFlower() } })
+            bar(Btn(c, "Tip: play clips, then audition your flower", Pal.BROWN))
+            refresh(); return
+        }
+        val e = Studio.current
+        clipRec = Btn(c, "● Rec ${e.title}", Pal.ORANGE_D).apply { onClick = { Studio.recordEngine(e) } }.also { bar(it) }
+        bar(Stepper(c, "Clip length", 110, { "${Studio.barsFor(e)} bar" + if (Studio.barsFor(e) > 1) "s" else "" }) { Studio.setBarsFor(e, Studio.barsFor(e) + it) })
+        soundBtn = Btn(c, "Sound", Pal.accent(e.id)).apply { onClick = { if (drawerOpen) closeDrawer() else openDrawer(e) } }.also { bar(it) }
+        if (e is SampleEngine) {
+            bar(Btn(c, "Load", Pal.AQUA).apply { onClick = { host.pickAudio(e) } })
+            micBtn = Btn(c, "Mic", Pal.ORANGE_D).apply { onClick = { host.toggleMic(e) } }.also { bar(it) }
+        }
+        chips.orientation = HORIZONTAL
         clipBar.addView(HorizontalScrollView(c).apply { isHorizontalScrollBarEnabled = false; addView(chips) }, lp(0, Px.dp(44), 1f))
         chipSig = ""
         refresh()
@@ -175,7 +170,7 @@ class StudioScreen(c: Context, private val host: Host) : LinearLayout(c) {
     private fun refreshChips() {
         val e = Studio.current
         val clips = Studio.clipsFor(e)
-        val sig = clips.joinToString { it.id + it.name + it.bars + Studio.isPlaying(it) + it.inValley }
+        val sig = e.id + clips.joinToString { it.id + it.name + it.bars + Studio.isPlaying(it) + it.inValley }
         if (sig == chipSig) return
         chipSig = sig
         chips.removeAllViews()
@@ -194,40 +189,36 @@ class StudioScreen(c: Context, private val host: Host) : LinearLayout(c) {
 
     private fun refresh() {
         val t = Audio.transport
-        tabBtns.forEach { (e, b) -> b.on = e === Studio.current }
+        tabBtns.forEach { (id, b) -> b.on = id == Studio.page }
         playBtn.text = if (t.playing) "■" else "▶"; playBtn.on = t.playing
         val project = t.rec != Transport.Rec.OFF && t.recTarget == null
         recBtn.on = project; recBtn.blink = project && t.rec == Transport.Rec.ARMED
         metroBtn.on = t.metronome; quantBtn.on = t.quantize; tapeBtn.on = Studio.taping; tapeBtn.blink = Studio.taping
-        if (::clipRec.isInitialized) {
-            val mine = t.rec != Transport.Rec.OFF && t.recTarget === Studio.current
-            clipRec.on = mine; clipRec.blink = mine && t.rec == Transport.Rec.ARMED
-            micBtn?.let { it.on = host.micOn; it.blink = host.micOn; it.text = if (host.micOn) "■ Stop mic" else "Mic" }
-            refreshChips()
-        }
+        clipRec?.let { b -> val mine = t.rec != Transport.Rec.OFF && t.recTarget === Studio.current; b.on = mine; b.blink = mine && t.rec == Transport.Rec.ARMED }
+        micBtn?.let { b -> val e = Studio.current as SampleEngine; val on = host.micOn(e); b.on = on; b.blink = on; b.text = if (on) "■ Stop mic" else "Mic"; b.requestLayout() }
+        auditionBtn?.let { it.on = Studio.auditioning }
+        if (Studio.page != Studio.FLOWERS) refreshChips()
         listOf(playBtn, recBtn, metroBtn, quantBtn, tapeBtn).forEach { it.requestLayout(); it.invalidate() }
-        (clipBar.getChildAt(1) as? Stepper)?.invalidate()
+        for (i in 0 until clipBar.childCount) clipBar.getChildAt(i).invalidate()
     }
 
     // ------------------------------------------------------------------ sound drawer
 
     private fun openDrawer(e: Engine) {
-        drawerOpen = true; soundBtn.on = true
+        drawerOpen = true; soundBtn?.on = true
         drawer.removeAllViews()
         drawer.setBackgroundColor(Pal.alpha(Pal.BROWN_D, 0.55f))
         val strip = LinearLayout(context).apply { orientation = HORIZONTAL; setPadding(Px.dp(6), Px.dp(6), Px.dp(6), Px.dp(6)) }
         val accent = Pal.accent(e.id)
         strip.addView(Btn(context, "✕ Close", accent).apply { onClick = { closeDrawer() } }, lp(WRAP, Px.dp(44)).apply { rightMargin = Px.dp(6) })
         e.p.sections.forEach { (name, params) ->
-            if (e === Audio.minds && name in app.foxbox.engines.Minds.DRUMS) return@forEach
+            if (name == "XY Pad" || (e === Audio.minds && name in app.foxbox.engines.Minds.DRUMS)) return@forEach
             val panel = Panel(context, name, accent = accent)
             val flow = Flow(context)
             params.forEach { flow.addView(Knob(context, it, accent)) }
-            val cols = (params.size + 1) / 2
-            panel.addView(flow, lp(Px.dp(74) * cols, WRAP))
+            panel.addView(flow, lp(Px.dp(74) * ((params.size + 1) / 2), WRAP))
             strip.addView(panel, lp(WRAP, WRAP).apply { rightMargin = Px.dp(6) })
         }
-        if (e === Audio.teeth) strip.addView(Panel(context, "Bite Pattern", accent = accent).apply { addView(BiteEditor(context), lp(Px.dp(300), Px.dp(80))) }, lp(WRAP, WRAP))
         drawer.addView(HorizontalScrollView(context).apply { addView(strip) }, FrameLayout.LayoutParams(MATCH, MATCH))
         drawer.visibility = VISIBLE
         drawer.bringToFront()
@@ -235,32 +226,8 @@ class StudioScreen(c: Context, private val host: Host) : LinearLayout(c) {
 
     private fun closeDrawer() {
         drawerOpen = false
-        if (::soundBtn.isInitialized) soundBtn.on = false
+        soundBtn?.on = false
         drawer.visibility = GONE
         Studio.save()
-    }
-
-    /** Tap teeth to toggle Teeth's 16-step bite pattern. */
-    private class BiteEditor(c: Context) : PixelView(c) {
-        init { animated = true }
-        override fun paint(c: Canvas) {
-            val tw = width / 16f
-            c.fill(0f, 0f, width.toFloat(), height.toFloat(), Pal.ORANGE_D)
-            for (i in 0 until 16) {
-                val cur = Audio.transport.playing && Audio.teeth.currentStep == i
-                val col = when { Audio.teeth.bites[i] && cur -> Pal.AQUA_L; Audio.teeth.bites[i] -> Pal.CREAM; else -> Pal.BROWN }
-                val top = u * 2 + if (cur) u * 2 else 0f
-                c.fill(i * tw + u, top, (i + 1) * tw - u, height * 0.7f + top, col)
-                c.fill(i * tw + tw * 0.3f, height * 0.7f + top, (i + 1) * tw - tw * 0.3f, height * 0.85f + top, col)
-            }
-        }
-        @SuppressLint("ClickableViewAccessibility")
-        override fun onTouchEvent(e: MotionEvent): Boolean {
-            if (e.actionMasked == MotionEvent.ACTION_DOWN) {
-                val i = (e.x / width * 16).toInt().coerceIn(0, 15)
-                Audio.teeth.bites[i] = !Audio.teeth.bites[i]; Studio.save()
-            }
-            return true
-        }
     }
 }

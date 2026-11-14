@@ -4,33 +4,48 @@ import android.os.Handler
 import android.os.Looper
 import app.foxbox.audio.Audio
 import app.foxbox.audio.Engine
+import app.foxbox.audio.XyState
 import app.foxbox.data.AudioFiles
 import app.foxbox.data.Project
 import app.foxbox.data.ProjectStore
+import app.foxbox.engines.SampleEngine
+import app.foxbox.fx.Flower
 import app.foxbox.midi.MidiInput
 import app.foxbox.seq.Clip
 import app.foxbox.seq.Theory
 import app.foxbox.seq.Ticks
 import app.foxbox.seq.Transport
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 
 /**
- * The app's controller: the open project, which engine is in front, note
- * and chord routing, recording, clips, the Valley and saving. UI code calls
- * these functions on the main thread; anything that touches sound is
- * forwarded to the audio thread with Audio.post.
+ * The app's controller: the open project, which page is in front, note and
+ * chord routing, recording, clips, flowers, the Valley and saving. UI code
+ * calls it on the main thread; anything that touches sound is forwarded to
+ * the audio thread with Audio.post.
  */
 object Studio : Transport.Listener, MidiInput.Sink {
+    const val FOX = "fox"
+    const val FLOWERS = "flowers"
+
     private val main = Handler(Looper.getMainLooper())
     private val t get() = Audio.transport
 
     lateinit var project: Project
         private set
-    val tabs: List<Engine> = listOf(Audio.gusts, Audio.reflections, Audio.leaves, Audio.minds, Audio.teeth)
+    /** Pages on the rail: the engines, then Flowers. */
+    val pages: List<String> = Audio.engines.map { it.id } + FLOWERS
+    var page: String = "gusts"
+        private set
+    /** Engine in front (on the Flowers page: the last engine). */
     var current: Engine = Audio.gusts
         private set
-    /** Melodic instrument the chord/strum surface plays (Teeth's page plays the last one). */
+    /** Melodic engine the play surface uses on pages without their own sound. */
     var melodic: Engine = Audio.gusts
+        private set
+    var flower: Flower? = null
+        private set
+    var auditioning = false
         private set
     /** Bars for the next clip recorded on each engine. */
     val clipBars = HashMap<String, Int>()
@@ -50,8 +65,12 @@ object Studio : Transport.Listener, MidiInput.Sink {
         Audio.post { t.stop() }
         project = p
         p.applyEngines()
-        Audio.leaves.droneNote = 48 + p.root
-        current = Audio.gusts; melodic = Audio.gusts
+        Audio.flowers.active = emptyList(); Audio.flowers.audition = null; auditioning = false
+        p.flowers.forEach { it.active = false }
+        if (p.flowers.isEmpty()) p.flowers += Flower(name = "Dewdrop")
+        flower = p.flowers.first()
+        applyKey()
+        page = "gusts"; current = Audio.gusts; melodic = Audio.gusts
         changed()
     }
 
@@ -64,9 +83,13 @@ object Studio : Transport.Listener, MidiInput.Sink {
         if (now) saver.run() else main.postDelayed(saver, 800)
     }
 
-    fun select(e: Engine) {
-        current = e
-        if (e.isInstrument && e !== Audio.minds) melodic = e
+    fun select(pageId: String) {
+        page = pageId
+        Audio.engines.firstOrNull { it.id == pageId }?.let { e ->
+            current = e
+            if (e !== Audio.minds) melodic = e
+        }
+        if (pageId != FLOWERS && auditioning) setAudition(false)
         changed()
     }
 
@@ -81,28 +104,37 @@ object Studio : Transport.Listener, MidiInput.Sink {
     fun setKey(root: Int = project.root, scale: Int = project.scale, seventh: Boolean = project.seventh, octave: Int = project.octave) {
         project.root = Math.floorMod(root, 12); project.scale = Math.floorMod(scale, Theory.SCALES.size)
         project.seventh = seventh; project.octave = octave.coerceIn(-2, 2)
+        applyKey(); save(); changed()
+    }
+    private fun applyKey() {
         Audio.leaves.droneNote = 48 + project.root
-        save(); changed()
+        Audio.bumble.scale = scale; Audio.bumble.root = project.root
     }
 
     // ------------------------------------------------------------------ playing notes
 
-    /** The engine that notes from the play surface go to. */
-    val target: Engine get() = if (current === Audio.teeth) melodic else current
+    /** Engine the chord selector and strum pad play. */
+    val target: Engine get() = if (page == FLOWERS || current === Audio.minds) melodic else current
 
-    fun noteOn(e: Engine, key: Int, note: Int, vel: Float) = Audio.post {
-        e.noteOn(key, note, vel); t.recNoteOn(e, key, note, vel)
-    }
+    fun noteOn(e: Engine, key: Int, note: Int, vel: Float) = Audio.post { e.noteOn(key, note, vel); t.recNoteOn(e, key, note, vel) }
     fun noteOff(e: Engine, key: Int) = Audio.post { e.noteOff(key); t.recNoteOff(e, key) }
     fun expr(e: Engine, key: Int, kind: Int, v: Float) = Audio.post { e.expr(key, kind, v) }
 
     fun chordOn(degree: Int, keyBase: Int, vel: Float = 0.8f) {
         val e = target
+        if (e === Audio.bumble) {
+            // Bumble follows the chord: the sequence moves to it, or play its root.
+            Audio.bumble.chordDegree = degree
+            if (!Audio.bumble.enabled.on) noteOn(e, keyBase, Audio.bumble.noteFor(0), vel)
+            changed(); return
+        }
         chord(degree).notes.forEachIndexed { i, n -> noteOn(e, keyBase + i, n, vel) }
     }
     fun chordOff(keyBase: Int) { val e = target; for (i in 0 until 4) noteOff(e, keyBase + i) }
 
-    fun setXy(e: Engine, x: Float, y: Float, touching: Boolean) { e.x = x; e.y = y; e.touching = touching }
+    fun setXy(xy: XyState, x: Float, y: Float, touching: Boolean) { xy.x = x; xy.y = y; xy.touching = touching }
+    /** The XY pad shown on the current page. */
+    val pad: XyState get() = if (page == FLOWERS) (flower ?: project.flowers.first()).xy else current.xy
 
     // ------------------------------------------------------------------ transport
 
@@ -135,7 +167,7 @@ object Studio : Transport.Listener, MidiInput.Sink {
 
     // ------------------------------------------------------------------ clips
 
-    fun engine(id: String): Engine = Audio.all.first { it.id == id }
+    fun engine(id: String): Engine = Audio.engines.first { it.id == id }
     fun clipsFor(e: Engine) = project.clips.filter { it.engine == e.id }
     fun isPlaying(c: Clip) = c.id in t.playing_ids
 
@@ -152,56 +184,107 @@ object Studio : Transport.Listener, MidiInput.Sink {
 
     fun deleteClip(c: Clip) {
         Audio.post { t.stopClip(c.id) }
-        project.clips.remove(c)
-        project.links.removeAll { it.first == c.id || it.second == c.id }
+        project.clips.remove(c); dropLinks(c.id)
         save(); changed()
     }
 
     fun renameClip(c: Clip, name: String) { c.name = name.ifBlank { c.name }; save(); changed() }
 
+    private fun nextSpot(): Pair<Float, Float> {
+        val i = project.clips.count { it.inValley } + project.flowers.count { it.inValley }
+        return (0.1f + (i % 6) * 0.15f) to (0.3f + ((i / 6) % 3) * 0.2f)
+    }
+
     fun sendToValley(c: Clip) {
-        if (!c.inValley) {
-            c.inValley = true
-            val i = project.clips.count { it.inValley }
-            c.vx = 0.12f + (i % 6) * 0.15f; c.vy = 0.25f + ((i / 6) % 3) * 0.22f
-        }
-        message("${c.name} is waiting in the Valley")
+        if (!c.inValley) { c.inValley = true; nextSpot().let { c.vx = it.first; c.vy = it.second } }
+        message("${c.name} is waiting in the Valley"); save(); changed()
+    }
+
+    // ------------------------------------------------------------------ flowers
+
+    fun selectFlower(f: Flower) { flower = f; if (auditioning) { f.prepare(); Audio.flowers.audition = f }; changed() }
+
+    fun newFlower(): Flower {
+        val f = Flower(name = listOf("Dewdrop", "Poppy", "Bluebell", "Clover", "Foxglove", "Marigold", "Thistle", "Lily")[project.flowers.size % 8])
+        f.variant = project.flowers.size
+        project.flowers += f; selectFlower(f); save()
+        return f
+    }
+
+    fun duplicateFlower(f: Flower) {
+        val copy = Flower.fromJson(f.toJson().put("id", java.util.UUID.randomUUID().toString().take(8)).put("name", f.name + " II").put("valley", false))
+        copy.active = false
+        project.flowers += copy; selectFlower(copy); save()
+    }
+
+    fun renameFlower(f: Flower, name: String) { f.name = name.ifBlank { f.name }; save(); changed() }
+
+    fun deleteFlower(f: Flower) {
+        if (project.flowers.size <= 1) return message("Keep at least one flower")
+        project.flowers.remove(f); dropLinks(f.id); f.active = false; syncRack()
+        if (flower === f) flower = project.flowers.first()
         save(); changed()
     }
+
+    fun plantFlower(f: Flower) {
+        if (!f.inValley) { f.inValley = true; nextSpot().let { f.vx = it.first; f.vy = it.second } }
+        message("${f.name} is planted in the Valley"); save(); changed()
+    }
+
+    /** Hear the flower being edited at full bloom. */
+    fun setAudition(on: Boolean) {
+        auditioning = on
+        val f = flower
+        if (on && f != null) { f.prepare(); Audio.flowers.audition = f } else Audio.flowers.audition = null
+        changed()
+    }
+
+    private fun syncRack() { Audio.flowers.active = project.flowers.filter { it.active } }
+
+    fun setBloom(f: Flower, b: Float) { f.bloom = b.coerceIn(0f, 1f) }
 
     // ------------------------------------------------------------------ Valley
 
     val valleyClips get() = project.clips.filter { it.inValley }
+    val valleyFlowers get() = project.flowers.filter { it.inValley }
 
     fun link(a: String, b: String) {
         if (a == b || project.links.any { (it.first == a && it.second == b) || (it.first == b && it.second == a) }) return
         project.links += a to b; save(); changed()
     }
     fun unlink(l: Pair<String, String>) { project.links.remove(l); save(); changed() }
-    fun removeFromValley(c: Clip) {
-        c.inValley = false
-        project.links.removeAll { it.first == c.id || it.second == c.id }
-        Audio.post { t.stopClip(c.id) }
-        save(); changed()
+    private fun dropLinks(id: String) { project.links.removeAll { it.first == id || it.second == id } }
+
+    fun removeFromValley(id: String) {
+        project.clips.firstOrNull { it.id == id }?.let { c -> c.inValley = false; Audio.post { t.stopClip(c.id) } }
+        project.flowers.firstOrNull { it.id == id }?.let { f -> f.inValley = false; f.active = false; syncRack() }
+        dropLinks(id); save(); changed()
     }
 
-    /** Clips connected to the fox through links. */
-    fun foxGroup(): List<Clip> {
+    /** Ids reachable from the fox through links. */
+    fun foxGroup(): Set<String> {
         val seen = HashSet<String>(); val queue = ArrayDeque(listOf(FOX))
         while (queue.isNotEmpty()) {
             val n = queue.removeFirst()
             if (!seen.add(n)) continue
             project.links.forEach { (a, b) -> if (a == n) queue += b else if (b == n) queue += a }
         }
-        return valleyClips.filter { it.id in seen }
+        return seen
     }
 
-    /** Tap the fox: start every linked clip together on the next bar, or stop them. */
+    /**
+     * Tap the fox: start every linked clip together on the next bar and wake
+     * every linked flower — or, if they are playing, stop them.
+     */
     fun foxTapped() {
         val group = foxGroup()
-        if (group.isEmpty()) return message("Draw a line from the fox to a clip first")
-        val anyPlaying = group.any { isPlaying(it) }
-        val pairs = group.map { it to engine(it.engine) }
+        val clips = valleyClips.filter { it.id in group }
+        val flowers = valleyFlowers.filter { it.id in group }
+        if (clips.isEmpty() && flowers.isEmpty()) return message("Draw a line from the fox to a clip or flower first")
+        val anyPlaying = clips.any { isPlaying(it) } || flowers.any { it.active }
+        if (anyPlaying) flowers.forEach { it.active = false } else flowers.forEach { it.prepare(); it.active = true }
+        syncRack()
+        val pairs = clips.map { it to engine(it.engine) }
         Audio.post {
             if (anyPlaying) pairs.forEach { t.stopClip(it.first.id) }
             else {
@@ -210,6 +293,7 @@ object Studio : Transport.Listener, MidiInput.Sink {
                 pairs.forEach { (c, e) -> t.launch(c, e, at) }
             }
         }
+        changed()
     }
 
     // ------------------------------------------------------------------ audio files
@@ -232,12 +316,9 @@ object Studio : Transport.Listener, MidiInput.Sink {
         changed()
     }
 
-    fun setSample(e: Engine, data: FloatArray, name: String) {
-        when (e) {
-            Audio.reflections -> Audio.reflections.setSample(data, name)
-            Audio.leaves -> { Audio.leaves.loaded = data; Audio.leaves.loadedName = name; Audio.leaves.source.set(2f) }
-            else -> return
-        }
+    fun setSample(e: SampleEngine, data: FloatArray, name: String) {
+        e.setSample(data, name)
+        if (e === Audio.leaves) Audio.leaves.source.set(0f)
         Thread { ProjectStore.saveSample(project, e.id, data) }.start()
         message("Loaded $name into ${e.title}")
         save(); changed()
@@ -245,9 +326,9 @@ object Studio : Transport.Listener, MidiInput.Sink {
 
     // ------------------------------------------------------------------ MIDI input (any thread)
 
-    private val midiHeld = java.util.concurrent.ConcurrentHashMap<Int, Pair<MidiInput.Dev, Int>>()
+    private val midiHeld = ConcurrentHashMap<Int, Pair<MidiInput.Dev, Int>>()
     private fun midiKey(d: MidiInput.Dev, ch: Int, note: Int) = 0x20000000 or ((d.id and 0xFF) shl 12) or (ch shl 8) or note
-    private val padKeys = java.util.concurrent.ConcurrentHashMap<Int, Int>()
+    private val padKeys = ConcurrentHashMap<Int, Int>()
     private fun padChordKey(d: MidiInput.Dev, i: Int) = 0x31000000 or ((d.id and 0xFF) shl 8) or (i shl 3)
 
     override fun noteOn(dev: MidiInput.Dev, ch: Int, note: Int, vel: Float) {
@@ -255,7 +336,7 @@ object Studio : Transport.Listener, MidiInput.Sink {
             val i = Math.floorMod(note - 36, 16)
             val key = 0x30000000 or (dev.id shl 8) or note
             padKeys[key] = i
-            if (current === Audio.minds) noteOn(Audio.minds, key, 36 + i % 8, vel)
+            if (page == "minds") noteOn(Audio.minds, key, 36 + i % 8, vel)
             else if (i < 7) chordOn(i, padChordKey(dev, i), vel)
             else noteOn(target, key, scaleNote(i - 7), vel)
             return
@@ -269,7 +350,7 @@ object Studio : Transport.Listener, MidiInput.Sink {
         if (dev.role == MidiInput.Role.PADS) {
             val key = 0x30000000 or (dev.id shl 8) or note
             val i = padKeys.remove(key) ?: return
-            if (current !== Audio.minds) { if (i < 7) chordOff(padChordKey(dev, i)) else noteOff(target, key) }
+            if (page != "minds") { if (i < 7) chordOff(padChordKey(dev, i)) else noteOff(target, key) }
             return
         }
         val key = midiKey(dev, ch, note)
@@ -284,12 +365,11 @@ object Studio : Transport.Listener, MidiInput.Sink {
         midiHeld.forEach { (k, dc) -> if (dc.first === dev && (all || dc.second == ch)) expr(e, k, kind, v) }
     }
 
+    /** CC1 and CC74 move the current XY pad's Y and X targets. */
     override fun cc(dev: MidiInput.Dev, ch: Int, cc: Int, v: Float) {
-        val e = if (current === Audio.minds) return else current
-        when (cc) { 1 -> e.y = v; 74, 71 -> e.x = v }
+        val xy = pad
+        when (cc) { 1 -> xy.yParam.norm = v; 74, 71 -> xy.xParam.norm = v }
     }
 
     override fun devicesChanged() = changed()
-
-    const val FOX = "fox"
 }

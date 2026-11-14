@@ -21,13 +21,23 @@ object Pal {
     const val BROWN_L = 0xFFA8774C.toInt()
     const val BROWN = 0xFF7A4A2A.toInt()
     const val BROWN_D = 0xFF3D2414.toInt()
+    // Valley extras: meadow greens and sunset tones.
+    const val GREEN_L = 0xFFA9CF6A.toInt()
+    const val GREEN = 0xFF6FA84A.toInt()
+    const val GREEN_D = 0xFF3F7A3A.toInt()
+    const val GREEN_DD = 0xFF2C5A30.toInt()
+    const val SUN = 0xFFF6C26B.toInt()
+    const val DUSK = 0xFFE58A5A.toInt()
+    const val ROSE = 0xFFD9786A.toInt()
+    const val HONEY = 0xFFD9A03A.toInt()
 
     val KEYS = mapOf('O' to ORANGE, 'o' to ORANGE_L, 'r' to ORANGE_D, 'A' to AQUA, 'a' to AQUA_L, 'q' to AQUA_D,
-        'W' to CREAM, 'w' to PAPER, 'b' to BROWN_L, 'B' to BROWN, 'D' to BROWN_D)
+        'W' to CREAM, 'w' to PAPER, 'b' to BROWN_L, 'B' to BROWN, 'D' to BROWN_D,
+        'g' to GREEN_L, 'G' to GREEN, 'h' to HONEY)
 
     /** Accent colour for each engine. */
     fun accent(id: String) = when (id) {
-        "gusts" -> AQUA; "reflections" -> AQUA_D; "leaves" -> ORANGE_D; "minds" -> ORANGE; else -> BROWN
+        "gusts" -> AQUA; "reflections" -> AQUA_D; "leaves" -> ORANGE_D; "minds" -> ORANGE; "bumble" -> HONEY; else -> BROWN
     }
 
     fun alpha(c: Int, a: Float) = (c and 0x00FFFFFF) or ((a.coerceIn(0f, 1f) * 255).toInt() shl 24)
@@ -147,9 +157,30 @@ object Sprites {
     val acorn by lazy { Sprite(listOf("..b..", ".bBb.", "BBBBB", ".OOO.", ".OoO.", "..O..")) }
     val flower by lazy { Sprite(listOf(".o.", "oOo", ".o.", ".q."), outline = null) }
 
-    fun icon(engineId: String) = when (engineId) {
-        "gusts" -> cloud; "reflections" -> drop; "leaves" -> leaf; "minds" -> mushroom; else -> tooth
+    val bee by lazy { Sprite(BEE) }
+    val bloom by lazy { Sprite(listOf("..o.o..", ".oOoOo.", "oOOWOOo", ".oOoOo.", "..oGo..", "...G...", "..GG...")) }
+    val cabin by lazy {
+        Sprite(listOf(
+            "..............bb....", "........rr....bb....", ".......rOOr...bb....", "......rOOOOr..bb....",
+            ".....rOOOOOOr.bb....", "....rOOOOOOOOrbb....", "...rOOOOOOOOOOr.....", "..rOOOOOOOOOOOOr....",
+            ".rOOOOOOOOOOOOOOr...", "rrrrrrrrrrrrrrrrrr..", ".BbBbBbBbBbBbBbBb...", ".BbBoooBbBbDDDbBb...",
+            ".bBboooBbBbDDDBbB...", ".BbBbBbBbBbDoDbBb...", ".bBbBbBbBbBDDDBbB...", ".BBBBBBBBBBBBBBBB...",
+        ))
     }
+    /** The small kitsune for the Valley (tails are drawn separately). */
+    val kitsune by lazy {
+        Sprite(listOf(
+            ".D..........D.", ".DD........DD.", ".DoD......DoD.", ".DOoDDDDDDoOD.", ".DOOOOOOOOOOD.",
+            "DOOOOOOOOOOOOD", "DOqDOOOOOOqDOD", "DOOOrOOOOrOOOD", ".DWWWOOOOWWWD.", "..DWWWWWWWWD..",
+            "...DWWDDWWD...", "..DOWWWWWWOD..", ".DOOWWWWWWOOD.", ".DOOOWWWWOOOD.", "DOOOOOWWOOOOOD",
+            "DOOOOOOOOOOOOD", "DWWDOOOOOODWWD", ".DDDDDDDDDDDD.",
+        ), outline = null)
+    }
+
+    fun icon(pageId: String) = when (pageId) {
+        "gusts" -> cloud; "reflections" -> drop; "leaves" -> leaf; "minds" -> mushroom; "bumble" -> bee; else -> bloom
+    }
+    private val BEE = listOf("..aa...aa..", ".aWWa.aWWa.", "..aaDDDaa..", "..DhhhhhD..", ".DDDDDDDDD.", ".DhWhhhWhD.", ".DDDDDDDDD.", "..DhhhhhD..", "...DDDDD...")
 
     // Valley critters (one per engine), with colour variants per clip.
     private val CRITTERS = mapOf(
@@ -157,7 +188,7 @@ object Sprites {
         "reflections" to listOf("....A....", "....A....", "...AAA...", "..AAAAA..", ".AaAAAAA.", ".aAAAAAA.", "AADAAADAA", "AAAAooAAA", ".AAAAAAA.", "..qAAAq.."),
         "leaves" to listOf("..aa...aa..", ".aAAa.aAAa.", "..aAAqAAa..", "....qAq....", ".....q.....", "..BBBBBBB..", ".BBDBBBDBB.", ".BBBBooBBB.", "..bBBBBBb.."),
         "minds" to listOf("...OOOOOO...", "..OWOOOOWO..", ".OOOOWOOOOO.", "OOWOOOOOOWOO", "OOOOOOOOOOOO", "...WWWWWW...", "...WDWWDW...", "...WWooWW...", "...WWWWWW...", "....wwww...."),
-        "teeth" to listOf(".WWWW.WWW.", "WWWWWWWWWW", "WWDWWWWDWW", "WWWWooWWWW", "WWWWWWWWWW", ".WWWWWWWW.", ".WWW..WWW.", ".WW....WW.", "..W....W.."),
+        "bumble" to listOf("..aa...aa..", ".aWWa.aWWa.", "..aaDDDaa..", "..DhhhhhD..", ".DDDDDDDDD.", ".DhDhhhDhD.", ".DDDDDDDDD.", "..DhhoohD..", "...DDDDD..."),
     )
     private val VARIANTS = listOf(
         emptyMap(),
@@ -167,18 +198,44 @@ object Sprites {
     )
     private val critterCache = HashMap<String, Sprite>()
     fun critter(engineId: String, variant: Int): Sprite = critterCache.getOrPut("$engineId$variant") {
-        Sprite(CRITTERS[engineId] ?: CRITTERS.getValue("teeth"), VARIANTS[Math.floorMod(variant, VARIANTS.size)])
+        Sprite(CRITTERS[engineId] ?: CRITTERS.getValue("minds"), VARIANTS[Math.floorMod(variant, VARIANTS.size)])
     }
 
-    /** The fox deity: a calm, sitting fox spirit (tails are drawn separately). */
-    val deity by lazy {
-        Sprite(listOf(
-            "..D..............D..", "..DD............DD..", "..DOD..........DOD..", "..DOoD........DoOD..",
-            "..DOOODDDDDDDDOOOD..", "..DOOOOOOOOOOOOOOD..", ".DOOOOOOOOOOOOOOOOD.", ".DOODDDOOOOOODDDOOD.",
-            ".DOOOOOOOOOOOOOOOOD.", "..DWWWOOOOOOOOWWWD..", "...DWWWWOOOOWWWWD...", "....DWWWWWWWWWWD....",
-            ".....DWWWDDWWWD.....", "....DOWWWWWWWWOD....", "...DOOWWWWWWWWOOD...", "..DOOOWWWWWWWWOOOD..",
-            "..DOOOOWWWWWWOOOOD..", ".DOOOOOOWWWWOOOOOOD.", ".DOOOOOOOOOOOOOOOOD.", ".DOOWOOOOOOOOOOWOOD.",
-            ".DWWWDOOOOOOOODWWWD.", "..DDDDDDDDDDDDDDDD..",
-        ), outline = null)
+}
+
+/** Colours for flower variants: petal, petal highlight. */
+val FLOWER_COLORS = listOf(Pal.ORANGE to Pal.ORANGE_L, Pal.AQUA to Pal.AQUA_L, Pal.ROSE to Pal.CREAM, Pal.CREAM to Pal.SUN, Pal.ORANGE_D to Pal.SUN)
+
+/**
+ * A pixel flower: a closed bud at bloom 0 opening to full petals at 1.
+ * `s` = art pixels per flower pixel.
+ */
+fun Canvas.flower(cx: Float, cy: Float, s: Float, bloom: Float, variant: Int, time: Float, sparkle: Boolean) {
+    val u = Px.u * s
+    val (petal, hi) = FLOWER_COLORS[Math.floorMod(variant, FLOWER_COLORS.size)]
+    // Stem and leaves
+    for (k in 0 until 9) dot(cx - u / 2, cy + k * u, Pal.GREEN_D, s.toInt().coerceAtLeast(1))
+    dot(cx + u * 0.5f, cy + u * 4, Pal.GREEN, (s * 2).toInt().coerceAtLeast(1)); dot(cx - u * 2.5f, cy + u * 6, Pal.GREEN, (s * 2).toInt().coerceAtLeast(1))
+    if (bloom < 0.08f) {
+        // Closed bud
+        for (k in -2..1) dot(cx - u, cy + k * u, petal, (s * 2).toInt().coerceAtLeast(1))
+        dot(cx - u * 1.5f, cy + u, Pal.GREEN, s.toInt().coerceAtLeast(1)); dot(cx + u * 0.5f, cy + u, Pal.GREEN, s.toInt().coerceAtLeast(1))
+    } else {
+        val r = u * (1.5f + bloom * 4.5f)
+        val petals = 6
+        val spin = time * 0.3f * bloom
+        for (i in 0 until petals) {
+            val a = spin + i * 6.283f / petals
+            val px = cx + kotlin.math.cos(a) * r; val py = cy + kotlin.math.sin(a) * r
+            val n = (s * (1.5f + bloom * 1.5f)).toInt().coerceAtLeast(1)
+            dot(px - n * Px.u / 2, py - n * Px.u / 2, petal, n)
+            dot(px - n * Px.u / 4, py - n * Px.u / 4, hi, (n / 2).coerceAtLeast(1))
+        }
+        dot(cx - u, cy - u, Pal.HONEY, (s * 2).toInt().coerceAtLeast(1))
+    }
+    if (sparkle) for (i in 0 until 6) {
+        val a = time * 2f + i * 1.047f
+        val rr = u * (6f + 3f * kotlin.math.sin(time * 5 + i))
+        if (kotlin.math.sin(time * 9f + i * 2.3f) > 0.2f) dot(cx + kotlin.math.cos(a) * rr, cy + kotlin.math.sin(a) * rr * 0.8f, if (i % 2 == 0) Pal.CREAM else Pal.SUN)
     }
 }

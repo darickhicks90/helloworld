@@ -3,40 +3,37 @@ package app.foxbox.audio
 import org.json.JSONObject
 
 /**
- * Base for every FoxBox engine. Engines are only ever called on the audio
- * thread (via [Audio.post] or the transport), except for [p] and the XY
- * values, which are safe to set from anywhere.
+ * Base for every FoxBox instrument. Engines run on the audio thread (via
+ * [Audio.post] or the transport); params and the XY pad are safe to set
+ * from anywhere.
  */
 abstract class Engine(val id: String, val title: String) {
     val p = Params()
+    /** The XY pad. Created by [finishParams] once all params exist. */
+    lateinit var xy: XyState
+        private set
+    fun v(param: Param) = xy.v(param)
 
-    /** XY pad position (0..1). Instruments use it as MPE-style expression. */
-    @Volatile var x = 0.5f
-    @Volatile var y = 0.5f
-    /** True while a finger is on the XY pad (clip automation yields to it). */
-    @Volatile var touching = false
-    /** Set by a playing clip each block when it drives the XY values. */
-    @Volatile var automated = false
-    /** Neutral XY position the pad springs back to (null = stays put). */
-    open val springX: Float? = 0.5f
-    open val springY: Float? = 0.5f
-    abstract val xName: String
-    abstract val yName: String
-
-    /** For animations: counts notes started, and the last note. */
+    /** For animations. */
     @Volatile var noteCount = 0
     @Volatile var lastNote = 60
     @Volatile var activeVoices = 0
 
-    open val isInstrument = true
-
-    // Every instrument has a volume and reverb send at the end of its params.
     lateinit var volume: Param
     lateinit var reverb: Param
-    protected fun mixParams(vol: Float = 0.8f, rev: Float = 0.2f) {
+
+    /** Adds the mix params and the XY pad (call at the end of the subclass's init). */
+    protected fun finishParams(xDefault: String, yDefault: String, vol: Float = 0.8f, rev: Float = 0.2f) {
         p.section("Mix")
         reverb = p.num("reverb", "Reverb Send", 0f, 1f, rev, Fmt.PCT)
         volume = p.num("volume", "Volume", 0f, 1f, vol, Fmt.PCT)
+        xy = XyState(p, xDefault, yDefault)
+    }
+
+    /** Pitch bend and vibrato params every melodic engine offers to its XY pad. */
+    protected fun expressionParams(): Pair<Param, Param> {
+        p.section("Expression")
+        return p.num("bend", "Pitch Bend", -2f, 2f, 0f, Fmt.ST) to p.num("vibrato", "Vibrato", 0f, 1f, 0f, Fmt.PCT)
     }
 
     abstract fun noteOn(key: Int, note: Int, vel: Float)
@@ -46,10 +43,9 @@ abstract class Engine(val id: String, val title: String) {
     open fun allOff() {}
     /** Called by the transport on every 16th-note step while playing. */
     open fun onStep(step: Long) {}
-    /** Add this engine's output into l/r. */
+    /** Add this engine's output into l/r. Call xy.begin() first. */
     abstract fun render(l: FloatArray, r: FloatArray, n: Int)
 
-    /** Extra per-project state beyond params (patterns, sample names...). */
     open fun saveExtra(o: JSONObject) {}
     open fun loadExtra(o: JSONObject?) {}
 
@@ -73,6 +69,7 @@ abstract class Voice {
     var slide = 0.5f
     abstract val active: Boolean
     fun resetExpr() { bend = 0f; pressure = 0f; slide = 0.5f }
+    fun expr(kind: Int, v: Float) { when (kind) { Engine.BEND -> bend = v; Engine.PRESSURE -> pressure = v; Engine.SLIDE -> slide = v } }
 }
 
 /** Allocates voices: reuses a free one, otherwise steals the oldest. */
@@ -88,7 +85,6 @@ class VoicePool<V : Voice>(count: Int, make: () -> V) {
         return v
     }
     fun find(key: Int): V? = voices.firstOrNull { it.key == key && it.active }
-    fun countActive() = voices.count { it.active }
 }
 
 /** Lock-free ring of recent events for animations (audio thread writes, UI reads). */

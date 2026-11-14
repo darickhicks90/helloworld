@@ -144,10 +144,9 @@ class Transport {
             if (Math.floorDiv(t0.toLong(), half.toLong()) != Math.floorDiv(t1.toLong(), half.toLong())) {
                 for (e in engines) if (taking(e)) {
                     val tk = takes.getOrPut(e) { Take() }
-                    if (e.touching || tk.xy.isNotEmpty()) {
-                        if (e.x != tk.lastX || e.y != tk.lastY) {
-                            tk.xy += Clip.XyPoint(rel(), e.x, e.y); tk.lastX = e.x; tk.lastY = e.y
-                        }
+                    val xy = e.xy
+                    if (xy.touching && (xy.x != tk.lastX || xy.y != tk.lastY)) {
+                        tk.xy += Clip.XyPoint(rel(), xy.x, xy.y); tk.lastX = xy.x; tk.lastY = xy.y
                     }
                 }
             }
@@ -170,8 +169,7 @@ class Transport {
             val notes = t.notes.filter { it.tick < end }.map {
                 if (quantize) it.copy(tick = (Math.round(it.tick / Ticks.STEP.toFloat()) * Ticks.STEP) % end) else it
             }.sortedBy { it.tick }
-            val moved = t.xy.isNotEmpty() && !e.isInstrument
-            if (notes.isEmpty() && !moved) continue
+            if (notes.isEmpty()) continue
             made += Clip(engine = e.id, name = "", lengthTicks = end, notes = notes.toMutableList(), xy = t.xy.filter { it.tick < end }.toMutableList())
         }
         takes.clear(); rec = Rec.OFF

@@ -259,6 +259,7 @@
   async function connectBLE() {
     try {
       const dev = await FB.midi.connectBLE();
+      if (!dev) return; // Android app: it reports the connection itself
       App.toast('Connected ' + dev.name + ' over Bluetooth (' + roleName(dev.role) + ')');
     } catch (e) {
       if (e && e.name === 'NotFoundError') return; // user closed the chooser
@@ -279,9 +280,20 @@
         b.classList.remove('on');
         b.textContent = '● Rec';
         const res = await r.stop();
-        const url = URL.createObjectURL(res.blob);
         const ext = (res.blob.type.split('/')[1] || 'webm').split(';')[0];
-        const a = U.el('a', { href: url, download: 'foxbox-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.' + ext });
+        const name = 'foxbox-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.' + ext;
+        if (window.FoxBoxAndroid) {
+          // In the Android app, hand the file to Android to save in Downloads.
+          const b64 = await new Promise((ok) => {
+            const fr = new FileReader();
+            fr.onload = () => ok(String(fr.result).split(',')[1] || '');
+            fr.readAsDataURL(res.blob);
+          });
+          App.toast(window.FoxBoxAndroid.saveRecording(name, res.blob.type || 'audio/webm', b64));
+          return;
+        }
+        const url = URL.createObjectURL(res.blob);
+        const a = U.el('a', { href: url, download: name });
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -459,6 +471,7 @@
         '<p><b>ROLI Seaboard M</b> — choose <i>MPE keys</i> (picked automatically when the name matches). Each note gets its own glide (pitch), press (pressure) and slide (timbre). Set the Seaboard to MPE mode in ROLI Dashboard / Equator; bend range 48 is the MPE default.</p>' +
         '<p><b>Synido TempoPad C16</b> — choose <i>Pads</i>. Its 16 pads drive the on-screen pads: notes, slices, drum neurons or Teeth moves depending on the tab. If pad 1 isn’t pad 1, press <i>learn</i> and hit pad 1. Map its knobs with MIDI learn.</p>' +
         '<p><b>MIDI learn</b> — right-click (or long-press) any knob or fader, then move a knob on your controller.</p>' +
+        (FB.midi.isAndroidApp ? '<p><b>Android app</b> — USB controllers connect automatically (use a USB-C / OTG adapter). For Bluetooth, tap <i>Pair Bluetooth MIDI</i> and pick your controller from the list.</p>' : '') +
         '<p><b>Bluetooth</b> — <i>Pair Bluetooth MIDI</i> connects directly in Chrome/Edge. On macOS, iOS, Windows or Android you can also pair in the system Bluetooth/MIDI settings and the device shows up like a USB one.</p>' +
         '<p><b>No controller?</b> Play the on-screen keyboard (drag sideways to bend, up/down to change tone), tap the pads, or use your computer keys: <kbd>A W S E D F T G Y H U J K</kbd> play notes, <kbd>Z</kbd>/<kbd>X</kbd> octave, <kbd>1</kbd>–<kbd>=</kbd> pads, <kbd>Space</kbd> play/stop, <kbd>Esc</kbd> stop all sound. Try Hold + Arp, Leaves’ Evergreen drone and the Minds sequencer.</p>',
     }));

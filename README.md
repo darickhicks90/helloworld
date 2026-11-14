@@ -18,8 +18,8 @@ or with just your screen and computer keyboard.
 FoxBox is drawn in a 16-bit, cottagecore pixel-art style using four colours:
 orange, aqua, off-white and brown. It has wooden panels, gingham
 tablecloths, pixel flowers and mushrooms, and a little pixel fox. The pixel
-fonts come from Google Fonts. Without internet, FoxBox uses a plain
-monospace font instead.
+fonts (Press Start 2P and Pixelify Sans, both under the SIL Open Font
+License) are included in the `fonts/` folder, so FoxBox works offline.
 
 ## How to run it
 
@@ -32,8 +32,34 @@ FoxBox is just files. You don't need to install or build anything.
 * **Locally with a server (optional):** run `python3 -m http.server` in this
   folder and open <http://localhost:8000>.
 
-Then press **Wake the fox ▶**. Browsers only allow sound to start after you
+Then press **Wake the fox**. Browsers only allow sound to start after you
 click something.
+
+## Android app
+
+FoxBox also comes as an Android app (an APK file). It has everything the
+web version has, plus:
+
+* **USB MIDI:** plug the TempoPad C16 (or any USB controller) into your
+  phone or tablet with a USB-C / OTG adapter. It connects by itself.
+* **Bluetooth MIDI:** tap **Bluetooth**, allow the permission, and pick your
+  Seaboard M (or other controller) from the list.
+* Microphone recording, loading sounds from your phone, and **● Rec**
+  (recordings are saved in `Downloads/FoxBox`).
+* It works offline and keeps the screen awake while you play.
+
+**Getting the APK:** GitHub builds it automatically whenever the app
+changes. Open this repository's **Actions** tab, click the latest
+**Android app** run, and download **FoxBox-android** under *Artifacts*.
+Unzip it to get `FoxBox.apk`, copy that to your phone, and open it. Android
+will ask you to allow installing apps from that source the first time.
+
+**Building it yourself:** open the `android/` folder in Android Studio and
+press Run, or run `./gradlew assembleRelease` inside `android/`. The build
+copies `index.html`, `css/`, `js/` and `fonts/` into the app, so change the
+web app and the Android app picks up the change. The included
+`foxbox-debug.keystore` signs test builds so new versions install over old
+ones. Make your own private key before putting FoxBox on the Play Store.
 
 ## Controllers
 
@@ -87,6 +113,9 @@ js/midi.js            USB + Bluetooth MIDI, MPE, MIDI learn
 js/input.js           routes notes to the engines, on-screen keyboard and pads, arp
 js/engines/*.js       Gusts, Reflections, Leaves, Minds, Teeth
 js/app.js             tabs, header, Den, saving, start-up
+fonts/                bundled pixel fonts (+ their licences)
+android/              Android app: a WebView around the web app, plus
+                      native USB/Bluetooth MIDI (app/src/main/java/app/foxbox)
 ```
 
 Each engine is a class with `noteOn`, `noteOff`, `expr` (bend, pressure,

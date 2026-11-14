@@ -1,5 +1,8 @@
 /* FoxBox styles — 16-bit cottagecore
    Palette: orange, aqua, off-white (cream) and brown. */
+/* Pixel fonts are bundled (SIL Open Font License, see fonts/) so FoxBox works offline. */
+@font-face { font-family: 'Press Start 2P'; src: url('../fonts/PressStart2P-Regular.ttf') format('truetype'); font-display: swap; }
+@font-face { font-family: 'Pixelify Sans'; src: url('../fonts/PixelifySans.ttf') format('truetype'); font-weight: 400 700; font-display: swap; }
 :root {
   --orange: #e8742c;
   --orange-l: #f4a259;

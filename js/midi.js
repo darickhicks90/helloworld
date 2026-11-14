@@ -22,8 +22,12 @@
   let activityFn = null;
   M.onActivity = (fn) => (activityFn = fn);
 
-  M.supported = () => !!navigator.requestMIDIAccess;
-  M.bleSupported = () => !!(navigator.bluetooth && navigator.bluetooth.requestDevice);
+  // Inside the FoxBox Android app, MIDI comes from Android's own MIDI
+  // system through a bridge object the app adds to the page.
+  const ANDROID = window.FoxBoxAndroid || null;
+  M.isAndroidApp = !!ANDROID;
+  M.supported = () => !!ANDROID || !!navigator.requestMIDIAccess;
+  M.bleSupported = () => !!ANDROID || !!(navigator.bluetooth && navigator.bluetooth.requestDevice);
 
   M.autoRole = function (name) {
     const n = (name || '').toLowerCase();
@@ -66,6 +70,7 @@
   // Web MIDI (USB + OS-paired Bluetooth)
   // ------------------------------------------------------------------
   M.initWebMIDI = async function () {
+    if (ANDROID) return M.initAndroid();
     if (!M.supported()) throw new Error('This browser has no Web MIDI. Try Chrome, Edge or Opera.');
     if (M.access) return M.access;
     M.access = await navigator.requestMIDIAccess({ sysex: false });
@@ -92,9 +97,110 @@
   };
 
   // ------------------------------------------------------------------
+  // Android app bridge (USB + Bluetooth MIDI through android.media.midi)
+  // ------------------------------------------------------------------
+  M.initAndroid = function () {
+    if (M._android) return Promise.resolve();
+    M._android = true;
+    const hooks = (window.FBAndroid = window.FBAndroid || {});
+    // batch: [[nativeId, [bytes...]], ...]
+    hooks.onMidi = function (batch) {
+      for (let i = 0; i < batch.length; i++) {
+        let dev = M.devices.get('a' + batch[i][0]);
+        if (!dev) {
+          M.refreshAndroid();
+          dev = M.devices.get('a' + batch[i][0]);
+        }
+        if (dev) M.parseStream(dev, batch[i][1]);
+      }
+    };
+    hooks.onDevices = () => M.refreshAndroid(true);
+    hooks.toast = (msg) => FB.app && FB.app.toast(msg);
+    ANDROID.openAllMidi();
+    M.refreshAndroid();
+    return Promise.resolve();
+  };
+
+  M.refreshAndroid = function (announce) {
+    let list = [];
+    try {
+      list = JSON.parse(ANDROID.listMidiDevices());
+    } catch (_) {}
+    const seen = new Set();
+    list.forEach((d) => {
+      const id = 'a' + d.id;
+      seen.add(id);
+      let dev = M.devices.get(id);
+      const isNew = !dev || !dev.connected;
+      if (!dev) {
+        dev = makeDevice(id, d.name, d.kind);
+        dev.nativeId = d.id;
+        M.devices.set(id, dev);
+      }
+      dev.connected = !!d.open;
+      if (announce && isNew && dev.connected && FB.app) FB.app.toast('Connected ' + dev.name + ' (' + ({ keys: 'Keys', mpe: 'MPE keys', pads: 'Pads' }[dev.role] || dev.role) + ')');
+    });
+    M.devices.forEach((d, id) => {
+      if (id[0] === 'a' && !seen.has(id) && d.connected) {
+        d.connected = false;
+        FB.input.releaseDevice(d);
+      }
+    });
+    M._emit();
+  };
+
+  // Split a raw MIDI byte stream (running status allowed) into messages.
+  M.parseStream = function (dev, d) {
+    let running = dev._running || 0;
+    let msg = dev._partial || null;
+    for (let i = 0; i < d.length; i++) {
+      const b = d[i];
+      if (b >= 0xf8) {
+        M.handle(dev, [b]);
+        continue;
+      }
+      if (dev._sysex) {
+        if (b === 0xf7) dev._sysex = false;
+        continue;
+      }
+      if (b & 0x80) {
+        if (b === 0xf0) {
+          dev._sysex = true;
+          msg = null;
+          continue;
+        }
+        running = b >= 0xf0 ? 0 : b;
+        msg = [b];
+        if (dataLen(b) === 0) {
+          M.handle(dev, msg);
+          msg = null;
+        }
+        continue;
+      }
+      if (!msg) {
+        if (!running) continue;
+        msg = [running];
+      }
+      msg.push(b);
+      if (msg.length === dataLen(msg[0]) + 1) {
+        M.handle(dev, msg);
+        msg = null;
+      }
+    }
+    dev._running = running;
+    dev._partial = msg;
+  };
+
+  // ------------------------------------------------------------------
   // Bluetooth LE MIDI via Web Bluetooth
   // ------------------------------------------------------------------
   M.connectBLE = async function () {
+    if (ANDROID) {
+      // The app shows its own Bluetooth device chooser and reports back.
+      await M.initAndroid();
+      ANDROID.pairBluetooth();
+      return null;
+    }
     if (!M.bleSupported()) throw new Error('This browser has no Web Bluetooth. Use Chrome or Edge (desktop or Android), or pair the device in your OS Bluetooth/MIDI settings.');
     const bt = await navigator.bluetooth.requestDevice({ filters: [{ services: [BLE_MIDI_SERVICE] }], optionalServices: [BLE_MIDI_SERVICE] });
     const id = 'ble:' + bt.id;
@@ -123,6 +229,7 @@
   };
 
   M.disconnectBLE = function (dev) {
+    if (ANDROID && dev.nativeId != null) return ANDROID.disconnect(String(dev.nativeId));
     if (dev.bt && dev.bt.gatt.connected) dev.bt.gatt.disconnect();
   };
 

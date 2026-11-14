@@ -35,10 +35,14 @@ Valley, which feels a bit like playing a game.
    Valley** puts it in the Valley.
 5. **The Valley (scenes):** clips are tiny critters and flowers are buds.
    Each kind has its own home, so nothing overlaps:
-   - Gusts clouds float in the sky.
+   - Gusts cloud spirits float in the sky.
    - Bumble bees hover between the sky and the meadow.
-   - Reflections drops swim in the pond.
-   - Minds mushrooms, Leaves trees and planted flowers grow on the valley floor.
+   - Reflections slimes swim in the pond.
+   - Minds mushroom folk and planted flowers grow on the valley floor.
+   - Leaves trees stand on the right of the meadow.
+
+   The critters are drawn like Game Boy Color JRPG sprites, with each clip a
+   different palette swap.
 
    Each engine can hold up to **3 clips** and up to **5 flowers** can be
    planted, so there's always room. Tap the **cabin** for a line of

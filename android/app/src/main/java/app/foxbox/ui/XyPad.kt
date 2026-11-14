@@ -122,7 +122,7 @@ class XyPad(c: Context, private val themeId: String, private val pickAxis: (XySt
             var xx = 0f
             while (xx < w) { val y1 = h * 0.86f + sin(xx * 0.01f + 3) * h * 0.04f; c.fill(xx, (y1 / Px.u).toInt() * Px.u, xx + Px.u, h, Pal.BROWN_L); xx += Px.u }
         }
-        override fun marker(c: Canvas, x: Float, y: Float, t: Float) = c.spriteCentered(Sprites.critter("gusts", 0), x, y, Px.u * 1.5f)
+        override fun marker(c: Canvas, x: Float, y: Float, t: Float) = c.spriteCentered(Sprites.critter("gusts", 0), x, y, Px.u * 0.9f)
     }
 
     // ------------------------------------------------------------------ Reflections: pond

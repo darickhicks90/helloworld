@@ -63,7 +63,7 @@ class ProjectScreen(c: Context, private val onOpen: (Project) -> Unit, private v
             }
             val clips = project.clips
             val engines = clips.map { it.engine }.distinct()
-            engines.forEachIndexed { i, id -> c.sprite(Sprites.critter(id, 0), Px.dp(14f) + i * Px.dp(34f), Px.dp(14f), Px.u * 1.6f) }
+            engines.forEachIndexed { i, id -> c.sprite(Sprites.critter(id, 0), Px.dp(12f) + i * Px.dp(36f), Px.dp(12f), Px.u * 0.75f) }
             c.drawText(project.name.take(18), Px.dp(14f), h - Px.dp(66f), nameP)
             c.drawText("${project.bpm.toInt()} BPM · ${Theory.NOTE_NAMES[project.root]} ${Theory.SCALES[project.scale].name}", Px.dp(14f), h - Px.dp(46f), infoP)
             c.drawText("${clips.size} clips · ${clips.count { it.inValley }} in the valley", Px.dp(14f), h - Px.dp(30f), infoP)

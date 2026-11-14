@@ -33,13 +33,16 @@ Valley, which feels a bit like playing a game.
 
    Play some clips and tap **Audition** to hear the flower. **Plant in
    Valley** puts it in the Valley.
-5. **The Valley:** clips are critters and flowers are buds. Draw lines from
-   the nine-tailed **kitsune** to critters and buds, then tap the kitsune.
-   The linked clips start together on the next bar and the linked flowers
-   wake up and sparkle. **Drag up** on a sparkling flower to bloom it (more
-   effect). It stays bloomed when you let go, and dragging it all the way
-   down switches it off. Tap a critter to play it alone, tap a line to
-   remove it, and long-press to move things or drop them in the basket.
+5. **The Valley (scenes):** clips are tiny critters and flowers are buds.
+   **Draw lines between whatever you want in the next scene**, or tap single
+   critters and flowers to add them on their own. Then **tap the nine-tailed
+   kitsune**: when the current scene reaches the end of its loop, everything
+   changes over on the beat. A banner counts down the beats. Tap the kitsune
+   again to cancel. With nothing drawn, tapping it ends the music at the end
+   of the loop. Flowers in the playing scene sparkle: **drag up** to bloom
+   them (more effect). They stay bloomed until you drag them back down. Tap a
+   line to remove it, and long-press to move things or drop them in the
+   basket.
 
 ## The engines
 
@@ -58,9 +61,12 @@ Env Amount and Key Tracking).
 **Reflections** and **Leaves** can both **Load** an audio file from your
 phone or record from the **Mic**.
 
-FoxBox uses your phone's native sample rate and the smallest audio buffer
-that plays without dropouts. The buffer grows only if the phone can't keep
-up, which keeps latency low enough to play.
+**Low latency:** FoxBox plays through AAudio, Android's fastest audio path
+(MMAP/exclusive mode on phones that support it), at the phone's native
+sample rate. The buffer starts at two bursts, grows only if the phone drops
+audio, and shrinks again after 20 quiet seconds. The audio thread allocates
+no memory, so garbage collection can't cause dropouts. If AAudio isn't
+available, FoxBox falls back to AudioTrack.
 
 ## Where your files go
 
@@ -80,10 +86,21 @@ Everything is saved on your device as you work.
   drums. Elsewhere pads 1–7 play the chords and the rest play scale notes.
 * **CC1** and **CC74** move whatever the current XY pad's Y and X axes control.
 
+## Publishing on Google Play
+
+Everything for the store is in `android/play/`: the listing text
+(`listing.md`), a privacy policy (`privacy-policy.md`), the 512 px icon, the
+feature graphic, the script that draws the icon (`make_art.py`), and a
+step-by-step `release-checklist.md` covering the upload key, GitHub secrets,
+App Bundle and Play Console. The app targets Android 16 (API 36), is shrunk
+with R8, has 16 KB-aligned native code, collects no data, and saves a local
+crash log it offers to share on the next launch.
+
 ## Getting the app
 
-GitHub builds the APK whenever the app changes. Open the **Actions** tab,
-click the latest **Android app** run, and download **FoxBox-android**. Unzip
+GitHub builds the app whenever it changes. Open the **Actions** tab, click
+the latest **Android app** run, and download **FoxBox-android** (an APK to
+install) or **FoxBox-play-bundle** (the `.aab` for Google Play). Unzip
 it, copy `FoxBox.apk` to your phone and open it to install.
 
 To build it yourself, open `android/` in Android Studio, or run
@@ -92,9 +109,10 @@ To build it yourself, open `android/` in Android Studio, or run
 ## Code layout (`android/app/src/main/java/app/foxbox`)
 
 ```
-MainActivity.kt   screens, file picker, mic, permissions, dialogs
+MainActivity.kt   screens, file picker, mic, permissions, dialogs, back handling, crash report
 Studio.kt         the controller: project, routing, chords, recording, clips, Valley, MIDI input
 audio/            DSP blocks, parameters, XY pad state, shared envelopes/filter, the audio engine
+                  (AAudio via cpp/foxbox_audio.c, AudioTrack fallback)
 engines/          Gusts, Sampler (Reflections + Leaves), Minds, Bumble
 fx/               Flowers: user-designed effects + modulation matrix, and the rack that runs them
 seq/              Transport (clock, recording, count-in, metronome), clips + MIDI files, music theory

@@ -53,10 +53,16 @@ abstract class SampleEngine(id: String, title: String, attack: Float, release: F
         return (d[i] + (d[i + 1] - d[i]) * f) * ramp
     }
 
-    protected fun region(d: FloatArray): IntArray {
-        val a = (min(v(start), v(end)) * (d.size - 1)).toInt()
-        val b = max(a + 256, (max(v(start), v(end)) * (d.size - 1)).toInt()).coerceAtMost(d.size - 1)
-        return intArrayOf(a, b)
+    /** Region in frames, set by [region]: always at least 256 frames long and inside the sample. */
+    protected var regS = 0
+    protected var regE = 1
+    protected fun region(d: FloatArray) {
+        val last = d.size - 1
+        val span = minOf(256, last)
+        var a = (min(v(start), v(end)) * last).toInt().coerceIn(0, last - span)
+        val b = (max(v(start), v(end)) * last).toInt().coerceIn(a + span, last)
+        if (b - a < span) a = maxOf(0, b - span)
+        regS = a; regE = b
     }
 
     // ------------------------------------------------------------------ grains (shared)
@@ -112,7 +118,8 @@ abstract class SampleEngine(id: String, title: String, attack: Float, release: F
         xy.begin()
         before(n)
         var count = 0
-        for (v in pool.voices) {
+        for (vi in pool.voices.indices) {
+            val v = pool.voices[vi]
             if (!v.active) { killGrains(v.index); continue }
             count++
             bl.fill(0f, 0, n); br.fill(0f, 0, n)
@@ -156,8 +163,8 @@ class Reflections : SampleEngine("reflections", "Reflections", 0.003f, 0.4f) {
         val d = sample
         val v = pool.start(key, note, vel) as V
         killGrains(v.index)
-        val rg = region(d)
-        v.data = d; v.s = rg[0]; v.e = rg[1]; v.rev = reverse.on; v.looping = loop.on; v.stretching = stretch.on
+        region(d)
+        v.data = d; v.s = regS; v.e = regE; v.rev = reverse.on; v.looping = loop.on; v.stretching = stretch.on
         v.pos = if (v.rev) v.e - 2.0 else v.s.toDouble()
         v.hop = 0f
         v.tail.start(env, xy)
@@ -189,7 +196,7 @@ class Reflections : SampleEngine("reflections", "Reflections", 0.003f, 0.4f) {
         v.hop -= n
         while (v.hop <= 0f) {
             val jitter = rng.bi() * len * 0.05
-            spawnGrain(v.index, v.data, (v.pos + jitter).coerceIn(v.s.toDouble(), v.e - 2.0), ratio * dir, len, 0.5f, 0.5f, v.s, v.e)
+            spawnGrain(v.index, v.data, (v.pos + jitter).coerceIn(v.s.toDouble(), maxOf(v.s.toDouble(), v.e - 2.0)), ratio * dir, len, 0.5f, 0.5f, v.s, v.e)
             v.hop += hop
         }
         v.pos += v(speed) * n * dir
@@ -260,7 +267,7 @@ class Leaves : SampleEngine("leaves", "Leaves", 0.25f, 1.4f) {
     override fun fill(v: SVoice, n: Int) {
         v as V
         val d = data
-        val rg = region(d)
+        region(d)
         val dens = v(density) * (if (v.pressure > 0f) 0.4f + v.pressure * 1.6f else 1f)
         v.countdown -= n
         var guard = 0
@@ -271,11 +278,11 @@ class Leaves : SampleEngine("leaves", "Leaves", 0.25f, 1.4f) {
             val len = (v(size) * SRF).toInt()
             var pos = v(position) + scanPos + rng.bi() * v(spray) * 0.5f
             pos -= kotlin.math.floor(pos)
-            val at = (rg[0] + pos * (rg[1] - rg[0])).toDouble()
+            val at = (regS + pos * (regE - regS)).toDouble()
             val amp = 0.55f / sqrt(max(1f, dens * v(size)))
             val pan = rng.bi() * v(width)
             val inc = semis(st).toDouble() * (if (reverse.on) -1.0 else 1.0) * (1f + rng.bi() * v(bendVib.second) * 0.02f)
-            if (spawnGrain(v.index, d, at, inc, len, amp * (1 - pan) * 0.7f, amp * (1 + pan) * 0.7f, rg[0], rg[1])) grainEvents.push(pos, st)
+            if (spawnGrain(v.index, d, at, inc, len, amp * (1 - pan) * 0.7f, amp * (1 + pan) * 0.7f, regS, regE)) grainEvents.push(pos, st)
             v.countdown += SRF / dens * (0.6f + rng.next() * 0.8f)
         }
         renderGrains(v.index, bl, br, n)

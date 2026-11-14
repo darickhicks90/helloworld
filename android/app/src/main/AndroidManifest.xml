@@ -25,12 +25,19 @@
 
     <application
         android:allowBackup="true"
+        android:appCategory="audio"
+        android:enableOnBackInvokedCallback="true"
         android:hardwareAccelerated="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.FoxBox">
+
+        <!-- FoxBox is designed for landscape only, including on tablets and foldables. -->
+        <property
+            android:name="android.window.PROPERTY_COMPAT_ALLOW_RESTRICTED_RESIZABILITY"
+            android:value="true" />
 
         <activity
             android:name=".MainActivity"

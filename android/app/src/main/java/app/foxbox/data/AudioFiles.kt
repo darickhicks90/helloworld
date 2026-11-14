@@ -193,24 +193,31 @@ object AudioFiles {
 
     // ------------------------------------------------------------------ microphone
 
+    /** Records the microphone. Throws if the mic can't be opened. */
     class Mic {
         private val chunks = ArrayList<FloatArray>()
         @Volatile private var running = true
         private val thread: Thread
+        @SuppressLint("MissingPermission")
+        private val rec = AudioRecord(MediaRecorder.AudioSource.MIC, SR, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_FLOAT,
+            maxOf(AudioRecord.getMinBufferSize(SR, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_FLOAT), SR / 5 * 4))
 
         init {
-            @SuppressLint("MissingPermission")
-            val rec = AudioRecord(MediaRecorder.AudioSource.MIC, SR, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_FLOAT,
-                maxOf(AudioRecord.getMinBufferSize(SR, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_FLOAT), SR / 5 * 4))
+            if (rec.state != AudioRecord.STATE_INITIALIZED) { rec.release(); throw IllegalStateException("The microphone is busy or unavailable") }
             thread = Thread {
-                rec.startRecording()
-                var total = 0
-                while (running && total < MAX_SECONDS * SR) {
-                    val buf = FloatArray(SR / 20)
-                    val n = rec.read(buf, 0, buf.size, AudioRecord.READ_BLOCKING)
-                    if (n > 0) { synchronized(chunks) { chunks += if (n == buf.size) buf else buf.copyOf(n) }; total += n }
+                try {
+                    rec.startRecording()
+                    var total = 0
+                    while (running && total < MAX_SECONDS * SR) {
+                        val buf = FloatArray(SR / 20)
+                        val n = rec.read(buf, 0, buf.size, AudioRecord.READ_BLOCKING)
+                        if (n < 0) break
+                        if (n > 0) { synchronized(chunks) { chunks += if (n == buf.size) buf else buf.copyOf(n) }; total += n }
+                    }
+                } catch (_: Exception) {
+                } finally {
+                    runCatching { rec.stop() }; rec.release()
                 }
-                rec.stop(); rec.release()
             }.apply { start() }
         }
 

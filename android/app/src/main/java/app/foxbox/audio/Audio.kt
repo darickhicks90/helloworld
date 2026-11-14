@@ -69,7 +69,8 @@ object Audio {
         while (true) (queue.poll() ?: break).run()
         transport.process(n)
         mixL.fill(0f); mixR.fill(0f); revL.fill(0f); revR.fill(0f)
-        for (e in engines) {
+        for (k in engines.indices) {
+            val e = engines[k]
             eL.fill(0f, 0, n); eR.fill(0f, 0, n)
             e.render(eL, eR, n)
             val v = e.volume.value; val s = e.reverb.value * v
@@ -90,46 +91,106 @@ object Audio {
 
     // ---------------------------------------------------------------- device output
 
-    @Volatile private var running = false
+    /** Which output is running, for display. */
+    @Volatile var outputName = "—"
+        private set
+    private var native = false
     private var thread: Thread? = null
+    private var tuner: Thread? = null
+    @Volatile private var running = false
+    private val lock = Any()
 
-    fun start() {
-        if (running) return
+    /** Start sound: AAudio (lowest latency) if possible, otherwise AudioTrack. */
+    fun start() = synchronized(lock) {
+        if (running) return@synchronized
         running = true
-        thread = Thread({
-            Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
+        native = NativeAudio.available && runCatching { NativeAudio.nOpen(SR) }.getOrDefault(-1).let { rate ->
+            if (rate == SR) true else { if (rate > 0) NativeAudio.nClose(); false }
+        }
+        if (native) {
+            outputName = if (NativeAudio.nExclusive()) "AAudio (exclusive)" else "AAudio"
+            tuner = Thread({ tuneNative() }, "FoxBoxAudioTuner").apply { isDaemon = true; start() }
+        } else {
+            outputName = "AudioTrack"
+            thread = Thread({ runAudioTrack() }, "FoxBoxAudio").apply { start() }
+        }
+    }
+
+    fun stop() = synchronized(lock) {
+        if (!running) return@synchronized
+        running = false
+        if (native) runCatching { NativeAudio.nClose() }
+        tuner?.join(1000); tuner = null
+        thread?.join(2000); thread = null
+    }
+
+    /**
+     * Keep the AAudio buffer as small as the device allows: grow by one burst
+     * after a glitch, shrink again after 20 quiet seconds, and reopen the
+     * stream if the output device changes (e.g. headphones plugged in).
+     */
+    private fun tuneNative() {
+        var lastXRuns = 0
+        var quiet = 0
+        while (running) {
+            Thread.sleep(250)
+            if (!running) break
+            runCatching {
+                if (NativeAudio.nDisconnected()) {
+                    NativeAudio.nClose()
+                    if (NativeAudio.nOpen(SR) != SR) { NativeAudio.nClose(); return@runCatching }
+                    lastXRuns = 0
+                }
+                val burst = NativeAudio.nBurst().coerceAtLeast(16)
+                val xr = NativeAudio.nXRuns()
+                val size = NativeAudio.nBufferSize()
+                if (xr > lastXRuns) {
+                    lastXRuns = xr; quiet = 0
+                    if (size < burst * 8) NativeAudio.nSetBufferSize(size + burst)
+                } else if (++quiet > 80 && size > burst * 2) {
+                    quiet = 0; NativeAudio.nSetBufferSize(size - burst)
+                }
+                latencyMs = NativeAudio.nBufferSize() * 1000f / SR
+            }
+        }
+    }
+
+    private fun runAudioTrack() {
+        Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
+        val track = try {
             val fmt = AudioFormat.Builder().setSampleRate(SR).setEncoding(AudioFormat.ENCODING_PCM_FLOAT).setChannelMask(AudioFormat.CHANNEL_OUT_STEREO).build()
             val min = AudioTrack.getMinBufferSize(SR, AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_FLOAT)
-            val track = AudioTrack.Builder()
+            AudioTrack.Builder()
                 .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_GAME).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
                 .setAudioFormat(fmt)
                 .setBufferSizeInBytes(max(min, burst * 8 * 4))
                 .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
                 .setTransferMode(AudioTrack.MODE_STREAM)
                 .build()
-            // Start with the smallest buffer (2 bursts) and grow only if the device underruns.
-            var bursts = 2
-            track.bufferSizeInFrames = burst * bursts
-            val buf = FloatArray(burst * 2)
-            var lastUnderruns = 0
+        } catch (e: Exception) {
+            outputName = "No audio output"; running = false; return
+        }
+        var bursts = 2
+        runCatching { track.bufferSizeInFrames = burst * bursts }
+        val buf = FloatArray(burst * 2)
+        var lastUnderruns = 0
+        var quiet = 0
+        try {
             track.play()
             while (running) {
                 render(buf, burst)
                 track.write(buf, 0, buf.size, AudioTrack.WRITE_BLOCKING)
                 val u = track.underrunCount
                 if (u > lastUnderruns) {
-                    lastUnderruns = u
+                    lastUnderruns = u; quiet = 0
                     if (bursts < 8) { bursts++; track.bufferSizeInFrames = burst * bursts }
-                }
+                } else if (++quiet > SR * 20 / burst && bursts > 2) { quiet = 0; bursts--; track.bufferSizeInFrames = burst * bursts }
                 latencyMs = track.bufferSizeInFrames * 1000f / SR
             }
-            track.stop(); track.release()
-        }, "FoxBoxAudio").apply { start() }
-    }
-
-    fun stop() {
-        running = false
-        thread?.join(500); thread = null
+        } catch (_: Exception) {
+        } finally {
+            runCatching { track.stop() }; track.release()
+        }
     }
 }
 

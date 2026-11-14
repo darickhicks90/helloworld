@@ -112,7 +112,8 @@ class ClipPlayer(val clip: Clip, val engine: app.foxbox.audio.Engine, val startT
         var loop = loopA
         while (loop * len < b) {
             val base = loop * len
-            for ((idx, n) in on.withIndex()) {
+            for (idx in on.indices) {
+                val n = on[idx]
                 val t = (base + n.tick).toDouble()
                 if (t >= a && t < b) {
                     val key = keyBase or (idx and 0xFFFF)
@@ -125,8 +126,8 @@ class ClipPlayer(val clip: Clip, val engine: app.foxbox.audio.Engine, val startT
         val pad = engine.xy
         if (xy.isNotEmpty() && !pad.touching) {
             val local = (b.toLong() % len).toInt()
-            var cur = xy.last()
-            for (pt in xy) if (pt.tick <= local) cur = pt else break
+            var cur = xy[xy.size - 1]
+            for (i in xy.indices) { val pt = xy[i]; if (pt.tick <= local) cur = pt else break }
             pad.x = cur.x; pad.y = cur.y; pad.automated = true
         }
     }

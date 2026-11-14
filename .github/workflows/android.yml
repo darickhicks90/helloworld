@@ -1,6 +1,7 @@
-# Builds the FoxBox Android app (APK) whenever the app changes.
-# To get it: open the repository's "Actions" tab, click the latest
-# "Android app" run, and download "FoxBox-android" under Artifacts.
+# Builds FoxBox: a signed App Bundle (.aab) for Google Play and an APK for
+# sideloading. Download both from the run's "Artifacts" section.
+# Release signing uses the FOXBOX_UPLOAD_* secrets when they are set
+# (see android/play/release-checklist.md); otherwise the test key is used.
 name: Android app
 
 on:
@@ -29,14 +30,37 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Build APK
+      - name: Prepare upload key
+        env:
+          KEYSTORE_B64: ${{ secrets.FOXBOX_UPLOAD_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/upload.jks"
+            echo "FOXBOX_UPLOAD_STORE_FILE=$RUNNER_TEMP/upload.jks" >> "$GITHUB_ENV"
+            echo "Signing with the upload key"
+          else
+            echo "No upload key secret: signing with the test key"
+          fi
+
+      - name: Build APK and App Bundle
+        env:
+          FOXBOX_UPLOAD_STORE_PASSWORD: ${{ secrets.FOXBOX_UPLOAD_STORE_PASSWORD }}
+          FOXBOX_UPLOAD_KEY_ALIAS: ${{ secrets.FOXBOX_UPLOAD_KEY_ALIAS }}
+          FOXBOX_UPLOAD_KEY_PASSWORD: ${{ secrets.FOXBOX_UPLOAD_KEY_PASSWORD }}
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon assembleRelease
+          ./gradlew --no-daemon assembleRelease bundleRelease
           cp app/build/outputs/apk/release/app-release.apk ../FoxBox.apk
+          cp app/build/outputs/bundle/release/app-release.aab ../FoxBox-release.aab
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: FoxBox-android
           path: FoxBox.apk
+
+      - name: Upload App Bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: FoxBox-play-bundle
+          path: FoxBox-release.aab

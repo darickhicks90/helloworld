@@ -119,16 +119,20 @@ internal class FlowerDsp(private val f: Flower) {
     private var lfo1 = 0f; private var modPh = 0f; private var fbL = 0f; private var fbR = 0f
     private var sh = 0f; private var shBeat = -1L
     private var amount = 0f; private var gateG = 1f
-    private val vals = HashMap<Param, Float>()
+    // Modulated values, indexed like f.destinations (NaN = not modulated). No allocation per block.
+    private val vals = FloatArray(f.destinations.size)
 
     val silent get() = amount < 0.0005f
 
     /** Value of a param after XY and the modulation matrix. */
-    private fun m(p: Param) = vals[p] ?: f.xy.v(p)
+    private fun m(p: Param): Float {
+        val i = f.destinations.indexOf(p)
+        return if (i >= 0 && !vals[i].isNaN()) vals[i] else f.xy.v(p)
+    }
 
     private fun modulate(bloom: Float) {
         f.xy.begin()
-        vals.clear()
+        vals.fill(Float.NaN)
         val t = Audio.transport
         val tick = maxOf(0.0, t.tick)
         lfo1 = (lfo1 + f.lfo1Rate.value * 64 / SRF) % 1f
@@ -141,11 +145,14 @@ internal class FlowerDsp(private val f: Flower) {
         val beat = (tick / Ticks.PPQ).toLong()
         if (beat != shBeat) { shBeat = beat; sh = rng.bi() }
         val ramp = ((tick % Ticks.BAR) / Ticks.BAR).toFloat()
-        for ((src, dst, amt) in f.slots) {
+        for (si in f.slots.indices) {
+            val (src, dst, amt) = f.slots[si]
             val s = when (src.index) { 1 -> l1; 2 -> l2; 3 -> bloom; 4 -> ramp; 5 -> sh; else -> continue }
-            val target = f.destinations[dst.index.coerceIn(0, f.destinations.size - 1)]
-            val base = vals[target]?.let { (it - target.min) / (target.max - target.min) } ?: (f.xy.v(target) - target.min) / (target.max - target.min)
-            vals[target] = target.valueAt(base + s * amt.value)
+            val ti = dst.index.coerceIn(0, f.destinations.size - 1)
+            val target = f.destinations[ti]
+            val cur = if (vals[ti].isNaN()) f.xy.v(target) else vals[ti]
+            val base = if (target.exp) (kotlin.math.ln(cur / target.min) / kotlin.math.ln(target.max / target.min)) else (cur - target.min) / (target.max - target.min)
+            vals[ti] = target.valueAt(base + s * amt.value)
         }
     }
 
@@ -215,15 +222,16 @@ class FlowerRack {
         val aud = audition
         val act = active
         // Keep processing flowers that are fading out so tails don't cut off.
-        for (f in act) if (f !in running) running += f
+        for (i in act.indices) if (act[i] !in running) running += act[i]
         if (aud != null && aud !in running) running += aud
-        val it = running.iterator()
-        while (it.hasNext()) {
-            val f = it.next()
-            val want = when { f === aud -> f.level.value; f in act && f.active -> f.bloom * f.level.value; else -> 0f }
+        var i = 0
+        while (i < running.size) {
+            val f = running[i]
+            val want = when { f === aud -> f.level.value; f.active && f in act -> f.bloom * f.level.value; else -> 0f }
             val d = f.dsp ?: FlowerDsp(f).also { f.dsp = it }
-            if (want == 0f && d.silent) { it.remove(); continue }
+            if (want == 0f && d.silent) { running.removeAt(i); continue }
             d.process(l, r, n, want, if (f === aud) 1f else f.bloom)
+            i++
         }
     }
 }

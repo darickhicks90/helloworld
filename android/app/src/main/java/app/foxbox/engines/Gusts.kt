@@ -74,7 +74,8 @@ class Gusts : Engine("gusts", "Gusts") {
         val bend = v(expr.first)
         val gl = if (glide.value > 0f) exp(-16f / (v(glide) * SRF * 0.3f)) else 0f
         var count = 0
-        for (vo in pool.voices) {
+        for (vi in pool.voices.indices) {
+            val vo = pool.voices[vi]
             if (!vo.active) continue
             count++
             var lph = lfoPh

@@ -253,7 +253,24 @@ object Studio : Transport.Listener, MidiInput.Sink {
         project.links += a to b; save(); changed()
     }
     fun unlink(l: Pair<String, String>) { project.links.remove(l); save(); changed() }
-    private fun dropLinks(id: String) { project.links.removeAll { it.first == id || it.second == id } }
+    private fun dropLinks(id: String) {
+        project.links.removeAll { it.first == id || it.second == id }
+        project.nextSolo.remove(id)
+    }
+
+    /** Tap a critter or flower to add it to (or remove it from) the next scene on its own. */
+    fun toggleInNextScene(id: String) {
+        if (!project.nextSolo.remove(id)) project.nextSolo += id
+        save(); changed()
+    }
+
+    /** Everything drawn into the next scene. */
+    fun nextScene(): Set<String> {
+        val ids = HashSet<String>(project.nextSolo)
+        project.links.forEach { ids += it.first; ids += it.second }
+        val valley = (valleyClips.map { it.id } + valleyFlowers.map { it.id }).toSet()
+        return ids.intersect(valley)
+    }
 
     fun removeFromValley(id: String) {
         project.clips.firstOrNull { it.id == id }?.let { c -> c.inValley = false; Audio.post { t.stopClip(c.id) } }
@@ -261,37 +278,41 @@ object Studio : Transport.Listener, MidiInput.Sink {
         dropLinks(id); save(); changed()
     }
 
-    /** Ids reachable from the fox through links. */
-    fun foxGroup(): Set<String> {
-        val seen = HashSet<String>(); val queue = ArrayDeque(listOf(FOX))
-        while (queue.isNotEmpty()) {
-            val n = queue.removeFirst()
-            if (!seen.add(n)) continue
-            project.links.forEach { (a, b) -> if (a == n) queue += b else if (b == n) queue += a }
-        }
-        return seen
-    }
+    val sceneQueued get() = t.queuedAt >= 0
 
     /**
-     * Tap the fox: start every linked clip together on the next bar and wake
-     * every linked flower — or, if they are playing, stop them.
+     * Tap the kitsune: queue the scene you drew. It starts when the current
+     * scene's loop comes round (or straight away if nothing is playing).
+     * Tap again while queued to cancel; with nothing drawn, the music stops
+     * at the end of the loop.
      */
     fun foxTapped() {
-        val group = foxGroup()
-        val clips = valleyClips.filter { it.id in group }
-        val flowers = valleyFlowers.filter { it.id in group }
-        if (clips.isEmpty() && flowers.isEmpty()) return message("Draw a line from the fox to a clip or flower first")
-        val anyPlaying = clips.any { isPlaying(it) } || flowers.any { it.active }
-        if (anyPlaying) flowers.forEach { it.active = false } else flowers.forEach { it.prepare(); it.active = true }
-        syncRack()
+        if (sceneQueued) { Audio.post { t.cancelScene() }; message("Next scene cancelled"); return }
+        val ids = nextScene()
+        if (ids.isEmpty()) {
+            val everyFlower = project.flowers.toList()
+            if (t.playing) { Audio.post { t.queueScene(emptyList(), true, Runnable { everyFlower.forEach { it.active = false }; Audio.flowers.active = emptyList() }) }; message("The music will stop at the end of this loop") }
+            else message("Draw lines between critters and flowers (or tap them) to build the next scene")
+            return
+        }
+        val clips = valleyClips.filter { it.id in ids }
+        val flowers = valleyFlowers.filter { it.id in ids }
+        flowers.forEach { it.prepare() }
         val pairs = clips.map { it to engine(it.engine) }
+        val drawn = project.links.toList(); val solo = project.nextSolo.toSet()
+        val everyFlower = project.flowers.toList()
         Audio.post {
-            if (anyPlaying) pairs.forEach { t.stopClip(it.first.id) }
-            else {
-                if (!t.playing) t.play()
-                val at = Math.ceil(maxOf(0.0, t.tick) / Ticks.BAR) * Ticks.BAR
-                pairs.forEach { (c, e) -> t.launch(c, e, at) }
-            }
+            t.queueScene(pairs, false, Runnable {
+                // Runs on the audio thread at the moment the scene changes.
+                everyFlower.forEach { it.active = it in flowers }
+                Audio.flowers.active = flowers
+                main.post {
+                    project.sceneLinks.clear(); project.sceneLinks += drawn
+                    project.sceneIds.clear(); project.sceneIds += ids
+                    project.links.removeAll(drawn); project.nextSolo.removeAll(solo)
+                    save(); changed()
+                }
+            })
         }
         changed()
     }

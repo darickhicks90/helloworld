@@ -78,13 +78,17 @@ class VoicePool<V : Voice>(count: Int, make: () -> V) {
     private var clock = 0L
 
     fun start(key: Int, note: Int, vel: Float): V {
-        val v = voices.firstOrNull { it.key == key && it.active }
-            ?: voices.firstOrNull { !it.active }
-            ?: voices.minBy { it.age }
-        v.key = key; v.note = note; v.vel = vel; v.age = ++clock; v.resetExpr()
-        return v
+        var v: V? = find(key)
+        if (v == null) for (i in voices.indices) if (!voices[i].active) { v = voices[i]; break }
+        if (v == null) { v = voices[0]; for (i in voices.indices) if (voices[i].age < v!!.age) v = voices[i] }
+        val chosen = v!!
+        chosen.key = key; chosen.note = note; chosen.vel = vel; chosen.age = ++clock; chosen.resetExpr()
+        return chosen
     }
-    fun find(key: Int): V? = voices.firstOrNull { it.key == key && it.active }
+    fun find(key: Int): V? {
+        for (i in voices.indices) { val v = voices[i]; if (v.key == key && v.active) return v }
+        return null
+    }
 }
 
 /** Lock-free ring of recent events for animations (audio thread writes, UI reads). */

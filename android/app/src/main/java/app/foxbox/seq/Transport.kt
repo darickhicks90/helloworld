@@ -34,6 +34,16 @@ class Transport {
     /** Clips currently looping (snapshot, safe to read from the UI). */
     @Volatile var playing_ids: Set<String> = emptySet(); private set
 
+    /** Current Valley scene: when it started and how long its loop is (0 = no scene). */
+    @Volatile var sceneStart = 0.0; private set
+    @Volatile var sceneLen = 0; private set
+    /** When the queued scene will start (-1 = nothing queued). */
+    @Volatile var queuedAt = -1.0; private set
+    private var queued: List<Pair<Clip, Engine>>? = null
+    private var queuedLen = 0
+    private var queuedStop = false
+    private var onSwitch: Runnable? = null
+
     var listener: Listener? = null
     var engines: List<Engine> = emptyList()
 
@@ -64,6 +74,7 @@ class Transport {
         players.clear(); syncIds()
         engines.forEach { it.allOff() }
         playing = false; rec = Rec.OFF; takes.clear(); tick = 0.0
+        queued = null; queuedAt = -1.0; onSwitch = null; sceneLen = 0; sceneStart = 0.0
         changed()
     }
 
@@ -96,6 +107,44 @@ class Transport {
         val it = players.iterator()
         while (it.hasNext()) { val p = it.next(); if (p.clip.id == id) { p.releaseAll(); it.remove() } }
         syncIds(); changed()
+    }
+
+    // ---------------------------------------------------------------- Valley scenes
+
+    /** When the current scene's loop next comes round (or the next bar if there is no scene). */
+    fun sceneBoundary(): Double = when {
+        !playing || tick < 0 -> 0.0
+        sceneLen > 0 -> sceneStart + (Math.floor((tick - sceneStart) / sceneLen) + 1) * sceneLen
+        else -> nextBar(tick + 1e-6)
+    }
+
+    /**
+     * Queue the next scene: at the end of the current scene's loop every clip
+     * stops, these clips start together, and `switch` runs (on this thread).
+     * An empty list with `stopAfter` ends the music at that point.
+     */
+    fun queueScene(clips: List<Pair<Clip, Engine>>, stopAfter: Boolean, switch: Runnable?) {
+        val startNow = !playing
+        if (startNow && !stopAfter) { tick = 0.0; playing = true; sceneLen = 0 }
+        queued = clips; queuedStop = stopAfter; onSwitch = switch
+        queuedLen = clips.maxOfOrNull { it.first.lengthTicks } ?: Ticks.BAR
+        queuedAt = if (startNow) 0.0 else sceneBoundary()
+        changed()
+    }
+
+    fun cancelScene() { queued = null; onSwitch = null; queuedAt = -1.0; changed() }
+
+    private fun switchScene() {
+        val at = queuedAt
+        val next = queued ?: return
+        players.forEach { it.releaseAll() }; players.clear()
+        for ((c, e) in next) players += ClipPlayer(c, e, at, slot++)
+        sceneStart = at; sceneLen = if (next.isEmpty()) 0 else queuedLen
+        val sw = onSwitch
+        queued = null; onSwitch = null; queuedAt = -1.0
+        syncIds()
+        sw?.run()
+        if (queuedStop) stop() else changed()
     }
 
     fun stopAllClips() {
@@ -132,11 +181,13 @@ class Transport {
         val t0 = tick
         val t1 = t0 + n * bpm * Ticks.PPQ / 60.0 / SR
         if (rec == Rec.ARMED && t1 > recStart) { rec = Rec.RECORDING; takes.clear(); changed() }
+        if (queued != null && t1 > queuedAt) { switchScene(); if (!playing) return }
+        // Index loops below: no iterator allocation on the audio thread.
 
         var s = ceil(t0 / Ticks.STEP).toLong()
         while (s * Ticks.STEP < t1) { step(s); s++ }
 
-        for (p in players) p.process(t0, t1)
+        for (i in players.indices) players[i].process(t0, t1)
 
         if (rec == Rec.RECORDING) {
             // Sample XY movement every 1/32 note.
@@ -157,7 +208,7 @@ class Transport {
     }
 
     private fun step(s: Long) {
-        if (s >= 0) for (e in engines) e.onStep(s)
+        if (s >= 0) for (i in engines.indices) engines[i].onStep(s)
         if (metronome && rec != Rec.OFF && Math.floorMod(s, 4L) == 0L) click(Math.floorMod(s, 16L) == 0L)
     }
 

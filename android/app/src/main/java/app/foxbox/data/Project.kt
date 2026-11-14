@@ -29,8 +29,11 @@ class Project(val dir: File) {
     var quantize = true
     var modified = System.currentTimeMillis()
     val clips = mutableListOf<Clip>()
-    /** Valley links between clip ids (or "fox"). */
+    /** Valley: lines drawn for the next scene, items added to it on their own, and the playing scene's lines. */
     val links = mutableListOf<Pair<String, String>>()
+    val nextSolo = mutableSetOf<String>()
+    val sceneLinks = mutableListOf<Pair<String, String>>()
+    val sceneIds = mutableSetOf<String>()
     /** Effects the player has designed (Flowers). */
     val flowers = mutableListOf<Flower>()
     var engineState = JSONObject()
@@ -46,6 +49,7 @@ class Project(val dir: File) {
         put("clips", JSONArray().apply { clips.forEach { put(it.toJson()) } })
         put("flowers", JSONArray().apply { flowers.forEach { put(it.toJson()) } })
         put("links", JSONArray().apply { links.forEach { put(JSONArray(listOf(it.first, it.second))) } })
+        put("nextSolo", JSONArray(nextSolo.toList()))
         put("engines", engineState)
     }
 
@@ -58,7 +62,9 @@ class Project(val dir: File) {
         val known = Audio.engines.map { it.id }.toSet()
         clips.clear(); o.optJSONArray("clips")?.let { a -> for (i in 0 until a.length()) Clip.fromJson(a.getJSONObject(i)).let { if (it.engine in known) clips += it } }
         flowers.clear(); o.optJSONArray("flowers")?.let { a -> for (i in 0 until a.length()) flowers += Flower.fromJson(a.getJSONObject(i)) }
-        links.clear(); o.optJSONArray("links")?.let { a -> for (i in 0 until a.length()) a.getJSONArray(i).let { links += it.getString(0) to it.getString(1) } }
+        links.clear(); o.optJSONArray("links")?.let { a -> for (i in 0 until a.length()) a.getJSONArray(i).let { if (it.getString(0) != "fox" && it.getString(1) != "fox") links += it.getString(0) to it.getString(1) } }
+        nextSolo.clear(); o.optJSONArray("nextSolo")?.let { a -> for (i in 0 until a.length()) nextSolo += a.getString(i) }
+        sceneLinks.clear(); sceneIds.clear()
         engineState = o.optJSONObject("engines") ?: JSONObject()
     }
 
@@ -130,12 +136,12 @@ object ProjectStore {
     }
 
     /** Write a clip's MIDI file into the project and to Music/FoxBox. */
-    fun saveClipMidi(p: Project, clip: Clip) {
+    fun saveClipMidi(p: Project, clip: Clip) = runCatching {
         val bytes = clip.toMidiFile(p.bpm, channel = Audio.engines.indexOfFirst { it.id == clip.engine }.coerceAtLeast(0))
         val name = safe("${clip.name}.mid")
         File(p.midiDir.apply { mkdirs() }, name).writeBytes(bytes)
         exportToMusic(p, "MIDI", name, "audio/midi", bytes)
-    }
+    }.isSuccess
 
     fun newTapeFile(p: Project) = File(p.audioDir.apply { mkdirs() }, "foxbox-${stamp()}.wav")
     fun exportTape(p: Project, f: File) = exportToMusic(p, "Audio", f.name, "audio/x-wav", f.readBytes())

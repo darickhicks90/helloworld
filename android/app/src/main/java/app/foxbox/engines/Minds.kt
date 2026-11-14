@@ -70,7 +70,7 @@ class Minds : Engine("minds", "Minds") {
     val hits = EventRing(64)
 
     private val rng = Rng(31)
-    private val drums = List(DRUMS.size) { Drum(it) }
+    private val drums = Array(DRUMS.size) { Drum(it) }
 
     init { fill(pattern, 1234); generate(4321) }
 
@@ -171,7 +171,9 @@ class Minds : Engine("minds", "Minds") {
             if (levels > 0f) { if (crushCount++ % down == 0) crushHold = round(o * levels) / levels; o = crushHold }
             l[s] += o; r[s] += o
         }
-        activeVoices = drums.count { it.active }
+        var act = 0
+        for (d in drums) if (d.active) act++
+        activeVoices = act
     }
 
     private inner class Drum(val type: Int) {

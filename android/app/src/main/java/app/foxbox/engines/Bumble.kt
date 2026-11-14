@@ -83,7 +83,7 @@ class Bumble : Engine("bumble", "Bumble") {
 
     override fun onStep(step: Long) {
         if (!enabled.on) { playStep = -1; return }
-        val div = intArrayOf(1, 2, 4)[rate.index]
+        val div = 1 shl rate.index
         if (step % div != 0L) return
         val len = length.value.toInt().coerceIn(1, 16)
         val i = ((step / div) % len).toInt()

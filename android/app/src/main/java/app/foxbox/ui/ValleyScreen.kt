@@ -16,15 +16,16 @@ import kotlin.math.sin
 import kotlin.random.Random
 
 /**
- * The Valley: perform. Clips are critters and planted Flowers are buds.
- * Draw lines from the kitsune to critters and buds, then tap the kitsune to
- * start the linked clips together and wake the linked flowers. Drag up on a
- * sparkling flower to bloom it (more effect); drag it down to switch it off.
+ * The Valley: perform in scenes. Clips are critters and planted Flowers are
+ * buds. Draw lines between what you want in the next scene (or tap single
+ * items), then tap the kitsune: the scene changes when the current one
+ * reaches the end of its loop. Drag up on a sparkling flower to bloom it;
+ * drag it down to switch it off.
  */
 @SuppressLint("ViewConstructor")
 class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
     private val hud = Px.text(14f, Pal.CREAM)
-    private val small = Px.text(11f, Pal.BROWN_D)
+    private val small = Px.text(9f, Pal.BROWN_D)
     private val hint = Px.text(13f, Pal.CREAM)
     private val title = Px.text(10f, Pal.CREAM, headFont = true)
     private val t0 = System.nanoTime()
@@ -32,7 +33,7 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
     private val smoke = ArrayList<FloatArray>()
 
     private val foxX = 0.5f; private val foxY = 0.62f
-    private val cabinX = 0.84f; private val cabinY = 0.47f
+    private val cabinX = 0.9f; private val cabinY = 0.9f
 
     private var from: String? = null
     private var downX = 0f; private var downY = 0f; private var curX = 0f; private var curY = 0f
@@ -68,37 +69,51 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
         scenery(c, w, h, time)
 
         val playing = Audio.transport.playing_ids
-        fun live(id: String) = id == Studio.FOX || id in playing || Studio.valleyFlowers.any { it.id == id && it.active }
-        Studio.project.links.forEach { (a, b) ->
+        val project = Studio.project
+        // The scene that is playing: solid lines with a pulse on the beat.
+        project.sceneLinks.forEach { (a, b) ->
             val pa = nodePos(a) ?: return@forEach; val pb = nodePos(b) ?: return@forEach
-            val on = live(a) && live(b)
-            linkLine(c, pa.first, pa.second, pb.first, pb.second, if (on) Pal.SUN else Pal.CREAM, if (on) beatPh else -1f)
+            linkLine(c, pa.first, pa.second, pb.first, pb.second, Pal.SUN, if (Audio.transport.playing) beatPh else -1f, 1)
+        }
+        // The next scene being drawn: dotted lines.
+        project.links.forEach { (a, b) ->
+            val pa = nodePos(a) ?: return@forEach; val pb = nodePos(b) ?: return@forEach
+            linkLine(c, pa.first, pa.second, pb.first, pb.second, Pal.CREAM, -1f, 2)
         }
         val f = from
-        if (f != null && dragged && movingId == null && blooming == null) nodePos(f)?.let { linkLine(c, it.first, it.second, curX, curY, Pal.ORANGE_L, -1f) }
+        if (f != null && f != Studio.FOX && dragged && movingId == null && blooming == null) nodePos(f)?.let { linkLine(c, it.first, it.second, curX, curY, Pal.ORANGE_L, -1f, 2) }
 
-        kitsune(c, foxX * w, foxY * h, beatPh, barPh, time, Studio.foxGroup().any { it in playing })
+        val queued = Studio.sceneQueued
+        kitsune(c, foxX * w, foxY * h, beatPh, barPh, time, playing.isNotEmpty() || queued)
+        val solo = project.nextSolo
+        fun ring(x: Float, y: Float, r: Float) {
+            if ((time * 3).toInt() % 2 == 0) return
+            val n = 16
+            for (i in 0 until n) { val a = i * 6.283f / n; c.dot(x + cos(a) * r, y + sin(a) * r, Pal.CREAM) }
+        }
 
         Studio.valleyFlowers.forEach { fl ->
             val x = fl.vx * w; val y = fl.vy * h
-            c.flower(x, y - Px.u * 4, 1.6f, fl.bloom, fl.variant, time, fl.active)
+            c.flower(x, y - Px.u * 2, 0.8f, fl.bloom, fl.variant, time, fl.active)
+            if (fl.id in solo) ring(x, y, Px.u * 8)
             if (fl.active) {
                 // Bloom meter: off at the bottom, full bloom at the top.
-                val top = y - Px.u * 16; val bot = y + Px.u * 14
-                c.fill(x + Px.u * 11, top, x + Px.u * 13, bot, Pal.alpha(Pal.BROWN_D, 0.6f))
-                c.fill(x + Px.u * 11, bot - (bot - top) * fl.bloom, x + Px.u * 13, bot, Pal.SUN)
+                val top = y - Px.u * 10; val bot = y + Px.u * 8
+                c.fill(x + Px.u * 6, top, x + Px.u * 7, bot, Pal.alpha(Pal.BROWN_D, 0.6f))
+                c.fill(x + Px.u * 6, bot - (bot - top) * fl.bloom, x + Px.u * 7, bot, Pal.SUN)
             }
-            tagLabel(c, fl.name + if (fl.active) "  ${(fl.bloom * 100).toInt()}%" else "", x, y + Px.u * 18)
+            tagLabel(c, fl.name + if (fl.active) " ${(fl.bloom * 100).toInt()}%" else "", x, y + Px.u * 9)
         }
 
         Studio.valleyClips.forEach { clip ->
             val on = clip.id in playing
             val s = Sprites.critter(clip.engine, clip.variant)
-            val bob = if (on) -abs(sin(beatPh * PI.toFloat())) * Px.u * 4 else sin(time * 1.5f + clip.vx * 9) * Px.u
+            val bob = if (on) -abs(sin(beatPh * PI.toFloat())) * Px.u * 1.5f else 0f
             val x = clip.vx * w; val y = clip.vy * h
-            if (on) c.fill(x - Px.u * 8, y + Px.u * 14, x + Px.u * 8, y + Px.u * 15, Pal.alpha(Pal.BROWN_D, 0.3f))
-            c.spriteCentered(s, x, y + bob, Px.u * 2.5f, alpha = if (movingId == clip.id) 170 else 255)
-            tagLabel(c, clip.name, x, y + Px.u * 16)
+            if (on) c.fill(x - Px.u * 2, y + Px.u * 3, x + Px.u * 2, y + Px.u * 3.5f, Pal.alpha(Pal.BROWN_D, 0.3f))
+            if (clip.id in solo) ring(x, y, Px.u * 6)
+            c.spriteCentered(s, x, y + bob, Px.u * 0.65f, alpha = if (movingId == clip.id) 170 else 255)
+            tagLabel(c, clip.name, x, y + Px.u * 5)
         }
 
         if (movingId != null) {
@@ -109,9 +124,9 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
     }
 
     private fun tagLabel(c: Canvas, s: String, x: Float, y: Float) {
-        val tw = small.measureText(s) + Px.dp(10f)
-        c.fill(x - tw / 2, y, x + tw / 2, y + Px.dp(16f), Pal.alpha(Pal.CREAM, 0.85f))
-        c.textCentered(s, x, y + Px.dp(8f), small)
+        val tw = small.measureText(s) + Px.dp(6f)
+        c.fill(x - tw / 2, y, x + tw / 2, y + Px.dp(12f), Pal.alpha(Pal.CREAM, 0.75f))
+        c.textCentered(s, x, y + Px.dp(6f), small)
     }
 
     private fun scenery(c: Canvas, w: Float, h: Float, time: Float) {
@@ -148,7 +163,7 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
         for (i in 0 until 14) c.sprite(Sprites.flower, ((i * 173 + 90) % 1000) / 1000f * w, h * (0.64f + ((i * 61) % 100) / 300f), u * 1.2f)
         // Cabin with chimney smoke.
         val cab = Sprites.cabin
-        val cs = u * 2.2f
+        val cs = u * 1.1f
         val cx = cabinX * w - cab.w * cs / 2; val cy = cabinY * h - cab.h * cs
         c.sprite(cab, cx, cy, cs)
         if ((time * 3).toInt() % 2 == 0) c.fill(cx + 4 * cs, cy + 11 * cs, cx + 7 * cs, cy + 13 * cs, Pal.SUN)
@@ -166,9 +181,10 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
         }
     }
 
-    private fun linkLine(c: Canvas, x1: Float, y1: Float, x2: Float, y2: Float, col: Int, pulse: Float) {
+    private fun linkLine(c: Canvas, x1: Float, y1: Float, x2: Float, y2: Float, col: Int, pulse: Float, every: Int = 1) {
         val n = (hypot(x2 - x1, y2 - y1) / (Px.u * 3)).toInt().coerceAtLeast(1)
         for (i in 0..n) {
+            if (i % every != 0) continue
             val t = i / n.toFloat()
             val glow = pulse >= 0f && abs(t - pulse) < 0.08f
             c.dot(x1 + (x2 - x1) * t, y1 + (y2 - y1) * t, if (glow) Pal.CREAM else col, if (glow) 2 else 1)
@@ -235,19 +251,28 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
         button("● Audio", w - m - Px.dp(110f), m, Px.dp(110f), Studio.taping) { Studio.toggleTape() }
         button("${Studio.project.bpm.toInt()} BPM", w - m - Px.dp(226f), m, Px.dp(108f)) { host.bpmDialog() }
         c.textCentered("THE VALLEY", w / 2, m + Px.dp(20f), title)
+        val q = Audio.transport.queuedAt
+        if (q >= 0) {
+            val beatsLeft = maxOf(0.0, (q - Audio.transport.tick) / Ticks.PPQ)
+            val banner = if (Studio.nextScene().isEmpty() && Audio.transport.playing) "Ending in ${Math.ceil(beatsLeft).toInt()} beats" else "Next scene in ${Math.ceil(beatsLeft).toInt()} beats"
+            val bw = hud.measureText(banner) + Px.dp(24f)
+            c.pixelBox(w / 2 - bw / 2, m + Px.dp(30f), w / 2 + bw / 2, m + Px.dp(64f), Pal.SUN)
+            hud.color = Pal.BROWN_D; c.textCentered(banner, w / 2, m + Px.dp(47f), hud)
+        }
         val msg = when {
             Studio.valleyClips.isEmpty() && Studio.valleyFlowers.isEmpty() -> "Long-press a clip and choose “Send to Valley”, or plant a flower"
-            Studio.valleyFlowers.any { it.active } -> "Drag up on a sparkling flower to bloom it · drag it down to switch it off"
-            else -> "Draw lines from the kitsune to critters and flowers · tap the kitsune to begin"
+            q >= 0 -> "Scene queued · tap the kitsune again to cancel"
+            Studio.valleyFlowers.any { it.active } -> "Drag up on a sparkling flower to bloom it · draw the next scene · tap the kitsune"
+            else -> "Draw lines between what plays next (or tap single items) · tap the kitsune"
         }
         c.fill(0f, h - Px.dp(26f), w, h, Pal.alpha(Pal.BROWN_D, 0.6f))
         c.textCentered(msg, w / 2, h - Px.dp(13f), hint)
     }
 
     private fun nodeAt(x: Float, y: Float): String? {
-        val r = Px.u * 14
+        val r = Px.dp(22f)
         Studio.valleyClips.asReversed().forEach { if (hypot(it.vx * width - x, it.vy * height - y) < r) return it.id }
-        Studio.valleyFlowers.asReversed().forEach { if (hypot(it.vx * width - x, it.vy * height - y) < r * 1.3f) return it.id }
+        Studio.valleyFlowers.asReversed().forEach { if (hypot(it.vx * width - x, it.vy * height - y) < r) return it.id }
         if (hypot(foxX * width - x, foxY * height - y) < Px.u * 26) return Studio.FOX
         return null
     }
@@ -268,12 +293,12 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
                 downX = e.x; downY = e.y; dragged = false; movingId = null; blooming = null
                 from = nodeAt(e.x, e.y)
                 val fl = Studio.valleyFlowers.firstOrNull { it.id == from && it.active }
-                if (fl != null) { blooming = fl; bloomStart = fl.bloom; return true }
-                if (from != null) postDelayed(longPress, 450)
+                if (fl != null) { blooming = fl; bloomStart = fl.bloom }
+                if (from != null && from != Studio.FOX) postDelayed(longPress, 450)
             }
             MotionEvent.ACTION_MOVE -> {
                 if (hypot(e.x - downX, e.y - downY) > Px.dp(10f)) { if (!dragged && movingId == null) removeCallbacks(longPress); dragged = true }
-                blooming?.let { Studio.setBloom(it, bloomStart + (downY - e.y) / Px.dp(140f)); return true }
+                blooming?.let { if (dragged) { removeCallbacks(longPress); Studio.setBloom(it, bloomStart + (downY - e.y) / Px.dp(140f)) }; return true }
                 movingId?.let { id ->
                     val vx = (e.x / width).coerceIn(0.04f, 0.96f); val vy = (e.y / height).coerceIn(0.2f, 0.88f)
                     Studio.valleyClips.firstOrNull { it.id == id }?.let { it.vx = vx; it.vy = vy }
@@ -284,11 +309,11 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
                 removeCallbacks(longPress)
                 val src = from; val mv = movingId
                 when {
-                    blooming != null -> Studio.save()
                     mv != null -> if (e.x < Px.dp(130f) && e.y > height - Px.dp(70f)) Studio.removeFromValley(mv) else Studio.save()
-                    src != null && dragged -> nodeAt(e.x, e.y)?.let { dst -> if (dst != src) Studio.link(src, dst) }
-                    src == Studio.FOX -> Studio.foxTapped()
-                    src != null -> Studio.valleyClips.firstOrNull { it.id == src }?.let { Studio.toggleClip(it) }
+                    blooming != null && dragged -> Studio.save()
+                    src == Studio.FOX -> if (!dragged) Studio.foxTapped()
+                    src != null && dragged -> nodeAt(e.x, e.y)?.let { dst -> if (dst != src && dst != Studio.FOX) Studio.link(src, dst) }
+                    src != null -> Studio.toggleInNextScene(src)
                     else -> linkAt(e.x, e.y)?.let { Studio.unlink(it) }
                 }
                 from = null; movingId = null; dragged = false; blooming = null

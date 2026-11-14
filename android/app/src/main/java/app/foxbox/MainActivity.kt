@@ -20,6 +20,7 @@ import app.foxbox.audio.XyState
 import app.foxbox.engines.SampleEngine
 import app.foxbox.fx.Flower
 import app.foxbox.data.AudioFiles
+import app.foxbox.data.CrashLog
 import app.foxbox.data.Project
 import app.foxbox.data.ProjectStore
 import app.foxbox.midi.MidiInput
@@ -45,13 +46,37 @@ class MainActivity : Activity(), Host {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         volumeControlStream = android.media.AudioManager.STREAM_MUSIC
+        CrashLog.install(this)
         DeviceAudio.configure(this) // before anything creates the engines
         Px.init(this)
         ProjectStore.init(this)
         Studio.onMessage = { Toast.makeText(this, it, Toast.LENGTH_SHORT).show() }
         midi = MidiInput(this, Studio)
         midi.start()
+        if (Build.VERSION.SDK_INT >= 33) {
+            onBackInvokedDispatcher.registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT) { goBack() }
+        }
         showProjects()
+        offerCrashReport()
+    }
+
+    /** If FoxBox crashed last time, offer to share the details (nothing is sent automatically). */
+    private fun offerCrashReport() {
+        val report = CrashLog.pending() ?: return
+        AlertDialog.Builder(this).setTitle("FoxBox closed unexpectedly")
+            .setMessage("Sorry about that. You can share the crash details with the developer to help fix it.")
+            .setPositiveButton("Share details") { _, _ ->
+                CrashLog.clear()
+                startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                    type = "text/plain"; putExtra(Intent.EXTRA_SUBJECT, "FoxBox crash report"); putExtra(Intent.EXTRA_TEXT, report)
+                }, "Share crash details"))
+            }
+            .setNegativeButton("Not now") { _, _ -> CrashLog.clear() }
+            .show()
+    }
+
+    private fun goBack() {
+        when (screen) { 2 -> showStudio(); 1 -> showProjects(); else -> finish() }
     }
 
     override fun onStart() { super.onStart(); Audio.start(); immersive() }
@@ -101,10 +126,8 @@ class MainActivity : Activity(), Host {
         setContentView(ValleyScreen(this, this).apply { backToStudio = { showStudio() } })
     }
 
-    @Deprecated("Back handling")
-    override fun onBackPressed() {
-        when (screen) { 2 -> showStudio(); 1 -> showProjects(); else -> @Suppress("DEPRECATION") super.onBackPressed() }
-    }
+    @Deprecated("Back handling for Android 12 and older")
+    override fun onBackPressed() = goBack()
 
     private fun textDialog(title: String, initial: String, numeric: Boolean = false, done: (String) -> Unit) {
         val input = EditText(this).apply {
@@ -224,7 +247,8 @@ class MainActivity : Activity(), Host {
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             micWaiting = e; requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQ_MIC); return
         }
-        mic = AudioFiles.Mic(); micFor = e
+        mic = try { AudioFiles.Mic() } catch (ex: Exception) { Studio.message(ex.message ?: "Couldn't open the microphone"); return }
+        micFor = e
         Studio.message("Recording into ${e.title} from the microphone… tap Stop mic when done")
         Studio.changed()
     }

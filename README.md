@@ -38,7 +38,7 @@ Valley, which feels a bit like playing a game.
    - Gusts clouds float in the sky.
    - Bumble bees hover between the sky and the meadow.
    - Reflections drops swim in the pond.
-   - Minds mushrooms and planted flowers grow on the valley floor.
+   - Minds mushrooms, Leaves trees and planted flowers grow on the valley floor.
 
    Each engine can hold up to **3 clips** and up to **5 flowers** can be
    planted, so there's always room. Tap the **cabin** for a line of

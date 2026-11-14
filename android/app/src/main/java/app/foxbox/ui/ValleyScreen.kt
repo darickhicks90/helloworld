@@ -42,14 +42,15 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
 
     /**
      * Every critter has a home, so nothing overlaps: Gusts in the sky, Bumble
-     * between sky and meadow, Reflections in the pond, Minds and Flowers on
-     * the valley floor, and the cabin's corner kept clear.
+     * between sky and meadow, Reflections in the pond, Minds, Leaves trees and
+     * Flowers on the valley floor, and the cabin's corner kept clear.
      */
     private val homes = mapOf(
         "gusts" to listOf(0.16f to 0.27f, 0.36f to 0.21f, 0.68f to 0.24f),
         "bumble" to listOf(0.24f to 0.46f, 0.74f to 0.43f, 0.87f to 0.52f),
         "reflections" to listOf(0.10f to 0.79f, 0.18f to 0.86f, 0.25f to 0.78f),
         "minds" to listOf(0.35f to 0.75f, 0.43f to 0.85f, 0.33f to 0.86f),
+        "leaves" to listOf(0.32f to 0.62f, 0.66f to 0.61f, 0.53f to 0.88f),
         "flowers" to listOf(0.58f to 0.80f, 0.65f to 0.73f, 0.70f to 0.86f, 0.77f to 0.75f, 0.83f to 0.86f),
     )
     private val spots = HashMap<String, Pair<Float, Float>>()
@@ -146,7 +147,8 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
             val bob = if (on) -abs(sin(beatPh * PI.toFloat())) * Px.u * 1.5f else 0f
             if (on) c.fill(x - Px.u * 2, y + Px.u * 3, x + Px.u * 2, y + Px.u * 3.5f, Pal.alpha(Pal.BROWN_D, 0.3f))
             if (clip.id in solo) ring(x, y, Px.u * 6)
-            c.spriteCentered(s, x, y + bob, Px.u * 0.65f, alpha = if (movingId == clip.id) 170 else 255)
+            val scale = if (clip.engine == "leaves") Px.u * 0.85f else Px.u * 0.65f
+            c.spriteCentered(s, x, y + bob, scale, alpha = if (movingId == clip.id) 170 else 255)
             tagLabel(c, clip.name, x, y + Px.u * 5)
         }
 

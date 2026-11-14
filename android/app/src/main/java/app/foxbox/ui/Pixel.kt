@@ -186,7 +186,7 @@ object Sprites {
     private val CRITTERS = mapOf(
         "gusts" to listOf("...WWWW.....", "..WWWWWW.WW.", ".WWWWWWWWWWW", "WWWDWWWWDWWW", "WWWWWooWWWWW", ".aaaaaaaaaa."),
         "reflections" to listOf("....A....", "....A....", "...AAA...", "..AAAAA..", ".AaAAAAA.", ".aAAAAAA.", "AADAAADAA", "AAAAooAAA", ".AAAAAAA.", "..qAAAq.."),
-        "leaves" to listOf("..aa...aa..", ".aAAa.aAAa.", "..aAAqAAa..", "....qAq....", ".....q.....", "..BBBBBBB..", ".BBDBBBDBB.", ".BBBBooBBB.", "..bBBBBBb.."),
+        "leaves" to listOf("....gGGg....", "..gGGOGGGg..", ".gGGGGGGGOg.", "gGOGGGGGGGGg", "GGGGDGGGDGGG", "GGGGGGooGGOG", ".GGOGGGGGGG.", "..GGGGGGGG..", ".....BB.....", ".....BB.....", "....bBBb...."),
         "minds" to listOf("...OOOOOO...", "..OWOOOOWO..", ".OOOOWOOOOO.", "OOWOOOOOOWOO", "OOOOOOOOOOOO", "...WWWWWW...", "...WDWWDW...", "...WWooWW...", "...WWWWWW...", "....wwww...."),
         "bumble" to listOf("..aa...aa..", ".aWWa.aWWa.", "..aaDDDaa..", "..DhhhhhD..", ".DDDDDDDDD.", ".DhDhhhDhD.", ".DDDDDDDDD.", "..DhhoohD..", "...DDDDD..."),
     )

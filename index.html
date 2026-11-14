@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#14100e" />
+  <title>FoxBox</title>
+  <meta name="description" content="FoxBox — a playful music box: Gusts synth, Reflections sampler, Leaves granular, Minds generative drums and the Teeth mangler. Works with USB and Bluetooth MIDI." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2314100e'/%3E%3Cpath d='M10 12l14 12h16l14-12-4 24-18 18-18-18z' fill='%23ff8a3d'/%3E%3Cpath d='M22 40l10 10 10-10-10 3z' fill='%23fff3e6'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body data-tab="gusts">
+  <div id="boot" class="boot">
+    <div class="boot-card">
+      <svg class="fox" viewBox="0 0 64 64" aria-hidden="true">
+        <path d="M10 12l14 12h16l14-12-4 24-18 18-18-18z" fill="#ff8a3d" />
+        <path d="M14 18l8 7-6 7z M50 18l-8 7 6 7z" fill="#5a2a12" />
+        <path d="M22 40l10 10 10-10-10 3z" fill="#fff3e6" />
+        <circle cx="25" cy="33" r="2.4" fill="#14100e" />
+        <circle cx="39" cy="33" r="2.4" fill="#14100e" />
+      </svg>
+      <h1>FoxBox</h1>
+      <p class="tag">wind · water · leaves · minds · teeth</p>
+      <button id="wake" class="wake">Wake the fox ▶</button>
+      <p class="small">Plug in a USB MIDI controller or pair a Bluetooth one — or just play with the screen and your keyboard.<br />Best in Chrome or Edge. Turn your volume down a little first.</p>
+    </div>
+  </div>
+
+  <header class="top">
+    <div class="brand">
+      <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M10 12l14 12h16l14-12-4 24-18 18-18-18z" fill="#ff8a3d" /><path d="M22 40l10 10 10-10-10 3z" fill="#fff3e6" /></svg>
+      <span>FoxBox</span>
+    </div>
+
+    <div class="group transport">
+      <button id="play" class="play" title="Play / stop (Space)">▶</button>
+      <span id="stepLed" class="led-text" title="Bar position">—</span>
+      <label class="num">BPM <input id="bpm" type="number" min="40" max="240" value="112" /></label>
+      <button id="tap" title="Tap tempo">Tap</button>
+      <label class="num">Swing <input id="swing" type="range" min="0" max="60" value="0" /></label>
+    </div>
+
+    <div class="group perf">
+      <button id="octDown" title="Octave down (Z)">−</button>
+      <span class="led-text">Oct <b id="octVal">+0</b></span>
+      <button id="octUp" title="Octave up (X)">+</button>
+      <button id="hold" class="toggle" title="Latch notes after you let go">Hold</button>
+      <button id="expr" class="toggle" title="Seaboard-style touch keys: drag sideways to bend, up/down to change tone. Off = glissando.">Expressive</button>
+      <select id="arpMode" title="Arpeggiator"></select>
+      <select id="arpRate" title="Arp speed"></select>
+      <select id="scaleRoot" title="Key for the pads"></select>
+      <select id="scaleName" title="Scale for the pads"></select>
+    </div>
+
+    <div class="group io">
+      <button id="midiBtn" title="MIDI devices & mixer">🎹 MIDI <span id="midiCount" class="badge"></span><span id="midiLed" class="led"></span></button>
+      <button id="bleBtn" title="Connect a Bluetooth LE MIDI controller">🔵 Bluetooth</button>
+      <button id="recBtn" class="rec" title="Record what you play to an audio file">● Rec</button>
+      <button id="panic" title="Stop all sound (Esc)">✕</button>
+      <canvas id="scope" width="160" height="36"></canvas>
+    </div>
+  </header>
+
+  <nav id="tabs" class="tabs"></nav>
+
+  <main id="panels"></main>
+
+  <footer class="surface">
+    <div class="surface-head"><span id="playTarget">Playing Gusts</span><span class="hint">Keys: A–K · Z/X octave · 1–= pads · Space play</span></div>
+    <div class="surface-body">
+      <div id="pads" class="pads"></div>
+      <div id="keyboard" class="keyboard"></div>
+    </div>
+  </footer>
+
+  <div id="toast" class="toast"></div>
+
+  <script src="js/util.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/clock.js"></script>
+  <script src="js/midi.js"></script>
+  <script src="js/input.js"></script>
+  <script src="js/engines/gusts.js"></script>
+  <script src="js/engines/reflections.js"></script>
+  <script src="js/engines/leaves.js"></script>
+  <script src="js/engines/minds.js"></script>
+  <script src="js/engines/teeth.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

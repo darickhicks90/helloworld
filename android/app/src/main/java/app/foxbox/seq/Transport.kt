@@ -1,0 +1,203 @@
+package app.foxbox.seq
+
+import app.foxbox.audio.Engine
+import app.foxbox.audio.SR
+import app.foxbox.audio.TAU
+import kotlin.math.ceil
+import kotlin.math.exp
+import kotlin.math.sin
+
+/**
+ * The one clock for the whole app. Runs on the audio thread and handles
+ * tempo, 16th-note steps, clip playback, recording (project-wide or a
+ * single engine), count-in and the metronome. Public commands must be
+ * called through Audio.post; the @Volatile fields are safe to read anywhere.
+ */
+class Transport {
+    enum class Rec { OFF, ARMED, RECORDING }
+
+    interface Listener {
+        fun onRecorded(clips: List<Clip>)
+        fun onChanged()
+    }
+
+    @Volatile var bpm = 110f
+    @Volatile var metronome = true
+    @Volatile var quantize = true
+    @Volatile var playing = false; private set
+    @Volatile var tick = 0.0; private set
+    @Volatile var rec = Rec.OFF; private set
+    /** Engine being recorded, or null when the whole project is recording. */
+    @Volatile var recTarget: Engine? = null; private set
+    @Volatile var recStart = 0.0; private set
+    @Volatile var recLen = 0; private set
+    /** Clips currently looping (snapshot, safe to read from the UI). */
+    @Volatile var playing_ids: Set<String> = emptySet(); private set
+
+    var listener: Listener? = null
+    var engines: List<Engine> = emptyList()
+
+    private val players = ArrayList<ClipPlayer>()
+    private var slot = 0
+
+    private class Take {
+        val notes = ArrayList<Clip.Note>()
+        val open = HashMap<Int, Clip.Note>()
+        val xy = ArrayList<Clip.XyPoint>()
+        var lastX = -1f; var lastY = -1f
+    }
+    private val takes = HashMap<Engine, Take>()
+
+    val bar get() = Math.floorDiv(tick.toLong(), Ticks.BAR.toLong())
+    val beat get() = Math.floorMod(Math.floorDiv(tick.toLong(), Ticks.PPQ.toLong()), 4L)
+    private fun nextBar(t: Double) = ceil(t / Ticks.BAR) * Ticks.BAR
+
+    // ---------------------------------------------------------------- commands
+
+    fun play() {
+        if (playing) return
+        tick = 0.0; playing = true; changed()
+    }
+
+    fun stop() {
+        players.forEach { it.releaseAll() }
+        players.clear(); syncIds()
+        engines.forEach { it.allOff() }
+        playing = false; rec = Rec.OFF; takes.clear(); tick = 0.0
+        changed()
+    }
+
+    /** Arm recording for `target` (null = all engines) for `lenTicks`. Calling again while recording ends it early. */
+    fun record(target: Engine?, lenTicks: Int) {
+        when (rec) {
+            Rec.RECORDING -> { recLen = maxOf(Ticks.BAR, nextBar(tick - recStart).toInt()); finish(); return }
+            Rec.ARMED -> { rec = Rec.OFF; changed(); return }
+            Rec.OFF -> {}
+        }
+        recTarget = target; recLen = lenTicks
+        if (!playing) {
+            // Start with a one-bar count-in when the metronome is on.
+            tick = if (metronome) -Ticks.BAR.toDouble() else 0.0
+            playing = true; recStart = 0.0
+        } else recStart = nextBar(tick)
+        rec = Rec.ARMED
+        changed()
+    }
+
+    /** Start a clip looping at the next bar (or at once if stopped). Replaces the same clip if already playing. */
+    fun launch(clip: Clip, engine: Engine, at: Double? = null) {
+        stopClip(clip.id)
+        if (!playing) { tick = 0.0; playing = true }
+        players += ClipPlayer(clip, engine, at ?: if (tick <= 0.0) 0.0 else nextBar(tick), slot++)
+        syncIds(); changed()
+    }
+
+    fun stopClip(id: String) {
+        val it = players.iterator()
+        while (it.hasNext()) { val p = it.next(); if (p.clip.id == id) { p.releaseAll(); it.remove() } }
+        syncIds(); changed()
+    }
+
+    fun stopAllClips() {
+        players.forEach { it.releaseAll() }; players.clear(); syncIds(); changed()
+    }
+
+    // ---------------------------------------------------------------- recording hooks (audio thread)
+
+    private fun taking(e: Engine) = rec == Rec.RECORDING && (recTarget == null || recTarget === e)
+    private fun rel() = (tick - recStart).toInt().coerceAtLeast(0)
+
+    fun recNoteOn(e: Engine, key: Int, note: Int, vel: Float) {
+        if (!taking(e)) return
+        takes.getOrPut(e) { Take() }.open[key] = Clip.Note(rel(), 0, note, vel)
+    }
+
+    fun recNoteOff(e: Engine, key: Int) {
+        if (!taking(e)) return
+        val t = takes[e] ?: return
+        val n = t.open.remove(key) ?: return
+        t.notes += n.copy(dur = maxOf(Ticks.STEP / 4, rel() - n.tick))
+    }
+
+    /** One-shot hit (drums): fixed short length. */
+    fun recHit(e: Engine, note: Int, vel: Float) {
+        if (!taking(e)) return
+        takes.getOrPut(e) { Take() }.notes += Clip.Note(rel(), Ticks.STEP / 2, note, vel)
+    }
+
+    // ---------------------------------------------------------------- processing
+
+    fun process(n: Int) {
+        if (!playing) return
+        val t0 = tick
+        val t1 = t0 + n * bpm * Ticks.PPQ / 60.0 / SR
+        if (rec == Rec.ARMED && t1 > recStart) { rec = Rec.RECORDING; takes.clear(); changed() }
+
+        var s = ceil(t0 / Ticks.STEP).toLong()
+        while (s * Ticks.STEP < t1) { step(s); s++ }
+
+        for (p in players) p.process(t0, t1)
+
+        if (rec == Rec.RECORDING) {
+            // Sample XY movement every 1/32 note.
+            val half = Ticks.STEP / 2
+            if (Math.floorDiv(t0.toLong(), half.toLong()) != Math.floorDiv(t1.toLong(), half.toLong())) {
+                for (e in engines) if (taking(e)) {
+                    val tk = takes.getOrPut(e) { Take() }
+                    if (e.touching || tk.xy.isNotEmpty()) {
+                        if (e.x != tk.lastX || e.y != tk.lastY) {
+                            tk.xy += Clip.XyPoint(rel(), e.x, e.y); tk.lastX = e.x; tk.lastY = e.y
+                        }
+                    }
+                }
+            }
+            tick = t1
+            if (t1 >= recStart + recLen) finish()
+        }
+        tick = t1
+    }
+
+    private fun step(s: Long) {
+        if (s >= 0) for (e in engines) e.onStep(s)
+        if (metronome && rec != Rec.OFF && Math.floorMod(s, 4L) == 0L) click(Math.floorMod(s, 16L) == 0L)
+    }
+
+    private fun finish() {
+        val end = recLen
+        val made = ArrayList<Clip>()
+        for ((e, t) in takes) {
+            t.open.values.forEach { t.notes += it.copy(dur = maxOf(Ticks.STEP / 4, end - it.tick)) }
+            val notes = t.notes.filter { it.tick < end }.map {
+                if (quantize) it.copy(tick = (Math.round(it.tick / Ticks.STEP.toFloat()) * Ticks.STEP) % end) else it
+            }.sortedBy { it.tick }
+            val moved = t.xy.isNotEmpty() && !e.isInstrument
+            if (notes.isEmpty() && !moved) continue
+            made += Clip(engine = e.id, name = "", lengthTicks = end, notes = notes.toMutableList(), xy = t.xy.filter { it.tick < end }.toMutableList())
+        }
+        takes.clear(); rec = Rec.OFF
+        // Newly recorded clips keep looping right where recording ended.
+        for (c in made) engines.firstOrNull { it.id == c.engine }?.let { e -> players += ClipPlayer(c, e, recStart + end, slot++) }
+        syncIds()
+        if (made.isNotEmpty()) listener?.onRecorded(made)
+        changed()
+    }
+
+    private fun syncIds() { playing_ids = players.map { it.clip.id }.toSet() }
+    private fun changed() = listener?.onChanged()
+
+    // ---------------------------------------------------------------- metronome
+
+    private var clickPhase = 0f; private var clickEnv = 0f; private var clickFreq = 1000f
+    private val clickDecay = exp(-1f / (0.02f * SR))
+    private fun click(accent: Boolean) { clickEnv = if (accent) 0.5f else 0.32f; clickFreq = if (accent) 1760f else 1175f; clickPhase = 0f }
+
+    fun renderClick(l: FloatArray, r: FloatArray, n: Int) {
+        if (clickEnv < 0.001f) return
+        for (i in 0 until n) {
+            val v = sin(TAU * clickPhase) * clickEnv
+            clickPhase += clickFreq / SR; if (clickPhase >= 1f) clickPhase -= 1f
+            clickEnv *= clickDecay
+            l[i] += v; r[i] += v
+        }
+    }
+}

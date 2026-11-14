@@ -9,10 +9,10 @@ android {
 
     defaultConfig {
         applicationId = "app.foxbox"
-        minSdk = 26
+        minSdk = 29
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "2.0"
     }
 
     // A fixed key for test builds, so a new APK installs over the old one
@@ -40,20 +40,8 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
-
-    // The web app (index.html, css, js, fonts in the repository root) is
-    // copied into the APK's assets at build time, so there is one copy of it.
-    sourceSets["main"].assets.srcDir(layout.buildDirectory.dir("generated/web"))
 }
-
-val copyWebApp by tasks.registering(Sync::class) {
-    from(rootDir.parentFile) {
-        include("index.html", "css/**", "js/**", "fonts/**")
-    }
-    into(layout.buildDirectory.dir("generated/web/www"))
-}
-tasks.named("preBuild") { dependsOn(copyWebApp) }
 
 dependencies {
-    implementation("androidx.webkit:webkit:1.12.1")
+    // No libraries needed: FoxBox uses only the Android framework.
 }

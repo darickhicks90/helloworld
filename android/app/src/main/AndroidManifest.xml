@@ -2,15 +2,15 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- MIDI and Bluetooth LE are optional: FoxBox works without them. -->
+    <!-- MIDI, Bluetooth LE and the microphone are optional: FoxBox works without them. -->
     <uses-feature android:name="android.software.midi" android:required="false" />
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
     <uses-feature android:name="android.hardware.usb.host" android:required="false" />
+    <uses-feature android:name="android.hardware.screen.landscape" android:required="true" />
 
-    <!-- Recording the microphone into the Reflections sampler -->
+    <!-- Recording samples from the microphone -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
     <!-- Bluetooth MIDI: Android 12 and newer -->
     <uses-permission
@@ -18,7 +18,7 @@
         android:usesPermissionFlags="neverForLocation"
         tools:targetApi="s" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-    <!-- Bluetooth MIDI: Android 11 and older -->
+    <!-- Bluetooth MIDI: Android 10 and 11 -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30" />
@@ -37,7 +37,8 @@
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density"
             android:exported="true"
             android:launchMode="singleTask"
-            android:windowSoftInputMode="adjustResize">
+            android:screenOrientation="sensorLandscape"
+            android:windowSoftInputMode="adjustPan">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

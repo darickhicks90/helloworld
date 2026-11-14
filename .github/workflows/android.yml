@@ -6,10 +6,6 @@ name: Android app
 on:
   push:
     paths:
-      - "index.html"
-      - "css/**"
-      - "js/**"
-      - "fonts/**"
       - "android/**"
       - ".github/workflows/android.yml"
   workflow_dispatch:

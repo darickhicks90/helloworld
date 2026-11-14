@@ -1,193 +1,222 @@
 package app.foxbox
 
 import android.Manifest
-import android.annotation.SuppressLint
 import android.app.Activity
-import android.content.ActivityNotFoundException
+import android.app.AlertDialog
 import android.content.Intent
-import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
-import android.graphics.Color
-import android.media.AudioManager
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.text.InputType
 import android.view.View
 import android.view.WindowInsets
+import android.view.WindowInsetsController
 import android.view.WindowManager
-import android.webkit.PermissionRequest
-import android.webkit.ValueCallback
-import android.webkit.WebChromeClient
-import android.webkit.WebResourceRequest
-import android.webkit.WebResourceResponse
-import android.webkit.WebView
-import android.webkit.WebViewClient
-import android.widget.FrameLayout
-import androidx.webkit.WebViewAssetLoader
+import android.widget.EditText
+import android.widget.Toast
+import app.foxbox.audio.Audio
+import app.foxbox.audio.Engine
+import app.foxbox.data.AudioFiles
+import app.foxbox.data.Project
+import app.foxbox.data.ProjectStore
+import app.foxbox.midi.MidiInput
+import app.foxbox.seq.Clip
+import app.foxbox.seq.Ticks
+import app.foxbox.ui.Host
+import app.foxbox.ui.ProjectScreen
+import app.foxbox.ui.Px
+import app.foxbox.ui.StudioScreen
+import app.foxbox.ui.ValleyScreen
 
-/**
- * FoxBox for Android.
- *
- * The whole app is the FoxBox web app (index.html, css, js, fonts), bundled
- * inside the APK and shown full-screen in a WebView. Android-only extras —
- * USB / Bluetooth MIDI, the microphone, picking sound files and saving
- * recordings — are provided by [FoxBoxBridge].
- */
-class MainActivity : Activity() {
+/** One activity, three screens: projects → studio ⇄ valley. */
+class MainActivity : Activity(), Host {
+    private lateinit var midi: MidiInput
+    private var screen = 0 // 0 projects, 1 studio, 2 valley
+    private var studio: StudioScreen? = null
+    private var pickFor: Engine? = null
+    private var mic: AudioFiles.Mic? = null
+    override val micOn get() = mic != null
 
-    companion object {
-        const val REQ_FILE = 1
-        const val REQ_MIC = 2
-        const val REQ_BLUETOOTH = 3
-
-        // The bundled web app is served from this (secure, https) address,
-        // which lets audio worklets, local storage and audio decoding work
-        // the same way they do in a normal browser.
-        private const val HOST = "appassets.androidplatform.net"
-        private const val START_URL = "https://$HOST/assets/www/index.html"
-    }
-
-    private lateinit var web: WebView
-    private lateinit var bridge: FoxBoxBridge
-    private var fileCallback: ValueCallback<Array<Uri>>? = null
-    private var pendingMicRequest: PermissionRequest? = null
-
-    @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        volumeControlStream = AudioManager.STREAM_MUSIC
+        volumeControlStream = android.media.AudioManager.STREAM_MUSIC
+        Px.init(this)
+        ProjectStore.init(this)
+        Studio.onMessage = { Toast.makeText(this, it, Toast.LENGTH_SHORT).show() }
+        midi = MidiInput(this, Studio)
+        midi.start()
+        showProjects()
+    }
 
-        val debuggable = (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
-        WebView.setWebContentsDebuggingEnabled(debuggable)
+    override fun onStart() { super.onStart(); Audio.start(); immersive() }
+    override fun onStop() {
+        if (screen != 0) Studio.save(true)
+        if (!Studio.taping) Audio.stop()
+        super.onStop()
+    }
+    override fun onDestroy() { midi.stop(); super.onDestroy() }
+    override fun onWindowFocusChanged(hasFocus: Boolean) { super.onWindowFocusChanged(hasFocus); if (hasFocus) immersive() }
 
-        // Keep content clear of the status bar, navigation bar and camera cut-out.
-        val root = FrameLayout(this)
-        root.setBackgroundColor(Color.parseColor("#3D2414"))
+    private fun immersive() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            root.setOnApplyWindowInsetsListener { v, insets ->
-                val bars = insets.getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
-                v.setPadding(bars.left, bars.top, bars.right, bars.bottom)
-                WindowInsets.CONSUMED
+            window.insetsController?.let {
+                it.hide(WindowInsets.Type.systemBars())
+                it.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             }
+        } else {
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or View.SYSTEM_UI_FLAG_FULLSCREEN or
+                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
         }
+    }
 
-        web = WebView(this)
-        web.setBackgroundColor(Color.parseColor("#F7EFDC"))
-        web.overScrollMode = View.OVER_SCROLL_NEVER
-        root.addView(web, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-        setContentView(root)
+    // ------------------------------------------------------------------ navigation
 
-        web.settings.apply {
-            javaScriptEnabled = true
-            domStorageEnabled = true // saves your FoxBox settings
-            mediaPlaybackRequiresUserGesture = false
-            allowFileAccess = false
-            allowContentAccess = false
-            builtInZoomControls = false
-            displayZoomControls = false
-            setSupportZoom(false)
-            textZoom = 100
+    override fun showProjects() {
+        if (screen != 0) { Studio.save(true); Audio.post { Audio.transport.stop() } }
+        screen = 0; studio = null
+        setContentView(ProjectScreen(this, ::openProject, ::newProject, ::manageProject))
+    }
+
+    private fun openProject(p: Project) {
+        Studio.open(p)
+        studio = StudioScreen(this, this)
+        showStudio()
+    }
+
+    private fun showStudio() {
+        screen = 1
+        setContentView(studio ?: StudioScreen(this, this).also { studio = it })
+    }
+
+    override fun showValley() {
+        screen = 2
+        (studio?.parent as? android.view.ViewGroup)?.removeView(studio)
+        setContentView(ValleyScreen(this, this).apply { backToStudio = { showStudio() } })
+    }
+
+    @Deprecated("Back handling")
+    override fun onBackPressed() {
+        when (screen) { 2 -> showStudio(); 1 -> showProjects(); else -> @Suppress("DEPRECATION") super.onBackPressed() }
+    }
+
+    private fun textDialog(title: String, initial: String, numeric: Boolean = false, done: (String) -> Unit) {
+        val input = EditText(this).apply {
+            setText(initial); setSelection(initial.length)
+            inputType = if (numeric) InputType.TYPE_CLASS_NUMBER else InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS
         }
+        AlertDialog.Builder(this).setTitle(title).setView(input)
+            .setPositiveButton("OK") { _, _ -> done(input.text.toString()) }
+            .setNegativeButton("Cancel", null).show()
+    }
 
-        val assets = WebViewAssetLoader.Builder()
-            .setDomain(HOST)
-            .addPathHandler("/assets/", WebViewAssetLoader.AssetsPathHandler(this))
-            .build()
+    private fun newProject() = textDialog("Name your project", "Song ${ProjectStore.list().size + 1}") { openProject(ProjectStore.create(it)) }
 
-        web.webViewClient = object : WebViewClient() {
-            override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
-                assets.shouldInterceptRequest(request.url)
-
-            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                if (request.url.host == HOST) return false
-                // Any outside link opens in the normal browser.
-                try {
-                    startActivity(Intent(Intent.ACTION_VIEW, request.url))
-                } catch (_: ActivityNotFoundException) {
-                }
-                return true
+    private fun manageProject(p: Project) {
+        AlertDialog.Builder(this).setTitle(p.name).setItems(arrayOf("Open", "Rename", "Delete")) { _, which ->
+            when (which) {
+                0 -> openProject(p)
+                1 -> textDialog("Rename project", p.name) { ProjectStore.rename(p, it); showProjects() }
+                2 -> AlertDialog.Builder(this).setTitle("Delete ${p.name}?").setMessage("Its clips and samples in the app will be removed. Exports in Music/FoxBox stay.")
+                    .setPositiveButton("Delete") { _, _ -> ProjectStore.delete(p); showProjects() }.setNegativeButton("Cancel", null).show()
             }
-        }
+        }.show()
+    }
 
-        web.webChromeClient = object : WebChromeClient() {
-            // Microphone for "Record mic" in Reflections.
-            override fun onPermissionRequest(request: PermissionRequest) {
-                runOnUiThread {
-                    if (PermissionRequest.RESOURCE_AUDIO_CAPTURE !in request.resources) {
-                        request.deny()
-                    } else if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                        request.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE))
-                    } else {
-                        pendingMicRequest?.deny()
-                        pendingMicRequest = request
-                        requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQ_MIC)
-                    }
+    // ------------------------------------------------------------------ Host
+
+    override fun bpmDialog() = textDialog("Tempo (BPM)", Studio.project.bpm.toInt().toString(), numeric = true) { s ->
+        s.toFloatOrNull()?.let { Studio.setBpm(it) }
+    }
+
+    override fun clipMenu(clip: Clip) {
+        val playing = Studio.isPlaying(clip)
+        val items = arrayOf(if (playing) "Stop" else "Play", if (clip.inValley) "Remove from Valley" else "Send to Valley", "Clip length…", "Rename", "Save MIDI file again", "Delete")
+        AlertDialog.Builder(this).setTitle(clip.name).setItems(items) { _, which ->
+            when (which) {
+                0 -> Studio.toggleClip(clip)
+                1 -> if (clip.inValley) Studio.removeFromValley(clip) else Studio.sendToValley(clip)
+                2 -> {
+                    val opts = arrayOf(1, 2, 3, 4, 6, 8, 12, 16)
+                    AlertDialog.Builder(this).setTitle("Length (now ${clip.lengthTicks / Ticks.BAR} bars)")
+                        .setItems(opts.map { "$it bar" + if (it > 1) "s" else "" }.toTypedArray()) { _, i -> Studio.setClipBars(clip, opts[i]) }.show()
                 }
+                3 -> textDialog("Rename clip", clip.name) { Studio.renameClip(clip, it) }
+                4 -> { ProjectStore.saveClipMidi(Studio.project, clip); Studio.message("Saved ${clip.name}.mid to Music/FoxBox") }
+                5 -> Studio.deleteClip(clip)
             }
+        }.show()
+    }
 
-            // "Load sound" in Reflections opens Android's file picker.
-            override fun onShowFileChooser(
-                view: WebView,
-                callback: ValueCallback<Array<Uri>>,
-                params: FileChooserParams
-            ): Boolean {
-                fileCallback?.onReceiveValue(null)
-                fileCallback = callback
-                val pick = Intent(Intent.ACTION_GET_CONTENT).apply {
-                    addCategory(Intent.CATEGORY_OPENABLE)
-                    type = "audio/*"
-                }
-                return try {
-                    @Suppress("DEPRECATION")
-                    startActivityForResult(Intent.createChooser(pick, "Choose a sound"), REQ_FILE)
-                    true
-                } catch (_: ActivityNotFoundException) {
-                    fileCallback = null
-                    false
-                }
+    override fun midiMenu() {
+        val devs = midi.devices
+        val items = (listOf("Pair a Bluetooth MIDI controller…") + devs.map { "${it.name}  —  plays as ${it.role.name.lowercase()}" }).toTypedArray()
+        AlertDialog.Builder(this).setTitle(if (devs.isEmpty()) "No MIDI controllers connected" else "MIDI controllers").setItems(items) { _, which ->
+            if (which == 0) {
+                if (midi.hasBluetoothPermission()) midi.pairBluetooth() else requestPermissions(midi.bluetoothPermissions(), REQ_BT)
+            } else {
+                val d = devs[which - 1]
+                val roles = MidiInput.Role.values()
+                AlertDialog.Builder(this).setTitle("${d.name} plays as…")
+                    .setItems(arrayOf("Keys", "MPE keys (ROLI Seaboard)", "Pads (TempoPad C16)")) { _, r -> d.role = roles[r] }.show()
             }
-        }
+        }.setNegativeButton("Close", null).show()
+    }
 
-        bridge = FoxBoxBridge(this, web)
-        web.addJavascriptInterface(bridge, "FoxBoxAndroid")
-
-        if (savedInstanceState == null || web.restoreState(savedInstanceState) == null) {
-            web.loadUrl(START_URL)
-        }
+    override fun pickAudio(e: Engine) {
+        pickFor = e
+        val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply { addCategory(Intent.CATEGORY_OPENABLE); type = "audio/*" }
+        @Suppress("DEPRECATION") startActivityForResult(i, REQ_FILE)
     }
 
     @Deprecated("Activity result API")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        @Suppress("DEPRECATION")
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == REQ_FILE) {
-            fileCallback?.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(resultCode, data))
-            fileCallback = null
+        @Suppress("DEPRECATION") super.onActivityResult(requestCode, resultCode, data)
+        val uri = data?.data
+        val e = pickFor
+        if (requestCode != REQ_FILE || resultCode != RESULT_OK || uri == null || e == null) return
+        Studio.message("Loading…")
+        Thread {
+            try {
+                val pcm = AudioFiles.decode(this, uri)
+                val name = contentResolver.query(uri, null, null, null, null)?.use { c ->
+                    if (c.moveToFirst()) c.getString(c.getColumnIndexOrThrow(android.provider.OpenableColumns.DISPLAY_NAME)) else null
+                } ?: "Sample"
+                runOnUiThread { Studio.setSample(e, pcm, name) }
+            } catch (ex: Exception) {
+                Studio.message("Couldn't read that file: ${ex.message}")
+            }
+        }.start()
+    }
+
+    override fun toggleMic() {
+        val m = mic
+        if (m != null) {
+            mic = null
+            Thread { val data = m.stop(); runOnUiThread { Studio.setSample(Audio.reflections, data, "Mic recording"); Studio.changed() } }.start()
+            Studio.changed(); return
         }
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQ_MIC); return
+        }
+        mic = AudioFiles.Mic()
+        Studio.message("Recording from the microphone… tap Stop mic when done")
+        Studio.changed()
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        val granted = grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }
+        val ok = grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }
         when (requestCode) {
-            REQ_MIC -> {
-                val req = pendingMicRequest
-                pendingMicRequest = null
-                if (granted) req?.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) else req?.deny()
-            }
-            REQ_BLUETOOTH -> bridge.onBluetoothPermission(granted)
+            REQ_MIC -> if (ok) toggleMic() else Studio.message("FoxBox needs the microphone to record samples")
+            REQ_BT -> if (ok) midi.pairBluetooth() else Studio.message("FoxBox needs Bluetooth permission to find controllers")
         }
     }
 
-    override fun onSaveInstanceState(outState: Bundle) {
-        super.onSaveInstanceState(outState)
-        web.saveState(outState)
-    }
-
-    override fun onDestroy() {
-        bridge.close()
-        web.destroy()
-        super.onDestroy()
+    companion object {
+        private const val REQ_FILE = 1
+        private const val REQ_MIC = 2
+        private const val REQ_BT = 3
     }
 }

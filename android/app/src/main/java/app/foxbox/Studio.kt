@@ -27,6 +27,10 @@ import java.util.concurrent.CopyOnWriteArrayList
 object Studio : Transport.Listener, MidiInput.Sink {
     const val FOX = "fox"
     const val FLOWERS = "flowers"
+    /** Most clips an engine can hold (keeps room for every critter in the Valley). */
+    const val MAX_CLIPS = 3
+    /** Most flowers planted in the Valley at once. */
+    const val MAX_PLANTED = 5
 
     private val main = Handler(Looper.getMainLooper())
     private val t get() = Audio.transport
@@ -68,6 +72,9 @@ object Studio : Transport.Listener, MidiInput.Sink {
         Audio.flowers.active = emptyList(); Audio.flowers.audition = null; auditioning = false
         p.flowers.forEach { it.active = false }
         if (p.flowers.isEmpty()) p.flowers += Flower(name = "Dewdrop")
+        // Older projects may have more than fit in the Valley: keep the first few there.
+        Audio.engines.forEach { e -> p.clips.filter { it.engine == e.id && it.inValley }.drop(MAX_CLIPS).forEach { it.inValley = false } }
+        p.flowers.filter { it.inValley }.drop(MAX_PLANTED).forEach { it.inValley = false }
         flower = p.flowers.first()
         applyKey()
         page = "gusts"; current = Audio.gusts; melodic = Audio.gusts
@@ -140,7 +147,11 @@ object Studio : Transport.Listener, MidiInput.Sink {
 
     fun togglePlay() = Audio.post { if (t.playing) t.stop() else t.play() }
     fun recordProject() = Audio.post { t.record(null, project.loopBars * Ticks.BAR) }
-    fun recordEngine(e: Engine) = Audio.post { t.record(e, barsFor(e) * Ticks.BAR) }
+    fun recordEngine(e: Engine) {
+        val recording = t.rec != Transport.Rec.OFF
+        if (!recording && clipsFor(e).size >= MAX_CLIPS) return message("${e.title} already has $MAX_CLIPS clips. Delete one (long-press it) to record another.")
+        Audio.post { t.record(e, barsFor(e) * Ticks.BAR) }
+    }
     fun barsFor(e: Engine) = clipBars[e.id] ?: 2
     fun setBarsFor(e: Engine, bars: Int) { clipBars[e.id] = bars.coerceIn(1, 16); changed() }
 
@@ -153,14 +164,19 @@ object Studio : Transport.Listener, MidiInput.Sink {
 
     override fun onRecorded(clips: List<Clip>) {
         main.post {
-            clips.forEach { c ->
+            val full = clips.filter { c -> project.clips.count { it.engine == c.engine } >= MAX_CLIPS }
+            if (full.isNotEmpty()) {
+                Audio.post { full.forEach { t.stopClip(it.id) } }
+                message(full.joinToString { engine(it.engine).title } + " already full ($MAX_CLIPS clips each), so those parts weren't kept")
+            }
+            (clips - full.toSet()).forEach { c ->
                 val e = engine(c.engine)
                 val n = project.clips.count { it.engine == c.engine } + 1
                 c.name = "${e.title} $n"; c.variant = n - 1
                 project.clips += c
                 ProjectStore.saveClipMidi(project, c)
             }
-            message("Recorded " + clips.joinToString { it.name })
+            if (clips.size > full.size) message("Recorded " + (clips - full.toSet()).joinToString { it.name })
             save(); changed()
         }
     }
@@ -190,13 +206,8 @@ object Studio : Transport.Listener, MidiInput.Sink {
 
     fun renameClip(c: Clip, name: String) { c.name = name.ifBlank { c.name }; save(); changed() }
 
-    private fun nextSpot(): Pair<Float, Float> {
-        val i = project.clips.count { it.inValley } + project.flowers.count { it.inValley }
-        return (0.1f + (i % 6) * 0.15f) to (0.3f + ((i / 6) % 3) * 0.2f)
-    }
-
     fun sendToValley(c: Clip) {
-        if (!c.inValley) { c.inValley = true; nextSpot().let { c.vx = it.first; c.vy = it.second } }
+        c.inValley = true
         message("${c.name} is waiting in the Valley"); save(); changed()
     }
 
@@ -227,7 +238,8 @@ object Studio : Transport.Listener, MidiInput.Sink {
     }
 
     fun plantFlower(f: Flower) {
-        if (!f.inValley) { f.inValley = true; nextSpot().let { f.vx = it.first; f.vy = it.second } }
+        if (!f.inValley && project.flowers.count { it.inValley } >= MAX_PLANTED) return message("The Valley has room for $MAX_PLANTED flowers. Remove one first.")
+        if (!f.inValley) f.inValley = true
         message("${f.name} is planted in the Valley"); save(); changed()
     }
 

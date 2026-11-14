@@ -33,7 +33,37 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
     private val smoke = ArrayList<FloatArray>()
 
     private val foxX = 0.5f; private val foxY = 0.62f
-    private val cabinX = 0.9f; private val cabinY = 0.9f
+    private val cabinX = 0.93f; private val cabinY = 0.9f
+    private val cabinBox = FloatArray(4)
+    private var poem: Pair<String, String>? = null
+    private var poemAt = 0L
+    private val poemP = Px.text(13f, Pal.CREAM)
+    private val poetP = Px.text(10f, Pal.SUN)
+
+    /**
+     * Every critter has a home, so nothing overlaps: Gusts in the sky, Bumble
+     * between sky and meadow, Reflections in the pond, Minds and Flowers on
+     * the valley floor, and the cabin's corner kept clear.
+     */
+    private val homes = mapOf(
+        "gusts" to listOf(0.16f to 0.27f, 0.36f to 0.21f, 0.68f to 0.24f),
+        "bumble" to listOf(0.24f to 0.46f, 0.74f to 0.43f, 0.87f to 0.52f),
+        "reflections" to listOf(0.10f to 0.79f, 0.18f to 0.86f, 0.25f to 0.78f),
+        "minds" to listOf(0.35f to 0.75f, 0.43f to 0.85f, 0.33f to 0.86f),
+        "flowers" to listOf(0.58f to 0.80f, 0.65f to 0.73f, 0.70f to 0.86f, 0.77f to 0.75f, 0.83f to 0.86f),
+    )
+    private val spots = HashMap<String, Pair<Float, Float>>()
+    private var moveX = 0f; private var moveY = 0f
+
+    private fun layout() {
+        spots.clear()
+        val byEngine = HashMap<String, Int>()
+        Studio.valleyClips.forEach { c ->
+            val i = byEngine.getOrDefault(c.engine, 0); byEngine[c.engine] = i + 1
+            homes[c.engine]?.getOrNull(i)?.let { spots[c.id] = it }
+        }
+        Studio.valleyFlowers.forEachIndexed { i, f -> homes.getValue("flowers").getOrNull(i)?.let { spots[f.id] = it } }
+    }
 
     private var from: String? = null
     private var downX = 0f; private var downY = 0f; private var curX = 0f; private var curY = 0f
@@ -41,7 +71,7 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
     private var dragged = false
     private var blooming: Flower? = null
     private var bloomStart = 0f
-    private val longPress = Runnable { val id = from; if (!dragged && id != null && id != Studio.FOX) { movingId = id; performHapticFeedback(0) } }
+    private val longPress = Runnable { val id = from; if (!dragged && id != null && id != Studio.FOX) { movingId = id; moveX = downX; moveY = downY; performHapticFeedback(0) } }
 
     private data class Button(val x: Float, val y: Float, val w: Float, val h: Float, val action: () -> Unit)
     private val buttons = ArrayList<Button>()
@@ -51,8 +81,8 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
 
     private fun nodePos(id: String): Pair<Float, Float>? = when (id) {
         Studio.FOX -> foxX * width to foxY * height
-        else -> Studio.valleyClips.firstOrNull { it.id == id }?.let { it.vx * width to it.vy * height }
-            ?: Studio.valleyFlowers.firstOrNull { it.id == id }?.let { it.vx * width to it.vy * height }
+        movingId -> moveX to moveY
+        else -> spots[id]?.let { it.first * width to it.second * height }
     }
 
     private fun beats(): Double {
@@ -66,6 +96,7 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
         val beatPh = (beats % 1.0).toFloat()
         val barPh = ((beats / 4.0) % 1.0).toFloat()
         val time = (System.nanoTime() - t0) / 1e9f
+        layout()
         scenery(c, w, h, time)
 
         val playing = Audio.transport.playing_ids
@@ -93,7 +124,7 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
         }
 
         Studio.valleyFlowers.forEach { fl ->
-            val x = fl.vx * w; val y = fl.vy * h
+            val (x, y) = nodePos(fl.id) ?: return@forEach
             c.flower(x, y - Px.u * 2, 0.8f, fl.bloom, fl.variant, time, fl.active)
             if (fl.id in solo) ring(x, y, Px.u * 8)
             if (fl.active) {
@@ -108,8 +139,11 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
         Studio.valleyClips.forEach { clip ->
             val on = clip.id in playing
             val s = Sprites.critter(clip.engine, clip.variant)
+            val (x, y0) = nodePos(clip.id) ?: return@forEach
+            // Sky and air critters drift a little; the rest hop on the beat when playing.
+            val drift = if (clip.engine == "gusts" || clip.engine == "bumble") sin(time * 1.3f + x * 0.01f) * Px.u else 0f
+            val y = y0 + drift
             val bob = if (on) -abs(sin(beatPh * PI.toFloat())) * Px.u * 1.5f else 0f
-            val x = clip.vx * w; val y = clip.vy * h
             if (on) c.fill(x - Px.u * 2, y + Px.u * 3, x + Px.u * 2, y + Px.u * 3.5f, Pal.alpha(Pal.BROWN_D, 0.3f))
             if (clip.id in solo) ring(x, y, Px.u * 6)
             c.spriteCentered(s, x, y + bob, Px.u * 0.65f, alpha = if (movingId == clip.id) 170 else 255)
@@ -146,14 +180,28 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
         c.bands(0f, h * 0.56f, w, h, intArrayOf(Pal.GREEN, 0xFF62994A.toInt(), Pal.GREEN_D, Pal.GREEN_DD))
         // Long sunset light across the meadow.
         for (i in 0 until 6) c.fill(0f, h * (0.6f + i * 0.06f), w, h * (0.6f + i * 0.06f) + u, Pal.alpha(Pal.SUN, 0.12f))
-        // River catching the sunset.
-        var y = h * 0.56f
-        while (y < h) {
-            val rx = w * 0.14f + sin(y * 0.02f) * w * 0.04f + (y - h * 0.56f) * 0.12f
-            val rw = u * (5 + (y - h * 0.56f) / h * 28)
+        // A river winding down from the hills into a pond.
+        var y = h * 0.53f
+        while (y < h * 0.74f) {
+            val k = (y - h * 0.53f) / (h * 0.21f)
+            val rx = w * (0.26f - k * 0.08f) + sin(y * 0.03f) * w * 0.02f
+            val rw = u * (3 + k * 6)
             c.fill(rx, y, rx + rw, y + u, Pal.AQUA_D)
-            if (((y / u).toInt() + (time * 4).toInt()) % 6 == 0) c.fill(rx + u * 2, y, rx + u * 5, y + u, Pal.ORANGE_L)
+            if (((y / u).toInt() + (time * 4).toInt()) % 6 == 0) c.fill(rx + u, y, rx + u * 3, y + u, Pal.ORANGE_L)
             y += u
+        }
+        val pcx = w * 0.18f; val pcy = h * 0.82f; val prx = w * 0.13f; val pry = h * 0.1f
+        y = pcy - pry
+        while (y < pcy + pry) {
+            val dy = (y - pcy) / pry
+            val half = prx * kotlin.math.sqrt(maxOf(0f, 1f - dy * dy))
+            c.fill(((pcx - half) / u).toInt() * u, y, ((pcx + half) / u).toInt() * u, y + u, if (dy < -0.6f) Pal.AQUA else Pal.AQUA_D)
+            y += u
+        }
+        for (k in 0 until 5) {
+            val sx = pcx + sin(time * 0.6f + k * 1.7f) * prx * 0.6f
+            val sy = pcy + (k - 2) * pry * 0.3f
+            c.fill(sx, sy, sx + u * 3, sy + u, Pal.alpha(Pal.SUN, 0.7f))
         }
         // Grass tufts and wildflowers.
         for (i in 0 until 40) {
@@ -166,6 +214,7 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
         val cs = u * 1.1f
         val cx = cabinX * w - cab.w * cs / 2; val cy = cabinY * h - cab.h * cs
         c.sprite(cab, cx, cy, cs)
+        cabinBox[0] = cx - u * 4; cabinBox[1] = cy - u * 6; cabinBox[2] = cx + cab.w * cs + u * 4; cabinBox[3] = cy + cab.h * cs + u * 2
         if ((time * 3).toInt() % 2 == 0) c.fill(cx + 4 * cs, cy + 11 * cs, cx + 7 * cs, cy + 13 * cs, Pal.SUN)
         if (Random.nextFloat() < 0.06f) smoke += floatArrayOf(cx + 14.5f * cs, cy, 1f)
         val it = smoke.iterator()
@@ -250,7 +299,16 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
         button(if (t.playing) "■ Stop" else "▶ Play", m + Px.dp(118f), m, Px.dp(96f), t.playing) { Studio.togglePlay() }
         button("● Audio", w - m - Px.dp(110f), m, Px.dp(110f), Studio.taping) { Studio.toggleTape() }
         button("${Studio.project.bpm.toInt()} BPM", w - m - Px.dp(226f), m, Px.dp(108f)) { host.bpmDialog() }
-        c.textCentered("THE VALLEY", w / 2, m + Px.dp(20f), title)
+        val p = poem
+        if (p != null && System.currentTimeMillis() - poemAt < 20_000) {
+            // A line of Romantic poetry, sized to fit between the buttons.
+            val room = w - Px.dp(470f)
+            val line = p.first.replace(" / ", " · ")
+            poemP.textSize = Px.dp(13f)
+            while (poemP.measureText(line) > room && poemP.textSize > Px.dp(8f)) poemP.textSize -= Px.dp(0.5f)
+            c.textCentered(line, w / 2, m + Px.dp(14f), poemP)
+            c.textCentered("— ${p.second}", w / 2, m + Px.dp(32f), poetP)
+        } else c.textCentered("VALLEY", w / 2, m + Px.dp(20f), title)
         val q = Audio.transport.queuedAt
         if (q >= 0) {
             val beatsLeft = maxOf(0.0, (q - Audio.transport.tick) / Ticks.PPQ)
@@ -271,8 +329,9 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
 
     private fun nodeAt(x: Float, y: Float): String? {
         val r = Px.dp(22f)
-        Studio.valleyClips.asReversed().forEach { if (hypot(it.vx * width - x, it.vy * height - y) < r) return it.id }
-        Studio.valleyFlowers.asReversed().forEach { if (hypot(it.vx * width - x, it.vy * height - y) < r) return it.id }
+        var best: String? = null; var bestD = r
+        for ((id, p) in spots) { val d = hypot(p.first * width - x, p.second * height - y); if (d < bestD) { bestD = d; best = id } }
+        if (best != null) return best
         if (hypot(foxX * width - x, foxY * height - y) < Px.u * 26) return Studio.FOX
         return null
     }
@@ -299,21 +358,18 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
             MotionEvent.ACTION_MOVE -> {
                 if (hypot(e.x - downX, e.y - downY) > Px.dp(10f)) { if (!dragged && movingId == null) removeCallbacks(longPress); dragged = true }
                 blooming?.let { if (dragged) { removeCallbacks(longPress); Studio.setBloom(it, bloomStart + (downY - e.y) / Px.dp(140f)) }; return true }
-                movingId?.let { id ->
-                    val vx = (e.x / width).coerceIn(0.04f, 0.96f); val vy = (e.y / height).coerceIn(0.2f, 0.88f)
-                    Studio.valleyClips.firstOrNull { it.id == id }?.let { it.vx = vx; it.vy = vy }
-                    Studio.valleyFlowers.firstOrNull { it.id == id }?.let { it.vx = vx; it.vy = vy }
-                }
+                if (movingId != null) { moveX = e.x; moveY = e.y }
             }
             MotionEvent.ACTION_UP -> {
                 removeCallbacks(longPress)
                 val src = from; val mv = movingId
                 when {
-                    mv != null -> if (e.x < Px.dp(130f) && e.y > height - Px.dp(70f)) Studio.removeFromValley(mv) else Studio.save()
+                    mv != null -> if (e.x < Px.dp(130f) && e.y > height - Px.dp(70f)) Studio.removeFromValley(mv)
                     blooming != null && dragged -> Studio.save()
                     src == Studio.FOX -> if (!dragged) Studio.foxTapped()
                     src != null && dragged -> nodeAt(e.x, e.y)?.let { dst -> if (dst != src && dst != Studio.FOX) Studio.link(src, dst) }
                     src != null -> Studio.toggleInNextScene(src)
+                    !dragged && e.x in cabinBox[0]..cabinBox[2] && e.y in cabinBox[1]..cabinBox[3] -> { poem = Poems.random(); poemAt = System.currentTimeMillis() }
                     else -> linkAt(e.x, e.y)?.let { Studio.unlink(it) }
                 }
                 from = null; movingId = null; dragged = false; blooming = null

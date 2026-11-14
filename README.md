@@ -34,6 +34,15 @@ Valley, which feels a bit like playing a game.
    Play some clips and tap **Audition** to hear the flower. **Plant in
    Valley** puts it in the Valley.
 5. **The Valley (scenes):** clips are tiny critters and flowers are buds.
+   Each kind has its own home, so nothing overlaps:
+   - Gusts clouds float in the sky.
+   - Bumble bees hover between the sky and the meadow.
+   - Reflections drops swim in the pond.
+   - Minds mushrooms and planted flowers grow on the valley floor.
+
+   Each engine can hold up to **3 clips** and up to **5 flowers** can be
+   planted, so there's always room. Tap the **cabin** for a line of
+   Romantic poetry.
    **Draw lines between whatever you want in the next scene**, or tap single
    critters and flowers to add them on their own. Then **tap the nine-tailed
    kitsune**: when the current scene reaches the end of its loop, everything
@@ -41,8 +50,8 @@ Valley, which feels a bit like playing a game.
    again to cancel. With nothing drawn, tapping it ends the music at the end
    of the loop. Flowers in the playing scene sparkle: **drag up** to bloom
    them (more effect). They stay bloomed until you drag them back down. Tap a
-   line to remove it, and long-press to move things or drop them in the
-   basket.
+   line to remove it. Long-press a critter and drag it to the basket to take
+   it out of the Valley.
 
 ## The engines
 

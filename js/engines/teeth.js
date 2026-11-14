@@ -14,7 +14,7 @@
     constructor() {
       super('teeth', 'Teeth');
       this.isInstrument = false;
-      this.color = '#ff5d5d';
+      this.color = '#7a4a2a';
       this.modParam = 'mix';
       const P = this.param.bind(this);
       P('engaged', { label: 'Lock jaw', type: 'bool', def: false, help: 'Keep Teeth biting all the time (otherwise it bites while you touch the XY pad)' });
@@ -380,7 +380,13 @@
       // XY pad
       const xyWrap = U.el('div', { class: 'xy-wrap' });
       top.appendChild(xyWrap);
-      this.xy = UI.canvas(xyWrap, 'xy');
+      const xyBox = U.el('div', { class: 'xy-box' });
+      xyWrap.appendChild(xyBox);
+      this.xy = UI.canvas(xyBox, 'xy');
+      this.xyLabels = { x: U.el('div', { class: 'xy-label xl' }), y: U.el('div', { class: 'xy-label yl' }), hint: U.el('div', { class: 'xy-hint', text: 'Touch & drag to bite' }) };
+      xyBox.appendChild(this.xyLabels.x);
+      xyBox.appendChild(this.xyLabels.y);
+      xyBox.appendChild(this.xyLabels.hint);
       const axes = U.el('div', { class: 'xy-axes' });
       UI.select(axes, this, 'xTarget', { label: 'X →', names: this.axisNames() });
       UI.select(axes, this, 'yTarget', { label: 'Y ↑', names: this.axisNames() });
@@ -392,7 +398,7 @@
       const right = U.el('div', { class: 'teeth-right' });
       top.appendChild(right);
       const jawBar = U.el('div', { class: 'toolbar' });
-      UI.toggle(jawBar, this, 'engaged', { text: '🔒 Lock jaw' });
+      UI.toggle(jawBar, this, 'engaged', { text: 'Lock jaw' });
       UI.choice(jawBar, this, 'gateMode', { noLabel: true });
       const play = U.el('button', { class: 'accent', text: '▶ Play' });
       play.onclick = () => FB.clock.toggle();
@@ -528,61 +534,43 @@
 
       const cv = this.xy;
       if (!cv) return;
+      const UI = FB.ui, PAL = FB.PAL, P = UI.PX;
       const g = cv.g, W = cv.w, H = cv.h;
       const on = this.active();
-      g.fillStyle = on ? '#2a0f12' : '#1a1014';
+      if (!this.spr) this.spr = { acorn: UI.sprite(UI.SPRITES.acorn, null, true) };
+      // Gingham tablecloth: aqua when resting, orange when biting.
+      g.fillStyle = PAL.cream;
       g.fillRect(0, 0, W, H);
-      g.strokeStyle = 'rgba(255,255,255,0.06)';
-      g.lineWidth = 1;
-      for (let i = 1; i < 8; i++) {
-        g.beginPath();
-        g.moveTo((i / 8) * W, 0);
-        g.lineTo((i / 8) * W, H);
-        g.moveTo(0, (i / 8) * H);
-        g.lineTo(W, (i / 8) * H);
-        g.stroke();
-      }
-      // Bite flash
+      const cell = P * 8;
+      g.fillStyle = on ? 'rgba(232,116,44,0.28)' : 'rgba(63,184,175,0.22)';
+      for (let x = 0; x < W; x += cell * 2) g.fillRect(x, 0, cell, H);
+      for (let y = 0; y < H; y += cell * 2) g.fillRect(0, y, W, cell);
       if (on && this.get('gateMode') === 'Pattern' && FB.clock.playing && vs >= 0 && this.bites[vs % 16]) {
-        g.fillStyle = 'rgba(255,80,80,0.08)';
+        g.fillStyle = 'rgba(232,116,44,0.18)';
         g.fillRect(0, 0, W, H);
       }
       const now = performance.now();
       this.trail = this.trail.filter((p) => now - p.t < 900);
       this.trail.forEach((p) => {
         const a = 1 - (now - p.t) / 900;
-        g.fillStyle = 'rgba(255,120,110,' + a * 0.5 + ')';
-        g.beginPath();
-        g.arc(p.x * W, (1 - p.y) * H, 4 + a * 8, 0, Math.PI * 2);
-        g.fill();
+        g.fillStyle = a > 0.5 ? PAL.orange : PAL.orangeL;
+        UI.dot(g, p.x * W - P, (1 - p.y) * H - P, a > 0.5 ? 3 : 2);
       });
       const x = this.norm(this.get('xTarget')) * W;
       const y = (1 - this.norm(this.get('yTarget'))) * H;
-      g.strokeStyle = 'rgba(255,200,190,0.35)';
-      g.beginPath();
-      g.moveTo(x, 0);
-      g.lineTo(x, H);
-      g.moveTo(0, y);
-      g.lineTo(W, y);
-      g.stroke();
-      g.fillStyle = on ? '#ff6b5e' : '#f3e7d7';
-      g.shadowColor = '#ff6b5e';
-      g.shadowBlur = on ? 22 : 0;
-      g.beginPath();
-      g.arc(x, y, 11, 0, Math.PI * 2);
-      g.fill();
-      g.shadowBlur = 0;
-      g.fillStyle = 'rgba(255,255,255,0.55)';
-      g.font = '11px system-ui, sans-serif';
-      g.textAlign = 'left';
-      const names = this.axisNames();
-      g.fillText('X: ' + names[this.get('xTarget')] + ' ' + FB.ui.format(this.params[this.get('xTarget')]), 8, H - 8);
-      g.fillText('Y: ' + names[this.get('yTarget')] + ' ' + FB.ui.format(this.params[this.get('yTarget')]), 8, 16);
-      if (!on) {
-        g.textAlign = 'center';
-        g.fillStyle = 'rgba(255,255,255,0.4)';
-        g.font = '13px system-ui, sans-serif';
-        g.fillText('Touch & drag to bite', W / 2, H / 2);
+      g.fillStyle = PAL.brown;
+      for (let k = 0; k < H; k += P * 3) UI.dot(g, x, k);
+      for (let k = 0; k < W; k += P * 3) UI.dot(g, k, y);
+      UI.drawSprite(g, this.spr.acorn, x - 21, y - 24 - (on ? Math.round(Math.sin(now / 90) + 1) * P : 0), 2);
+      // Labels live in the DOM so the pixel font stays crisp.
+      if (this.xyLabels) {
+        const names = this.axisNames();
+        const xt = this.get('xTarget'), yt = this.get('yTarget');
+        const xs = 'X: ' + names[xt] + ' ' + FB.ui.format(this.params[xt]);
+        const ys = 'Y: ' + names[yt] + ' ' + FB.ui.format(this.params[yt]);
+        if (this.xyLabels.x.textContent !== xs) this.xyLabels.x.textContent = xs;
+        if (this.xyLabels.y.textContent !== ys) this.xyLabels.y.textContent = ys;
+        this.xyLabels.hint.style.display = on ? 'none' : '';
       }
     }
   }

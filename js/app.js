@@ -9,12 +9,12 @@
   FB.engines = {};
 
   const TABS = [
-    { id: 'gusts', icon: '🌬', name: 'Gusts', sub: 'analog synth' },
-    { id: 'reflections', icon: '💧', name: 'Reflections', sub: 'sampler' },
-    { id: 'leaves', icon: '🍃', name: 'Leaves', sub: 'granular' },
-    { id: 'minds', icon: '🧠', name: 'Minds', sub: 'generative drums' },
-    { id: 'teeth', icon: '🦷', name: 'Teeth', sub: 'mangler' },
-    { id: 'den', icon: '🦊', name: 'Den', sub: 'mixer & MIDI' },
+    { id: 'gusts', icon: 'cloud', name: 'Gusts', sub: 'analog synth' },
+    { id: 'reflections', icon: 'drop', name: 'Reflections', sub: 'sampler' },
+    { id: 'leaves', icon: 'leaf', name: 'Leaves', sub: 'granular' },
+    { id: 'minds', icon: 'mushroom', name: 'Minds', sub: 'generative drums' },
+    { id: 'teeth', icon: 'tooth', name: 'Teeth', sub: 'mangler' },
+    { id: 'den', icon: 'cottage', name: 'Den', sub: 'mixer & MIDI' },
   ];
 
   // Which engine receives notes and pads right now.
@@ -144,7 +144,7 @@
     if (FB.midi.supported()) {
       FB.midi.initWebMIDI().then(() => {
         const n = Array.from(FB.midi.devices.values()).filter((d) => d.connected).length;
-        if (n) App.toast('🎹 ' + n + ' MIDI device' + (n > 1 ? 's' : '') + ' connected');
+        if (n) App.toast('' + n + ' MIDI device' + (n > 1 ? 's' : '') + ' connected');
       }).catch(() => {});
     }
     FB.midi.onChange(() => {
@@ -259,7 +259,7 @@
   async function connectBLE() {
     try {
       const dev = await FB.midi.connectBLE();
-      App.toast('🔵 Connected ' + dev.name + ' over Bluetooth (' + roleName(dev.role) + ')');
+      App.toast('Connected ' + dev.name + ' over Bluetooth (' + roleName(dev.role) + ')');
     } catch (e) {
       if (e && e.name === 'NotFoundError') return; // user closed the chooser
       App.toast('Bluetooth MIDI: ' + (e.message || e));
@@ -304,7 +304,7 @@
   function buildTabs() {
     const nav = $('#tabs');
     TABS.forEach((t) => {
-      const b = U.el('button', { class: 'tab', 'data-tab': t.id }, [U.el('span', { class: 'ticon', text: t.icon }), U.el('span', { class: 'tname', text: t.name }), U.el('span', { class: 'tsub', text: t.sub })]);
+      const b = U.el('button', { class: 'tab', 'data-tab': t.id }, [U.el('span', { class: 'ticon', html: FB.ui.spriteSVG(FB.ui.SPRITES[t.icon], null, true) }), U.el('span', { class: 'tname', text: t.name }), U.el('span', { class: 'tsub', text: t.sub })]);
       if (FB.engines[t.id]) b.style.setProperty('--accent', FB.engines[t.id].color);
       b.onclick = () => App.select(t.id);
       nav.appendChild(b);
@@ -319,7 +319,7 @@
     document.querySelectorAll('.tab').forEach((b) => b.classList.toggle('on', b.dataset.tab === id));
     document.querySelectorAll('.panel').forEach((p) => p.classList.toggle('on', p.id === 'panel-' + id));
     document.body.dataset.tab = id;
-    const accent = eng ? eng.color : '#ff8a3d';
+    const accent = eng ? eng.color : FB.PAL.orange;
     document.body.style.setProperty('--accent', accent);
     const tgt = FB.engines[App.lastInstrument];
     $('#playTarget').textContent = id === 'teeth' ? 'Keys → ' + tgt.name + ' · Pads → Teeth moves' : id === 'den' ? 'Keys & pads → ' + tgt.name : 'Playing ' + (eng ? eng.name : tgt.name);
@@ -375,7 +375,7 @@
         ch.apply();
         FB.state.dirty();
       };
-      const teeth = U.el('button', { class: 'toggle' + (ch.teeth ? ' on' : ''), text: '🦷 Teeth', title: 'Send this engine through Teeth' });
+      const teeth = U.el('button', { class: 'toggle' + (ch.teeth ? ' on' : ''), text: 'Teeth', title: 'Send this engine through Teeth' });
       teeth.onclick = () => {
         ch.teeth = !ch.teeth;
         teeth.classList.toggle('on', ch.teeth);
@@ -406,10 +406,10 @@
     const midi = U.el('div', { class: 'sect den-midi' }, [U.el('h3', { text: 'MIDI controllers' })]);
     const btns = U.el('div', { class: 'toolbar' });
     btns.appendChild(U.el('button', {
-      text: '🔌 Enable USB MIDI',
+      text: 'Enable USB MIDI',
       onclick: () => FB.midi.initWebMIDI().then(() => App.toast('USB / system MIDI ready')).catch((e) => App.toast(e.message)),
     }));
-    btns.appendChild(U.el('button', { text: '🔵 Pair Bluetooth MIDI', onclick: connectBLE }));
+    btns.appendChild(U.el('button', { text: 'Pair Bluetooth MIDI', onclick: connectBLE }));
     btns.appendChild(U.el('button', { text: 'Forget MIDI-learn mappings', onclick: () => {
       FB.midi.clearLearn();
       App.toast('MIDI-learn mappings cleared');
@@ -426,7 +426,7 @@
       }
       devs.forEach((d) => {
         const row = U.el('div', { class: 'device' + (d.connected ? '' : ' gone') });
-        row.appendChild(U.el('span', { class: 'dname', text: (d.kind === 'ble' ? '🔵 ' : '🔌 ') + d.name + (d.connected ? '' : ' (disconnected)') }));
+        row.appendChild(U.el('span', { class: 'dname', text: (d.kind === 'ble' ? '' : '') + d.name + (d.connected ? '' : ' (disconnected)') }));
         const sel = U.el('select');
         ['keys', 'mpe', 'pads'].forEach((r) => sel.appendChild(U.el('option', { value: r, text: roleName(r) })));
         sel.value = d.role;
@@ -489,8 +489,8 @@
     const w = c.width, h = c.height;
     FB.audio.analyser.getFloatTimeDomainData(scopeBuf);
     g.clearRect(0, 0, w, h);
-    g.strokeStyle = getComputedStyle(document.body).getPropertyValue('--accent') || '#ff8a3d';
-    g.lineWidth = 1.5;
+    g.strokeStyle = FB.PAL.aquaL;
+    g.lineWidth = 2;
     g.beginPath();
     let peak = 0;
     for (let i = 0; i < scopeBuf.length; i += 4) {

@@ -12,7 +12,7 @@
   class Gusts extends FB.Engine {
     constructor() {
       super('gusts', 'Gusts');
-      this.color = '#9fd8ff';
+      this.color = '#3fb8af';
       this.modParam = 'gale';
       const P = this.param.bind(this);
       P('shapeA', { label: 'Current', type: 'choice', options: SHAPES, def: 'sawtooth' });
@@ -121,62 +121,99 @@
     draw(time) {
       const c = this.cv;
       if (!c) return;
+      const UI = FB.ui, PAL = FB.PAL, P = UI.PX;
       const g = c.g, W = c.w, H = c.h;
+      if (!this.spr) {
+        this.spr = {
+          cloud: UI.sprite(UI.SPRITES.cloud, null, PAL.aquaD),
+          cloud2: UI.sprite(['...WWW......', '.WWWWWWW.WW.', 'WWWWWWWWWWWW', '.aaaaaaaaaa.'], null, PAL.aquaD),
+          flower: UI.sprite(UI.SPRITES.flower),
+          flowerA: UI.sprite(UI.SPRITES.flower, { O: PAL.aqua, o: PAL.aquaL }),
+          flowerW: UI.sprite(UI.SPRITES.flower, { O: PAL.cream, o: PAL.orangeL }),
+        };
+      }
       if (this.particles.length === 0 || c._w !== W || c._h !== H) {
         c._w = W;
         c._h = H;
         this.particles = [];
-        for (let i = 0; i < 280; i++) this.particles.push({ x: Math.random() * W, y: Math.random() * H, s: 0.5 + Math.random() });
-        const sky = g.createLinearGradient(0, 0, 0, H);
-        sky.addColorStop(0, '#0b1830');
-        sky.addColorStop(1, '#1b2f4d');
-        g.fillStyle = sky;
-        g.fillRect(0, 0, W, H);
+        for (let i = 0; i < 130; i++) this.particles.push({ x: Math.random() * W, y: Math.random() * H * 0.75, s: 0.5 + Math.random() });
+        this.clouds = [];
+        for (let i = 0; i < 6; i++) this.clouds.push({ x: Math.random() * W, y: 10 + Math.random() * H * 0.35, s: 0.2 + Math.random() * 0.4, big: Math.random() < 0.5 });
+        this.blooms = [];
+        for (let x = 12; x < W; x += 24 + Math.random() * 40) this.blooms.push({ x, k: Math.floor(Math.random() * 3), ph: Math.random() * 6 });
       }
-      // Energy follows number of sounding voices.
       let target = 0;
       this.voices.forEach((v) => (target += v.vel));
       this.energy += (Math.min(2, target) - this.energy) * 0.05;
-
-      g.fillStyle = 'rgba(11,24,48,0.16)';
-      g.fillRect(0, 0, W, H);
-
       const tt = time / 1000;
       const galeN = this.norm('gale');
       const turb = 0.4 + this.norm('howl') * 1.2 + this.get('flutterDepth') * 1.5;
       const base = 0.5 + galeN * 2.6 + this.energy * 2.2;
+
+      // Sky in flat 16-bit bands, with a pixel sun.
+      UI.bands(g, 0, 0, W, H, [PAL.aquaL, '#9fded7', '#b2e5dd', '#c6ebe2', '#daf0e4', PAL.cream]);
+      g.fillStyle = PAL.orangeL;
+      const sx = W - 70, sy = 40;
+      for (let y = -6; y <= 6; y++) for (let x = -6; x <= 6; x++) if (x * x + y * y <= 36) UI.dot(g, sx + x * P, sy + y * P);
+      g.fillStyle = PAL.orange;
+      for (let y = -4; y <= 4; y++) for (let x = -4; x <= 4; x++) if (x * x + y * y <= 14) UI.dot(g, sx + x * P + P, sy + y * P + P);
+
+      // Drifting clouds
+      this.clouds.forEach((cl) => {
+        cl.x += cl.s * (0.3 + galeN * 1.5 + this.energy);
+        const spr = cl.big ? this.spr.cloud : this.spr.cloud2;
+        if (cl.x > W + 10) {
+          cl.x = -spr.width * P * 2;
+          cl.y = 10 + Math.random() * H * 0.35;
+        }
+        UI.drawSprite(g, spr, cl.x, cl.y, 2);
+      });
+
+      // Wind streaks
       const now = performance.now();
       this.gusts = this.gusts.filter((gu) => now - gu.t0 < 2500);
-
-      g.lineWidth = 1.2;
-      g.lineCap = 'round';
       for (const p of this.particles) {
-        const a = Math.sin(p.x * 0.006 + tt * 0.4) * 0.5 * turb + Math.cos(p.y * 0.012 - tt * 0.3 + p.x * 0.002) * 0.6 * turb;
+        const a = Math.sin(p.x * 0.006 + tt * 0.4) * 0.35 * turb + Math.cos(p.y * 0.012 - tt * 0.3 + p.x * 0.002) * 0.4 * turb;
         let sp = base * p.s;
         let glow = 0;
         for (const gu of this.gusts) {
           const age = (now - gu.t0) / 2500;
           if (age < 0) continue;
-          const dy = (p.y / H - gu.y) * 6;
+          const dy = (p.y / H - gu.y * 0.75) * 6;
           const k = Math.exp(-dy * dy) * gu.power * (1 - age);
           sp += k * 9;
           glow += k;
         }
-        const nx = p.x + Math.cos(a) * sp;
-        const ny = p.y + Math.sin(a) * sp * 0.6;
-        const alpha = Math.min(1, 0.2 + glow * 0.8 + this.energy * 0.15);
-        g.strokeStyle = 'hsla(' + (200 + glow * 20) + ',70%,' + (78 + glow * 15) + '%,' + alpha + ')';
-        g.beginPath();
-        g.moveTo(p.x, p.y);
-        g.lineTo(nx, ny);
-        g.stroke();
-        p.x = nx;
-        p.y = ny;
-        if (p.x > W + 5 || p.y < -5 || p.y > H + 5 || p.x < -5) {
-          p.x = -2;
-          p.y = Math.random() * H;
+        p.x += Math.cos(a) * sp;
+        p.y += Math.sin(a) * sp * 0.5;
+        const n = Math.max(1, Math.min(9, Math.round(sp * 1.4)));
+        g.fillStyle = glow > 0.25 ? PAL.orange : glow > 0.08 ? PAL.orangeL : PAL.cream;
+        for (let k = 0; k < n; k++) UI.dot(g, p.x - Math.cos(a) * k * P, p.y - Math.sin(a) * k * P * 0.5);
+        if (p.x > W + 5 || p.y < -5 || p.y > H * 0.8 || p.x < -30) {
+          p.x = -Math.random() * 20;
+          p.y = Math.random() * H * 0.75;
         }
       }
+
+      // Rolling hills with flowers swaying in the wind
+      const hill = (x, base, a1, a2) => base + Math.sin(x * 0.008 + a1) * 10 + Math.sin(x * 0.021 + a2) * 5;
+      for (let x = 0; x < W; x += P) {
+        g.fillStyle = PAL.brownL;
+        g.fillRect(x, Math.floor(hill(x, H * 0.8, 1, 2) / P) * P, P, H);
+      }
+      for (let x = 0; x < W; x += P) {
+        const y = Math.floor(hill(x, H * 0.88, 3, 0.5) / P) * P;
+        g.fillStyle = PAL.brown;
+        g.fillRect(x, y, P, H);
+        g.fillStyle = PAL.orangeD;
+        g.fillRect(x, y, P, P);
+      }
+      const sway = Math.sin(tt * (1 + galeN * 4)) * (2 + galeN * 4 + this.energy * 5);
+      this.blooms.forEach((b) => {
+        const y = hill(b.x, H * 0.88, 3, 0.5) - 12;
+        const spr = [this.spr.flower, this.spr.flowerA, this.spr.flowerW][b.k];
+        UI.drawSprite(g, spr, b.x + sway * Math.sin(b.ph + tt), y, 1);
+      });
     }
   }
 

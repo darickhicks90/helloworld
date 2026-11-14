@@ -10,7 +10,7 @@
   class Reflections extends FB.Engine {
     constructor() {
       super('reflections', 'Reflections');
-      this.color = '#4fd1c5';
+      this.color = '#22706b';
       this.modParam = 'surface';
       const P = this.param.bind(this);
       P('mode', { label: 'Mode', type: 'choice', options: ['Keys', 'Slices'], def: 'Keys' });
@@ -208,7 +208,7 @@
           const r = this.rec;
           this.rec = null;
           btn.classList.remove('on');
-          btn.textContent = r.kind === 'mic' ? '🎙 Record mic' : '⟲ Resample FoxBox';
+          btn.textContent = r.kind === 'mic' ? 'Record mic' : 'Resample FoxBox';
           const res = await r.r.stop();
           this.setBuffer(res.buffer, r.kind === 'mic' ? 'Mic recording' : 'Resampled FoxBox');
           this.set('start', 0);
@@ -247,15 +247,15 @@
       const file = U.el('input', { type: 'file', accept: 'audio/*', style: 'display:none' });
       file.addEventListener('change', () => file.files[0] && this.loadFile(file.files[0]));
       bar.appendChild(file);
-      bar.appendChild(U.el('button', { text: '📂 Load sound', onclick: () => file.click() }));
-      const mic = U.el('button', { text: '🎙 Record mic' });
+      bar.appendChild(U.el('button', { text: 'Load sound', onclick: () => file.click() }));
+      const mic = U.el('button', { text: 'Record mic' });
       mic.onclick = () => this.toggleRecord('mic', mic);
-      const res = U.el('button', { text: '⟲ Resample FoxBox', title: 'Record what FoxBox is playing and turn it into a sample' });
+      const res = U.el('button', { text: 'Resample FoxBox', title: 'Record what FoxBox is playing and turn it into a sample' });
       res.onclick = () => this.toggleRecord('master', res);
       bar.appendChild(mic);
       bar.appendChild(res);
-      bar.appendChild(U.el('button', { text: '💧 Droplet', onclick: () => this.setBuffer(this.makeDroplet(), 'Droplet (built-in)') }));
-      bar.appendChild(U.el('button', { text: '🔔 Glass', onclick: () => this.setBuffer(this.makeGlass(), 'Glass (built-in)') }));
+      bar.appendChild(U.el('button', { text: 'Droplet', onclick: () => this.setBuffer(this.makeDroplet(), 'Droplet (built-in)') }));
+      bar.appendChild(U.el('button', { text: 'Glass', onclick: () => this.setBuffer(this.makeGlass(), 'Glass (built-in)') }));
       this.nameEl = U.el('span', { class: 'sample-name', text: this.sampleName + ' · ' + this.buffer.duration.toFixed(2) + 's' });
       bar.appendChild(this.nameEl);
       top.appendChild(bar);
@@ -302,86 +302,83 @@
     draw(time) {
       const cv = this.cv;
       if (!cv || !this.peaks) return;
+      const UI = FB.ui, PAL = FB.PAL, P = UI.PX;
       const g = cv.g, W = cv.w, H = cv.h;
-      const hz = H * 0.52;
+      const hz = Math.floor((H * 0.55) / P) * P;
       const tt = time / 1000;
-      const sky = g.createLinearGradient(0, 0, 0, hz);
-      sky.addColorStop(0, '#04131c');
-      sky.addColorStop(1, '#0c2c3a');
-      g.fillStyle = sky;
-      g.fillRect(0, 0, W, hz);
-      const water = g.createLinearGradient(0, hz, 0, H);
-      water.addColorStop(0, '#0d3b4d');
-      water.addColorStop(1, '#03161f');
-      g.fillStyle = water;
-      g.fillRect(0, hz, W, H - hz);
+      // Sunset sky and a sun sinking into the pond
+      UI.bands(g, 0, 0, W, hz, [PAL.cream, '#f7e7c9', PAL.paper, '#f2cfa2', '#f3b47c', PAL.orangeL]);
+      g.fillStyle = PAL.orange;
+      const sx = W * 0.5;
+      for (let y = -8; y <= 0; y++) for (let x = -8; x <= 8; x++) if (x * x + y * y <= 64) UI.dot(g, sx + x * P, hz + y * P - P);
+      UI.bands(g, 0, hz, W, H - hz, [PAL.aqua, '#37aaa1', '#2f9a93', '#28857f', PAL.aquaD]);
+      // Sun's glitter on the water
+      g.fillStyle = PAL.orangeL;
+      for (let k = 0; k < 6; k++) {
+        const w = (6 - k) * 6 + Math.sin(tt * 2 + k) * 4;
+        g.fillRect(Math.floor((sx - w) / P) * P, hz + P * (2 + k * 3), Math.floor((w * 2) / P) * P, P);
+      }
 
       const s = Math.min(this.get('start'), this.get('end'));
       const e = Math.max(this.get('start'), this.get('end'));
       const n = this.peaks.length;
-      const cols = Math.min(W, 700);
-      const bw = W / cols;
-      for (let i = 0; i < cols; i++) {
-        const x = i / cols;
-        const pk = this.peaks[Math.floor(x * n)] || 0;
-        const inside = x >= s && x <= e;
-        const h = Math.max(1, pk * hz * 0.85);
-        g.fillStyle = inside ? '#8ff3e6' : 'rgba(143,243,230,0.22)';
-        g.fillRect(i * bw, hz - h, Math.max(1, bw - 0.3), h);
-        // Reflection: shimmering, compressed, fading.
-        const wob = Math.sin(i * 0.09 + tt * 2.2) * 2.5 + Math.sin(i * 0.031 - tt * 1.3) * 1.5;
-        g.fillStyle = inside ? 'rgba(79,209,197,0.35)' : 'rgba(79,209,197,0.08)';
-        g.fillRect(i * bw + wob, hz + 1, Math.max(1, bw - 0.3), h * 0.75);
+      const cw = P * 2;
+      for (let x = 0; x < W; x += cw) {
+        const fx = x / W;
+        const pk = this.peaks[Math.floor(fx * n)] || 0;
+        const inside = fx >= s && fx <= e;
+        const h = Math.max(P, Math.floor((pk * hz * 0.8) / P) * P);
+        // Reeds standing in the water...
+        g.fillStyle = inside ? PAL.brown : 'rgba(122,74,42,0.35)';
+        g.fillRect(x, hz - h, cw - P / 3, h);
+        if (inside && h > 24) {
+          g.fillStyle = PAL.orangeD;
+          g.fillRect(x, hz - h, cw - P / 3, P * 3);
+        }
+        // ...and their wobbling reflection
+        const wob = Math.round((Math.sin(x * 0.05 + tt * 2.2) * 2 + Math.sin(x * 0.017 - tt * 1.3)) ) * P;
+        g.fillStyle = inside ? 'rgba(34,112,107,0.85)' : 'rgba(34,112,107,0.3)';
+        g.fillRect(x + wob, hz + P, cw - P / 3, Math.floor((h * 0.7) / P) * P);
       }
-      // Slice lines
+      // Water sparkles
+      g.fillStyle = PAL.cream;
+      for (let k = 0; k < 14; k++) {
+        const x = ((k * 97 + tt * 18 * (1 + (k % 3))) % (W + 40)) - 20;
+        const y = hz + P * 3 + ((k * 53) % Math.max(1, H - hz - P * 5));
+        g.fillRect(Math.floor(x / P) * P, Math.floor(y / P) * P, P * (2 + (k % 3)), P);
+      }
+      // Slice posts
       if (this.get('mode') === 'Slices') {
-        g.strokeStyle = 'rgba(255,255,255,0.18)';
-        g.lineWidth = 1;
+        g.fillStyle = PAL.brownD;
         for (let k = 1; k < 16; k++) {
           const x = (s + ((e - s) * k) / 16) * W;
-          g.beginPath();
-          g.moveTo(x, hz * 0.15);
-          g.lineTo(x, hz);
-          g.stroke();
+          for (let y = hz * 0.2; y < hz; y += P * 3) UI.dot(g, x, y);
         }
       }
-      // Horizon line
-      g.fillStyle = 'rgba(200,255,250,0.25)';
-      g.fillRect(0, hz, W, 1);
-      // Markers
-      [['start', s], ['end', e]].forEach(([, v]) => {
-        const x = v * W;
-        g.strokeStyle = '#ffd27a';
-        g.lineWidth = 2;
-        g.beginPath();
-        g.moveTo(x, 6);
-        g.lineTo(x, H - 6);
-        g.stroke();
-        g.fillStyle = '#ffd27a';
-        g.beginPath();
-        g.arc(x, hz, 6, 0, Math.PI * 2);
-        g.fill();
+      // Start / end flags
+      [[s, PAL.orange], [e, PAL.aqua]].forEach(([v, col]) => {
+        const x = Math.floor((v * W) / P) * P;
+        g.fillStyle = PAL.brownD;
+        const top = Math.floor(Math.max(hz * 0.3, 54) / P) * P;
+        g.fillRect(x, top, P, H - top - P * 2);
+        g.fillStyle = col;
+        const dir = v === s ? 1 : -1;
+        for (let r = 0; r < 5; r++) for (let c2 = 0; c2 <= 4 - Math.abs(r - 2); c2++) UI.dot(g, Math.min(W - P, Math.max(0, x + dir * (c2 + 1) * P)), top + r * P);
       });
       // Playheads
       const now = this.now();
+      g.fillStyle = PAL.cream;
       this.voices.forEach((v) => {
         const el = now - v.t;
         if (el < 0 || v.ended) return;
         let p = v.s + el * v.rate;
-        if (v.loop) {
-          const len = v.e - v.s;
-          p = v.s + ((p - v.s) % len);
-        } else if (p > v.e) return;
-        const x = (v.rev ? v.dur - p : p) / v.dur;
-        g.strokeStyle = '#ffffff';
-        g.lineWidth = 1.5;
-        g.beginPath();
-        g.moveTo(x * W, hz * 0.2);
-        g.lineTo(x * W, hz);
-        g.stroke();
-        if (Math.random() < 0.06) this.ripples.push({ x, t0: performance.now(), p: 0.35 });
+        if (v.loop) p = v.s + ((p - v.s) % (v.e - v.s));
+        else if (p > v.e) return;
+        const x = ((v.rev ? v.dur - p : p) / v.dur) * W;
+        for (let y = hz * 0.15; y < hz; y += P * 2) UI.dot(g, x, y);
+        if (Math.random() < 0.05) this.ripples.push({ x: x / W, t0: performance.now(), p: 0.5 });
       });
-      // Ripples on the water
+      // Ripples
       const pn = performance.now();
       this.ripples = this.ripples.filter((r) => pn - r.t0 < 2200);
       this.ripples.forEach((r) => {
@@ -390,11 +387,8 @@
         for (let k = 0; k < 3; k++) {
           const a = age - k * 0.12;
           if (a <= 0) continue;
-          g.strokeStyle = 'rgba(180,255,245,' + (1 - a) * 0.6 * r.p + ')';
-          g.lineWidth = 1.2;
-          g.beginPath();
-          g.ellipse(r.x * W, hz + 8 + a * 20, a * 140, a * 18, 0, 0, Math.PI * 2);
-          g.stroke();
+          g.fillStyle = k === 0 ? PAL.cream : PAL.aquaL;
+          UI.pellipse(g, r.x * W, hz + 12 + a * 22, a * 130 * (0.4 + r.p), a * 16 + 3);
         }
       });
     }

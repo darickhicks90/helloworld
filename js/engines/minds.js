@@ -7,21 +7,21 @@
   'use strict';
   const U = FB.util;
   const VOICES = [
-    { id: 'kick', name: 'Kick', dens: 0.28, color: '#ff6b9a' },
-    { id: 'snare', name: 'Snare', dens: 0.16, color: '#ffb36b' },
-    { id: 'hat', name: 'Hat', dens: 0.6, color: '#fff27a' },
-    { id: 'click', name: 'Click', dens: 0.3, color: '#7affc1' },
-    { id: 'zap', name: 'Zap', dens: 0.13, color: '#6be3ff' },
-    { id: 'crunch', name: 'Crunch', dens: 0.15, color: '#8f8bff' },
-    { id: 'metal', name: 'Metal', dens: 0.1, color: '#d38bff' },
-    { id: 'ghost', name: 'Ghost', dens: 0.16, color: '#ff8bd8' },
+    { id: 'kick', name: 'Kick', dens: 0.28, color: '#e8742c' },
+    { id: 'snare', name: 'Snare', dens: 0.16, color: '#3fb8af' },
+    { id: 'hat', name: 'Hat', dens: 0.6, color: '#f7efdc' },
+    { id: 'click', name: 'Click', dens: 0.3, color: '#8fd9d1' },
+    { id: 'zap', name: 'Zap', dens: 0.13, color: '#f4a259' },
+    { id: 'crunch', name: 'Crunch', dens: 0.15, color: '#a8774c' },
+    { id: 'metal', name: 'Metal', dens: 0.1, color: '#d9a066' },
+    { id: 'ghost', name: 'Ghost', dens: 0.16, color: '#b8521b' },
   ];
   const POLY = [16, 16, 12, 10, 7, 13, 9, 5];
 
   class Minds extends FB.Engine {
     constructor() {
       super('minds', 'Minds');
-      this.color = '#c58bff';
+      this.color = '#e8742c';
       this.modParam = 'chaos';
       const P = this.param.bind(this);
       P('density', { label: 'Activity', min: 0, max: 1, def: 0.5, unit: '%', help: 'How busy the generated patterns are' });
@@ -338,12 +338,12 @@
       root.appendChild(top);
       this.cv = UI.canvas(top, 'viz');
       const bar = U.el('div', { class: 'toolbar' });
-      bar.appendChild(U.el('button', { text: '🧠 Rethink', title: 'Grow a brand new pattern', onclick: () => this.rethink() }));
-      bar.appendChild(U.el('button', { text: '🧬 Mutate', onclick: () => this.mutateNow(1) }));
-      bar.appendChild(U.el('button', { text: '⚡ Fill', onclick: () => (this.fill = 4) }));
-      UI.toggle(bar, this, 'freeze', { text: '❄ Freeze' });
+      bar.appendChild(U.el('button', { text: 'Rethink', title: 'Grow a brand new pattern', onclick: () => this.rethink() }));
+      bar.appendChild(U.el('button', { text: 'Mutate', onclick: () => this.mutateNow(1) }));
+      bar.appendChild(U.el('button', { text: 'Fill', onclick: () => (this.fill = 4) }));
+      UI.toggle(bar, this, 'freeze', { text: 'Freeze' });
       UI.toggle(bar, this, 'poly', { text: '∿ Polymeter' });
-      bar.appendChild(U.el('button', { text: '⌫ Clear', onclick: () => {
+      bar.appendChild(U.el('button', { text: 'Clear', onclick: () => {
         this.pattern.forEach((p) => p.steps.fill(0));
         this.renderGrid();
       } }));
@@ -352,6 +352,8 @@
       FB.clock.onChange(() => (play.textContent = FB.clock.playing ? '■ Stop' : '▶ Play'));
       bar.appendChild(play);
       top.appendChild(bar);
+      this.capEl = U.el('div', { class: 'viz-caption', text: 'Press Play (or Space) to let the mushrooms think' });
+      top.appendChild(this.capEl);
 
       // Editable grid
       const gridEl = U.el('div', { class: 'mind-grid' });
@@ -363,7 +365,8 @@
         VOICES.forEach((v, vi) => {
           const row = U.el('div', { class: 'mrow' + (this.mutes[vi] ? ' muted' : '') });
           const name = U.el('button', { class: 'mname', text: v.name, title: 'Click to mute / unmute' });
-          name.style.color = v.color;
+          name.style.background = v.color;
+          name.style.color = '#3d2414';
           name.onclick = () => this.toggleMute([vi]);
           row.appendChild(name);
           const p = this.pattern[vi];
@@ -402,13 +405,28 @@
     draw() {
       const cv = this.cv;
       if (!cv) return;
+      const UI = FB.ui, PAL = FB.PAL, P = UI.PX;
       const g = cv.g, W = cv.w, H = cv.h;
       const now = this.now();
+      if (!this.spr) {
+        this.spr = VOICES.map((v) => UI.sprite(UI.SPRITES.mushroom, { O: v.color, o: PAL.cream }, true));
+        this.flies = [];
+        for (let i = 0; i < 22; i++) this.flies.push({ x: Math.random(), y: Math.random(), ph: Math.random() * 6, sp: 0.2 + Math.random() });
+        this.spores = [];
+      }
+      const cx = W / 2, cy = H / 2 + 6;
+      const R = Math.min(W * 0.34, H * 0.34);
+      const pos = VOICES.map((v, i) => {
+        const a = (i / VOICES.length) * Math.PI * 2 - Math.PI / 2;
+        return [cx + Math.cos(a) * R * 1.35, cy + Math.sin(a) * R];
+      });
       this.events.drain(now, (ev) => {
         if (ev.fire != null) {
           this.flash[ev.fire] = Math.max(this.flash[ev.fire], ev.vel);
           if (this.lastFired >= 0 && this.lastFired !== ev.fire) this.synapses.push({ a: this.lastFired, b: ev.fire, life: 1, glitch: Math.random() < this.get('glitch') });
           this.lastFired = ev.fire;
+          const [x, y] = pos[ev.fire];
+          for (let k = 0; k < 4; k++) this.spores.push({ x, y: y - 20, vx: (Math.random() - 0.5) * 3, vy: -1 - Math.random() * 2, life: 1, c: VOICES[ev.fire].color });
         } else if (ev.step != null && this.cells) {
           this.cells.forEach((row, vi) => {
             const len = this.pattern[vi].len;
@@ -417,69 +435,56 @@
         }
       });
 
-      g.fillStyle = 'rgba(14,6,24,0.35)';
-      g.fillRect(0, 0, W, H);
-      const cx = W / 2, cy = H / 2;
-      const R = Math.min(W * 0.36, H * 0.36);
-      const pos = VOICES.map((v, i) => {
-        const a = (i / VOICES.length) * Math.PI * 2 - Math.PI / 2;
-        return [cx + Math.cos(a) * R * 1.25, cy + Math.sin(a) * R];
+      // Forest floor at night
+      UI.bands(g, 0, 0, W, H, ['#22140a', '#2c1a0e', PAL.brownD, '#4a2c18', '#57341c']);
+      const t = performance.now() / 1000;
+      this.flies.forEach((f) => {
+        const on = Math.sin(t * 2 * f.sp + f.ph) > 0.3;
+        if (!on) return;
+        g.fillStyle = f.ph > 3 ? PAL.orangeL : PAL.aquaL;
+        UI.dot(g, ((f.x * W + Math.sin(t * 0.3 * f.sp + f.ph) * 30) + W) % W, f.y * H * 0.8 + Math.cos(t * 0.4 + f.ph) * 10);
       });
-      // Synapses
+
+      // Mycelium connections between mushrooms that fire one after another
       this.synapses = this.synapses.filter((s) => (s.life -= 0.035) > 0);
       this.synapses.forEach((s) => {
         const [x1, y1] = pos[s.a];
         const [x2, y2] = pos[s.b];
-        g.strokeStyle = 'rgba(220,170,255,' + s.life * 0.8 + ')';
-        g.lineWidth = 1 + s.life * 2;
-        g.beginPath();
-        g.moveTo(x1, y1);
-        if (s.glitch) {
-          for (let k = 1; k < 6; k++) {
-            const t = k / 6;
-            g.lineTo(x1 + (x2 - x1) * t + (Math.random() - 0.5) * 30, y1 + (y2 - y1) * t + (Math.random() - 0.5) * 30);
-          }
-        } else g.quadraticCurveTo(cx, cy, x2, y2);
-        g.lineTo(x2, y2);
-        g.stroke();
+        g.fillStyle = s.life > 0.5 ? PAL.cream : PAL.paper;
+        g.globalAlpha = Math.min(1, s.life * 1.5);
+        UI.pline(g, x1, y1 + 10, x2, y2 + 10, s.glitch ? 14 : 0);
       });
-      // Neurons with their pattern rings
+      g.globalAlpha = 1;
+
+      // Mushrooms with their pattern rings; they hop when they fire.
       const vs = FB.clock.visualStep;
       VOICES.forEach((v, i) => {
         const [x, y] = pos[i];
         const f = this.flash[i];
-        this.flash[i] *= 0.88;
+        this.flash[i] *= 0.85;
         const p = this.pattern[i];
-        const rr = 18 + Math.min(R * 0.12, 14);
+        const rr = 34;
         for (let k = 0; k < p.len; k++) {
           const a = (k / p.len) * Math.PI * 2 - Math.PI / 2;
           const on = p.steps[k] > 0;
           const cur = vs >= 0 && k === vs % p.len;
-          g.fillStyle = cur ? '#ffffff' : on ? v.color : 'rgba(255,255,255,0.12)';
-          g.beginPath();
-          g.arc(x + Math.cos(a) * rr, y + Math.sin(a) * rr, cur ? 3.2 : on ? 2.6 : 1.6, 0, Math.PI * 2);
-          g.fill();
+          g.fillStyle = cur ? PAL.cream : on ? v.color : 'rgba(247,239,220,0.18)';
+          UI.dot(g, x + Math.cos(a) * rr, y + Math.sin(a) * rr * 0.8, cur ? 2 : 1);
         }
-        g.globalAlpha = this.mutes[i] ? 0.25 : 1;
-        g.fillStyle = v.color;
-        g.shadowColor = v.color;
-        g.shadowBlur = 8 + f * 30;
-        g.beginPath();
-        g.arc(x, y, 7 + f * 7, 0, Math.PI * 2);
-        g.fill();
-        g.shadowBlur = 0;
+        g.globalAlpha = this.mutes[i] ? 0.3 : 1;
+        UI.drawSprite(g, this.spr[i], x - 18, y - 21 - Math.round(f * 4) * P, 1);
         g.globalAlpha = 1;
-        g.fillStyle = 'rgba(255,255,255,0.7)';
-        g.font = '11px system-ui, sans-serif';
-        g.textAlign = 'center';
-        g.fillText(v.name, x, y + rr + 14);
       });
-      if (!FB.clock.playing) {
-        g.fillStyle = 'rgba(255,255,255,0.55)';
-        g.font = '13px system-ui, sans-serif';
-        g.textAlign = 'center';
-        g.fillText('Press ▶ Play (or Space) to let the minds think', cx, cy + 4);
-      }
+      // Spores
+      this.spores = this.spores.filter((s) => (s.life -= 0.03) > 0);
+      this.spores.forEach((s) => {
+        s.x += s.vx;
+        s.y += s.vy;
+        s.vy += 0.05;
+        g.fillStyle = s.c;
+        UI.dot(g, s.x, s.y);
+      });
+      if (this.capEl) this.capEl.style.display = FB.clock.playing ? 'none' : '';
     }
   }
 

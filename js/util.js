@@ -242,21 +242,36 @@ window.FB = window.FB || {};
   UI.knob = function (parent, engine, key, opts) {
     opts = opts || {};
     const p = engine.params[key];
-    const r = 17;
-    const C = 2 * Math.PI * r;
     const wrap = U.el('div', { class: 'knob' + (opts.big ? ' big' : ''), title: (p.help || p.label) + ' — drag, double-click to reset, right-click / long-press to MIDI-learn' });
+    // A 16-bit style dial: a ring of pixel "lamps" around a little pixel button.
+    const G = 17, cx = 8.5, cy = 8.5, SEG = 11;
+    let body = '';
+    for (let y = 0; y < G; y++)
+      for (let x = 0; x < G; x++) {
+        const d = Math.hypot(x + 0.5 - cx, y + 0.5 - cy);
+        if (d <= 4.6) body += '<rect class="kbody" x="' + x + '" y="' + y + '" width="1" height="1"/>';
+        else if (d <= 5.7) body += '<rect class="krim" x="' + x + '" y="' + y + '" width="1" height="1"/>';
+      }
+    let segs = '';
+    for (let i = 0; i < SEG; i++) {
+      const a = ((-225 + (270 * i) / (SEG - 1)) * Math.PI) / 180;
+      const x = Math.round(cx + Math.cos(a) * 7 - 1);
+      const y = Math.round(cy + Math.sin(a) * 7 - 1);
+      segs += '<rect class="kseg" x="' + x + '" y="' + y + '" width="2" height="2"/>';
+    }
     wrap.innerHTML =
-      '<svg viewBox="0 0 44 44"><circle class="track" cx="22" cy="22" r="' + r + '" stroke-dasharray="' + 0.75 * C + ' ' + C + '"/>' +
-      '<circle class="val" cx="22" cy="22" r="' + r + '" stroke-dasharray="0 ' + C + '"/>' +
-      '<line class="ptr" x1="22" y1="22" x2="22" y2="9"/></svg>' +
+      '<svg viewBox="0 0 ' + G + ' ' + G + '" shape-rendering="crispEdges">' + body + segs + '<rect class="kptr" width="2" height="2"/></svg>' +
       '<div class="kval"></div><div class="klabel">' + p.label + '</div>';
-    const val = wrap.querySelector('.val');
-    const ptr = wrap.querySelector('.ptr');
+    const segEls = wrap.querySelectorAll('.kseg');
+    const ptr = wrap.querySelector('.kptr');
     const txt = wrap.querySelector('.kval');
     const update = () => {
       const n = engine.norm(key);
-      val.setAttribute('stroke-dasharray', 0.75 * C * n + ' ' + C);
-      ptr.setAttribute('transform', 'rotate(' + (-135 + 270 * n) + ' 22 22)');
+      const lit = Math.round(n * (SEG - 1));
+      segEls.forEach((el, i) => el.classList.toggle('on', i <= lit && (n > 0.001 || i === 0)));
+      const a = ((-225 + 270 * n) * Math.PI) / 180;
+      ptr.setAttribute('x', Math.round(cx + Math.cos(a) * 2.6 - 1));
+      ptr.setAttribute('y', Math.round(cy + Math.sin(a) * 2.6 - 1));
       txt.textContent = UI.format(p);
     };
     p.listeners.add(update);
@@ -374,22 +389,26 @@ window.FB = window.FB || {};
   };
 
   // Canvas that tracks its CSS size at device pixel ratio.
-  UI.canvas = function (parent, cls) {
-    const c = U.el('canvas', { class: cls || '' });
+  // Canvas drawn at low resolution and scaled up with hard edges, for a
+  // 16-bit look. Drawing code still uses CSS pixel coordinates; one "art
+  // pixel" is UI.PX CSS pixels.
+  UI.PX = 3;
+  UI.canvas = function (parent, cls, px) {
+    px = px || UI.PX;
+    const c = U.el('canvas', { class: (cls || '') + ' pixel' });
     parent.appendChild(c);
-    const o = { canvas: c, g: c.getContext('2d'), w: 1, h: 1, dpr: 1 };
+    const o = { canvas: c, g: c.getContext('2d'), w: 1, h: 1, px };
     const fit = () => {
       const r = c.getBoundingClientRect();
-      const dpr = Math.min(2, window.devicePixelRatio || 1);
       const w = Math.max(1, Math.round(r.width));
       const h = Math.max(1, Math.round(r.height));
-      if (w !== o.w || h !== o.h || dpr !== o.dpr) {
+      if (w !== o.w || h !== o.h) {
         o.w = w;
         o.h = h;
-        o.dpr = dpr;
-        c.width = w * dpr;
-        c.height = h * dpr;
-        o.g.setTransform(dpr, 0, 0, dpr, 0, 0);
+        c.width = Math.ceil(w / px);
+        c.height = Math.ceil(h / px);
+        o.g.setTransform(1 / px, 0, 0, 1 / px, 0, 0);
+        o.g.imageSmoothingEnabled = false;
         if (o.onResize) o.onResize();
       }
     };
@@ -397,6 +416,140 @@ window.FB = window.FB || {};
     o.fit = fit;
     setTimeout(fit, 0);
     return o;
+  };
+
+  // ------------------------------------------------------------------
+  // Pixel art: palette, sprites and drawing helpers
+  // ------------------------------------------------------------------
+  const PAL = (FB.PAL = {
+    orange: '#e8742c',
+    orangeL: '#f4a259',
+    orangeD: '#b8521b',
+    aqua: '#3fb8af',
+    aquaL: '#8fd9d1',
+    aquaD: '#22706b',
+    cream: '#f7efdc',
+    paper: '#ecdcb9',
+    brownL: '#a8774c',
+    brown: '#7a4a2a',
+    brownD: '#3d2414',
+  });
+  // Letters used in sprite drawings.
+  const SPRITE_KEYS = { O: PAL.orange, o: PAL.orangeL, r: PAL.orangeD, A: PAL.aqua, a: PAL.aquaL, q: PAL.aquaD, W: PAL.cream, w: PAL.paper, B: PAL.brown, b: PAL.brownL, D: PAL.brownD };
+
+  // rows: array of strings; '.' is transparent. Optional outline in dark brown.
+  function spriteCells(rows, colors, outline) {
+    colors = Object.assign({}, SPRITE_KEYS, colors || {});
+    const h = rows.length + (outline ? 2 : 0);
+    const w = Math.max.apply(null, rows.map((r) => r.length)) + (outline ? 2 : 0);
+    const o = outline ? 1 : 0;
+    const cells = [];
+    const filled = (x, y) => {
+      const r = rows[y - o];
+      return r && r[x - o] && r[x - o] !== '.' && r[x - o] !== ' ';
+    };
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) {
+        if (filled(x, y)) cells.push([x, y, colors[rows[y - o][x - o]] || rows[y - o][x - o]]);
+        else if (outline && (filled(x - 1, y) || filled(x + 1, y) || filled(x, y - 1) || filled(x, y + 1))) cells.push([x, y, typeof outline === 'string' ? outline : PAL.brownD]);
+      }
+    return { w, h, cells };
+  }
+  UI.sprite = function (rows, colors, outline) {
+    const s = spriteCells(rows, colors, outline);
+    const c = document.createElement('canvas');
+    c.width = s.w;
+    c.height = s.h;
+    const g = c.getContext('2d');
+    s.cells.forEach(([x, y, col]) => {
+      g.fillStyle = col;
+      g.fillRect(x, y, 1, 1);
+    });
+    return c;
+  };
+  UI.spriteSVG = function (rows, colors, outline, cls) {
+    const s = spriteCells(rows, colors, outline);
+    return '<svg class="' + (cls || 'sprite') + '" viewBox="0 0 ' + s.w + ' ' + s.h + '" shape-rendering="crispEdges">' + s.cells.map(([x, y, c]) => '<rect x="' + x + '" y="' + y + '" width="1" height="1" fill="' + c + '"/>').join('') + '</svg>';
+  };
+  // Draw a sprite so each sprite pixel is `scale` art pixels, snapped to the grid.
+  UI.drawSprite = function (g, spr, x, y, scale, flip) {
+    const P = UI.PX * (scale || 1);
+    x = Math.round(x / UI.PX) * UI.PX;
+    y = Math.round(y / UI.PX) * UI.PX;
+    if (flip) {
+      g.save();
+      g.translate(x + spr.width * P, y);
+      g.scale(-1, 1);
+      g.drawImage(spr, 0, 0, spr.width * P, spr.height * P);
+      g.restore();
+    } else g.drawImage(spr, x, y, spr.width * P, spr.height * P);
+  };
+  // One art pixel (or a block of n art pixels) at CSS coordinates.
+  UI.dot = function (g, x, y, n) {
+    const P = UI.PX;
+    n = n || 1;
+    g.fillRect(Math.floor(x / P) * P, Math.floor(y / P) * P, P * n, P * n);
+  };
+  // Stepped "16-bit" vertical gradient made of flat colour bands.
+  UI.bands = function (g, x, y, w, h, colors) {
+    const P = UI.PX;
+    const n = colors.length;
+    for (let i = 0; i < n; i++) {
+      const y0 = Math.floor((y + (h * i) / n) / P) * P;
+      const y1 = Math.floor((y + (h * (i + 1)) / n) / P) * P;
+      g.fillStyle = colors[i];
+      g.fillRect(x, y0, w, y1 - y0 + P);
+    }
+  };
+  // Pixel line (for mycelium, flags, etc.).
+  UI.pline = function (g, x1, y1, x2, y2, jitter) {
+    const P = UI.PX;
+    const steps = Math.max(1, Math.ceil(Math.hypot(x2 - x1, y2 - y1) / P));
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      UI.dot(g, x1 + (x2 - x1) * t + (jitter ? (Math.random() - 0.5) * jitter : 0), y1 + (y2 - y1) * t + (jitter ? (Math.random() - 0.5) * jitter : 0));
+    }
+  };
+  // Pixel ellipse outline.
+  UI.pellipse = function (g, cx, cy, rx, ry) {
+    const P = UI.PX;
+    const n = Math.max(8, Math.ceil((Math.PI * (rx + ry)) / P));
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      UI.dot(g, cx + Math.cos(a) * rx, cy + Math.sin(a) * ry);
+    }
+  };
+  UI.font = function (size) {
+    return (size || 8) + 'px "Press Start 2P", "Pixelify Sans", monospace';
+  };
+
+  // Sprite library
+  UI.SPRITES = {
+    fox: [
+      '.D............D.',
+      '.DD..........DD.',
+      '.DOD........DOD.',
+      '.DOoD......DoOD.',
+      '.DOOODDDDDDOOOD.',
+      '.DOOOOOOOOOOOOD.',
+      'DOOOOOOOOOOOOOOD',
+      'DOODDOOOOOODDOOD',
+      'DOOWDOOOOOOWDOOD',
+      'DOWWWOOOOOOWWWOD',
+      '.DWWWWOOOOWWWWD.',
+      '..DWWWWWWWWWWD..',
+      '...DWWWWWWWWD...',
+      '....DDWDDWDD....',
+      '......DDDD......',
+    ],
+    cloud: ['...WWW....', '..WWWWW.W.', '.WWWWWWWWW', 'WWWWWWWWWW', 'WWWWWWWWWW', '.aaaaaaaa.'],
+    drop: ['...A...', '...A...', '..AAA..', '..AAA..', '.AaAAA.', '.aAAAA.', '.AAAAA.', '..qAq..'],
+    leaf: ['......DD', '....OOOD', '..OOOOoD', '.OOOOoOO', '.OOOoOO.', '.OOoOO..', '.DoOO...', 'D.......'],
+    mushroom: ['...OOOO...', '..OWOOWO..', '.OOOOOOOO.', 'OWOOOWOOOO', 'OOOOOOOOWO', '..BWWWWB..', '...WWWW...', '...WWWW...', '...WwwW...'],
+    tooth: ['.WWW..WWW.', 'WWWWWWWWWW', 'WWWWWWWWWW', 'WWWWWWWWWW', '.WWWWWWWW.', '.WWW..WWW.', '.WW....WW.', '..W....W..'],
+    cottage: ['....OO....', '...OOOO...', '..OoOOoO..', '.OOOOOOOO.', 'OOOOOOOOOO', '.WWWWWWWW.', '.WaaWWBBW.', '.WaaWWBBW.', '.WWWWWBBW.'],
+    flower: ['.o.', 'oOo', '.o.', '.q.'],
+    acorn: ['..b..', '.bBb.', 'BBBBB', '.OOO.', '.OoO.', '..O..'],
   };
 
   // Queue of things to draw when the audio clock reaches their time.

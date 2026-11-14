@@ -10,7 +10,7 @@
   class Leaves extends FB.Engine {
     constructor() {
       super('leaves', 'Leaves');
-      this.color = '#8fd16a';
+      this.color = '#b8521b';
       this.modParam = 'branch';
       const P = this.param.bind(this);
       P('source', { label: 'Seed', type: 'choice', options: ['Moss', 'Reflections'], def: 'Moss', help: 'Which sound the grains are cut from' });
@@ -198,7 +198,7 @@
       this.cv = UI.canvas(top, 'viz');
       const bar = U.el('div', { class: 'toolbar' });
       UI.choice(bar, this, 'source');
-      UI.toggle(bar, this, 'evergreen', { text: '🌲 Evergreen drone' });
+      UI.toggle(bar, this, 'evergreen', { text: 'Evergreen drone' });
       top.appendChild(bar);
       top.appendChild(U.el('div', { class: 'viz-caption', text: 'Each leaf is a tiny grain of sound. Drag along the branch to choose where they grow.' }));
 
@@ -221,44 +221,60 @@
       UI.knobs(UI.section(grid, 'Climate'), this, ['sun', 'dew', 'sprout', 'fall', 'level']);
     }
 
-    draw(time) {
+    draw() {
       const cv = this.cv;
       if (!cv) return;
+      const UI = FB.ui, PAL = FB.PAL, P = UI.PX;
       const g = cv.g, W = cv.w, H = cv.h;
-      const bg = g.createLinearGradient(0, 0, 0, H);
-      bg.addColorStop(0, '#0e1f12');
-      bg.addColorStop(1, '#1d2b12');
-      g.fillStyle = bg;
-      g.fillRect(0, 0, W, H);
-      const by = H * 0.32;
-      // Branch: thickness follows the sound's loudness.
+      if (!this.spr) {
+        const L = UI.SPRITES.leaf;
+        this.spr = {
+          leaves: [
+            UI.sprite(L, { O: PAL.aqua, o: PAL.aquaL }),
+            UI.sprite(L),
+            UI.sprite(L, { O: PAL.orangeD, o: PAL.orange }),
+            UI.sprite(L, { O: PAL.brownL, o: PAL.orangeL }),
+            UI.sprite(L, { O: PAL.brown, o: PAL.brownL }),
+          ],
+          bud: UI.sprite(UI.SPRITES.flower, { o: PAL.cream, O: PAL.orange, q: PAL.aquaD }, true),
+          shroom: UI.sprite(UI.SPRITES.mushroom, null, true),
+        };
+      }
+      UI.bands(g, 0, 0, W, H, [PAL.cream, '#f5ead2', '#f2e4c7', PAL.paper]);
+      const by = Math.floor((H * 0.3) / P) * P;
+      const groundY = Math.floor((H - 21) / P) * P;
+      // Soil, with a couple of mushrooms
+      g.fillStyle = PAL.brown;
+      g.fillRect(0, groundY, W, H - groundY);
+      g.fillStyle = PAL.brownL;
+      for (let x = 0; x < W; x += P * 4) g.fillRect(x + ((x / P) % 3) * P, groundY, P * 2, P);
+      UI.drawSprite(g, this.spr.shroom, W * 0.12, groundY - 33, 1);
+      UI.drawSprite(g, this.spr.shroom, W * 0.83, groundY - 33, 1);
+
+      // Branch: thickness follows the sound's loudness
       const n = this.peaks.length;
-      g.fillStyle = '#5b3d23';
-      g.beginPath();
-      g.moveTo(0, by);
-      for (let x = 0; x <= W; x += 3) {
+      for (let x = 0; x < W; x += P) {
         const pk = this.peaks[Math.floor((x / W) * (n - 1))] || 0;
-        g.lineTo(x, by - 2 - pk * 14 + Math.sin(x * 0.02) * 2);
+        const th = Math.floor((3 + pk * 12) / P) * P + P;
+        const y = Math.floor((by + Math.sin(x * 0.02) * 4) / P) * P;
+        g.fillStyle = PAL.brownD;
+        g.fillRect(x, y - th - P, P, th * 2 + P * 2);
+        g.fillStyle = PAL.brown;
+        g.fillRect(x, y - th, P, th * 2);
+        g.fillStyle = PAL.brownL;
+        g.fillRect(x, y - th, P, P);
       }
-      for (let x = W; x >= 0; x -= 3) {
-        const pk = this.peaks[Math.floor((x / W) * (n - 1))] || 0;
-        g.lineTo(x, by + 2 + pk * 14 + Math.sin(x * 0.02) * 2);
-      }
-      g.closePath();
-      g.fill();
-      // Position + sway region
+      // Where grains come from
       const pos = (this.get('branch') + this.scan) % 1;
       const sw = this.get('sway') * 0.5;
-      g.fillStyle = 'rgba(180,255,140,0.10)';
-      g.fillRect((pos - sw) * W, 0, sw * 2 * W, H);
-      if (pos + sw > 1) g.fillRect(0, 0, (pos + sw - 1) * W, H);
-      if (pos - sw < 0) g.fillRect((1 + pos - sw) * W, 0, sw * W, H);
-      g.fillStyle = '#d6ff9e';
-      g.beginPath();
-      g.arc(pos * W, by, 7, 0, Math.PI * 2);
-      g.fill();
+      g.fillStyle = 'rgba(63,184,175,0.18)';
+      const band = (a, b) => g.fillRect(Math.floor((a * W) / P) * P, 0, Math.ceil(((b - a) * W) / P) * P, groundY);
+      band(Math.max(0, pos - sw), Math.min(1, pos + sw));
+      if (pos + sw > 1) band(0, pos + sw - 1);
+      if (pos - sw < 0) band(1 + pos - sw, 1);
+      UI.drawSprite(g, this.spr.bud, pos * W - 15, by - 24, 2);
 
-      // Leaves (grains)
+      // Falling leaves (one per grain)
       const now = this.now();
       const life = 3.2;
       this.leaves = this.leaves.filter((l) => now - l.t < life);
@@ -267,20 +283,11 @@
         if (age < 0) continue;
         const k = age / life;
         const x = l.x * W + l.pan * 60 * k + Math.sin(age * 3 + l.x * 30) * 14 * k;
-        const y = by + age * age * 26 + age * 22;
-        const hue = U.clamp(110 - l.semis * 4, 10, 140);
-        const sz = 4 + Math.min(10, l.size * 40);
-        g.save();
-        g.translate(x, y);
-        g.rotate(age * 2 + l.x * 10);
-        g.globalAlpha = 1 - k;
-        g.fillStyle = 'hsl(' + hue + ',70%,' + (45 + (1 - k) * 15) + '%)';
-        g.beginPath();
-        g.moveTo(-sz, 0);
-        g.quadraticCurveTo(0, -sz * 0.7, sz, 0);
-        g.quadraticCurveTo(0, sz * 0.7, -sz, 0);
-        g.fill();
-        g.restore();
+        const y = Math.min(groundY - 20, by + age * age * 26 + age * 22);
+        const idx = U.clamp(Math.floor((l.semis + 12) / 8) + (Math.floor(l.x * 997) % 3) - 1 + 1, 0, 4);
+        const scale = l.size > 0.2 ? 2 : 1;
+        g.globalAlpha = k > 0.8 ? (1 - k) * 5 : 1;
+        UI.drawSprite(g, this.spr.leaves[idx], x - 12, y - 12, scale, Math.sin(age * 4 + l.x * 20) > 0);
       }
       g.globalAlpha = 1;
     }

@@ -3,32 +3,30 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#14100e" />
+  <meta name="theme-color" content="#7a4a2a" />
   <title>FoxBox</title>
   <meta name="description" content="FoxBox — a playful music box: Gusts synth, Reflections sampler, Leaves granular, Minds generative drums and the Teeth mangler. Works with USB and Bluetooth MIDI." />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2314100e'/%3E%3Cpath d='M10 12l14 12h16l14-12-4 24-18 18-18-18z' fill='%23ff8a3d'/%3E%3Cpath d='M22 40l10 10 10-10-10 3z' fill='%23fff3e6'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&family=Press+Start+2P&display=swap" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body data-tab="gusts">
   <div id="boot" class="boot">
     <div class="boot-card">
-      <svg class="fox" viewBox="0 0 64 64" aria-hidden="true">
-        <path d="M10 12l14 12h16l14-12-4 24-18 18-18-18z" fill="#ff8a3d" />
-        <path d="M14 18l8 7-6 7z M50 18l-8 7 6 7z" fill="#5a2a12" />
-        <path d="M22 40l10 10 10-10-10 3z" fill="#fff3e6" />
-        <circle cx="25" cy="33" r="2.4" fill="#14100e" />
-        <circle cx="39" cy="33" r="2.4" fill="#14100e" />
-      </svg>
+      <div id="bootFox"></div>
       <h1>FoxBox</h1>
       <p class="tag">wind · water · leaves · minds · teeth</p>
-      <button id="wake" class="wake">Wake the fox ▶</button>
+      <div class="flowers" id="bootFlowers"></div>
+      <button id="wake" class="wake">Wake the fox</button>
       <p class="small">Plug in a USB MIDI controller or pair a Bluetooth one — or just play with the screen and your keyboard.<br />Best in Chrome or Edge. Turn your volume down a little first.</p>
     </div>
   </div>
 
   <header class="top">
     <div class="brand">
-      <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M10 12l14 12h16l14-12-4 24-18 18-18-18z" fill="#ff8a3d" /><path d="M22 40l10 10 10-10-10 3z" fill="#fff3e6" /></svg>
+      <span id="brandFox"></span>
       <span>FoxBox</span>
     </div>
 
@@ -53,8 +51,8 @@
     </div>
 
     <div class="group io">
-      <button id="midiBtn" title="MIDI devices & mixer">🎹 MIDI <span id="midiCount" class="badge"></span><span id="midiLed" class="led"></span></button>
-      <button id="bleBtn" title="Connect a Bluetooth LE MIDI controller">🔵 Bluetooth</button>
+      <button id="midiBtn" title="MIDI devices & mixer">MIDI <span id="midiCount" class="badge"></span><span id="midiLed" class="led"></span></button>
+      <button id="bleBtn" title="Connect a Bluetooth LE MIDI controller">Bluetooth</button>
       <button id="recBtn" class="rec" title="Record what you play to an audio file">● Rec</button>
       <button id="panic" title="Stop all sound (Esc)">✕</button>
       <canvas id="scope" width="160" height="36"></canvas>
@@ -76,6 +74,25 @@
   <div id="toast" class="toast"></div>
 
   <script src="js/util.js"></script>
+  <script>
+    // Pixel fox logo, flowers and favicon (drawn from sprites in util.js).
+    (function () {
+      var UI = FB.ui, S = UI.SPRITES;
+      document.getElementById('bootFox').innerHTML = UI.spriteSVG(S.fox);
+      document.getElementById('brandFox').innerHTML = UI.spriteSVG(S.fox);
+      var fl = '';
+      for (var i = 0; i < 7; i++) fl += UI.spriteSVG(i % 2 ? S.flower : S.acorn, i % 3 === 0 ? { O: '#3fb8af', o: '#8fd9d1' } : null);
+      document.getElementById('bootFlowers').innerHTML = fl;
+      var c = UI.sprite(S.fox);
+      var big = document.createElement('canvas');
+      big.width = big.height = 64;
+      var g = big.getContext('2d');
+      g.imageSmoothingEnabled = false;
+      g.drawImage(c, 0, 2, 64, 60);
+      var link = document.querySelector('link[rel=icon]');
+      if (link) link.href = big.toDataURL();
+    })();
+  </script>
   <script src="js/audio.js"></script>
   <script src="js/clock.js"></script>
   <script src="js/midi.js"></script>

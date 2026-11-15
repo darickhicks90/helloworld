@@ -70,20 +70,28 @@ clip launcher.
      coloured square shows which block a clip belongs to.
    - Tap the **poetry stone** for a line of Romantic poetry across the top
      of the screen.
-   - Audio takes sit in tidy rows, one row per channel.
-   - **Tap** a box to queue it and select it. A **fader** appears: drag it
-     for volume (the box fades with it). **Double-tap** to mute.
+   - **Audio tracks** (bottom left, kept clear of everything else) work
+     like tracks in a DAW: **Red, Yellow and Blue**. Each one is broken up
+     into its takes, shown as regions with their waveforms and sized by
+     length. Each take is its own loop you can queue, fade, mute or chain.
+     Tap a track's name to arm it; **● Rec** counts in two bars and records
+     the armed tracks. Takes are rounded to whole bars, and each track holds
+     up to **6 minutes**.
+   - **Master:** all three audio tracks feed the master audio track. Drag
+     its slider for the level of all recorded audio together; the green bar
+     is its meter.
+   - **Tap** a clip box or take to queue it and select it. A **fader**
+     appears: drag it for volume (it fades with it). **Double-tap** to mute.
    - The top row: **▶ Play** starts the queued clips (when the current loop
-     comes round), **■ Stop** stops, **● Rec** counts in two bars and
-     records the armed audio channels, and **+ Audio** adds a channel (red,
-     yellow, blue). Tap a channel's name box to arm it.
-   - Takes are rounded to whole bars and each channel holds up to
-     **6 minutes**. Latency is compensated automatically; fine-tune it with
-     **Recording offset**.
+     comes round), **■ Stop** stops, **● Rec** records audio, and
+     **⤨ Shuffle** moves everything to new spots.
+   - Latency is compensated automatically; fine-tune it with **Recording
+     offset**.
    - **Daisy chains:** planted flowers grow in the grass. Drag a line
      from one through any boxes: they all go through that flower's effects.
-     Up to 3 chains, traced in red, yellow and blue. Double-tap a flower to
-     undo its chain; select it for a **bloom** fader.
+     Up to 3 chains, traced in red, yellow and blue (they redraw
+     themselves when you shuffle). Double-tap a flower to undo its chain;
+     select it for a **bloom** fader.
    - Hold a box until it clicks and drag it to **R.I.P.** to lay it to rest.
 
 ## The blocks

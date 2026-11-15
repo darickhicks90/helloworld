@@ -12,8 +12,10 @@ import kotlin.math.sqrt
  * launcher for a line of Romantic poetry. Painted once per size and cached.
  */
 object PoemStone {
-    private val TONES = intArrayOf(0xFFF1ECE2.toInt(), 0xFFD9D2C4.toInt(), 0xFFBDB4A4.toInt(), 0xFF9C9282.toInt(), 0xFF7A7062.toInt(), 0xFF584F44.toInt(), 0xFF2E2922.toInt())
-    private val MOSS = intArrayOf(0xFFD6E08A.toInt(), 0xFFA8C25A.toInt(), 0xFF7C9C3E.toInt(), 0xFF56732C.toInt(), 0xFF35491E.toInt())
+    // Same world as the grass: stone greys cooled with the meadow's green, outlined in its dark soil,
+    // with moss in the grass's own greens.
+    private val TONES = intArrayOf(0xFFDDE3C8.toInt(), 0xFFBFC7A6.toInt(), 0xFF9DA685.toInt(), 0xFF7C8566.toInt(), 0xFF5C654A.toInt(), 0xFF3C4530.toInt(), 0xFF14200F.toInt())
+    private val MOSS = intArrayOf(0xFFC2E07A.toInt(), 0xFF84BF55.toInt(), 0xFF5A973F.toInt(), 0xFF3A6A30.toInt(), 0xFF27492A.toInt())
     private var cache: Bitmap? = null
     private var key = ""
 
@@ -44,7 +46,7 @@ object PoemStone {
         }
         fun ins(x: Int, y: Int) = y in 0 until rows && x in 0 until cols && inside[y][x]
         // contact shadow in the grass
-        for (y in 0 until rows) for (x in 0 until cols) if (!ins(x, y) && (ins(x - 2, y - 2) || ins(x - 1, y - 3))) px(x, y, 0x66101808)
+        for (y in 0 until rows) for (x in 0 until cols) if (!ins(x, y) && (ins(x - 2, y - 2) || ins(x - 1, y - 3))) px(x, y, 0x88101808.toInt())
         for (y in 0 until rows) for (x in 0 until cols) if (ins(x, y)) {
             val edge = !ins(x - 1, y) || !ins(x + 1, y) || !ins(x, y - 1) || !ins(x, y + 1)
             if (edge) { px(x, y, TONES[6]); continue }

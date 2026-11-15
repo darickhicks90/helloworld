@@ -17,7 +17,10 @@ class LaunchModel(
     val clips: List<Box>,
     val channels: List<Channel>,
     val flowers: List<FlowerSlot>,
-    val chains: List<List<FloatArray>>,
+    /** Daisy chains: flower id → the clips/takes it runs through (redrawn from where they lie). */
+    val chains: List<Pair<String, List<String>>>,
+    /** The chain being drawn right now (screen points). */
+    val drawing: List<FloatArray>,
     val playing: Boolean,
     val sceneQueued: Boolean,
     val armedAny: Boolean,
@@ -29,8 +32,12 @@ class LaunchModel(
     val seed: Int = 0,
     /** A line of poetry and its poet, shown at the top while set. */
     val quote: Pair<String, String>? = null,
+    /** Master audio track level and meter. */
+    val master: Float = 0.9f,
+    val masterPeak: Float = 0f,
 ) {
-    class Box(val id: String, val name: String, val block: String, val accent: Int, val queued: Boolean, val playing: Boolean, val muted: Boolean, val volume: Float)
+    class Box(val id: String, val name: String, val block: String, val accent: Int, val queued: Boolean, val playing: Boolean, val muted: Boolean, val volume: Float,
+              val seconds: Float = 0f, val wave: FloatArray? = null)
     class Channel(val ch: Int, val name: String, val accent: Int, val armed: Boolean, val takes: List<Box>)
     class FlowerSlot(val id: String, val name: String, val variant: Int, val bloom: Float, val chain: Int)
 }
@@ -44,7 +51,11 @@ class LaunchModel(
 object ClipField {
     const val K_CLIP = 0; const val K_TAKE = 1; const val K_FLOWER = 2; const val K_CHANNEL = 3
     const val K_PLAY = 4; const val K_STOP = 5; const val K_REC = 6; const val K_BACK = 7; const val K_PLUS = 8
-    const val K_SHUFFLE = 9; const val K_POEM = 10
+    const val K_SHUFFLE = 9; const val K_POEM = 10; const val K_MASTER = 11
+    /** Where the master slider lies (l, t, r, b), for dragging. */
+    val masterLane = FloatArray(4)
+    /** Centre of every clip, take and flower this frame, for routing daisy chains. */
+    private val centres = HashMap<String, FloatArray>()
     const val POEM_ID = "poem-stone"
     /** Daisy-chain tracer colours: red, yellow, blue. */
     val CHAIN = intArrayOf(0xFFE0533F.toInt(), 0xFFF0C23B.toInt(), 0xFF4A8FD8.toInt())
@@ -110,7 +121,6 @@ object ClipField {
         top("stop", K_STOP, "■ Stop", Px.dp(96f), WHITE)
         val recLit = m.audioRec == Transport.Rec.RECORDING || ((m.audioRec == Transport.Rec.ARMED || m.armedAny) && blink)
         top("rec", K_REC, if (m.audioRec == Transport.Rec.ARMED) "● ${m.beat}" else "● Rec", Px.dp(96f), 0xFFFF4A3A.toInt(), recLit)
-        if (m.canAddChannel) top("plus", K_PLUS, "+ Audio", Px.dp(96f), WHITE)
         top("shuffle", K_SHUFFLE, "⤨ Shuffle", Px.dp(110f), WHITE)
         val sr = w - pad
         if (sr - x > Px.dp(80f)) {
@@ -119,22 +129,25 @@ object ClipField {
         }
 
         // ---- audio rows along the bottom; everything else is scattered over the grass above
-        val rowH = Px.dp(36f); val rowGap = Px.dp(5f)
-        val audioH = if (m.channels.isEmpty()) 0f else m.channels.size * (rowH + rowGap)
-        val audioTop = h - pad - audioH
+        val rowH = Px.dp(30f); val rowGap = Px.dp(4f)
+        val panelW = minOf(w * 0.42f, Px.dp(440f))
+        val panelH = (m.channels.size + 1) * (rowH + rowGap) + Px.dp(8f)
+        val audioTop = h - pad - panelH
         val fieldTop = pad + topH + Px.dp(10f); val fieldBottom = h - pad
-        // the audio rows' corner is kept clear; the grass beside them is fair game
-        val audioRect = if (audioH > 0f) floatArrayOf(0f, audioTop - Px.dp(8f), w * 0.58f, h) else null
+        centres.clear()
+        // the audio tracks keep their corner to themselves
+        val audioRect = floatArrayOf(0f, audioTop - Px.dp(6f), pad + panelW + Px.dp(6f), h)
         val items = ArrayList<Triple<String, Float, Float>>()
-        m.clips.forEach { items += Triple(it.id, Px.dp(124f + hash(it.id, 1) * 40f), Px.dp(46f + hash(it.id, 2) * 10f)) }
-        m.flowers.forEach { items += Triple(it.id, Px.dp(66f), Px.dp(108f)) }
-        items += Triple(POEM_ID, Px.dp(128f), Px.dp(96f))
+        m.clips.forEach { items += Triple(it.id, Px.dp(100f + hash(it.id, 1) * 28f), Px.dp(38f + hash(it.id, 2) * 8f)) }
+        items += Triple(POEM_ID, Px.dp(112f), Px.dp(84f))
+        m.flowers.forEach { items += Triple(it.id, Px.dp(56f), Px.dp(98f)) }
         val sig = "${w.toInt()}x${h.toInt()}:${audioTop.toInt()}:${m.seed}:" + items.joinToString(",") { it.first }
         if (sig != spotSig) { seed = m.seed; place(items, pad, fieldTop, w - pad, fieldBottom, audioRect); spotSig = sig }
 
         // the poetry stone
         spots[POEM_ID]?.let { sp ->
-            PoemStone.draw(c, sp.x, sp.y, sp.w, sp.h, Px.u * 0.4f)
+            PoemStone.draw(c, sp.x, sp.y, sp.w, sp.h, Px.u * 0.5f)
+            Grass.tuft(c, sp.x + sp.w * 0.3f, sp.y + sp.h * 0.97f, Px.u * 0.5f, 11); Grass.tuft(c, sp.x + sp.w * 0.72f, sp.y + sp.h * 0.98f, Px.u * 0.5f, 23)
             hits += Hit(POEM_ID, K_POEM, sp.x, sp.y, sp.x + sp.w, sp.y + sp.h)
         }
         // flowers growing in the grass, with blades in front of their stems
@@ -143,6 +156,7 @@ object ClipField {
             val fx = sp.x + sp.w / 2; val fy = sp.y + sp.h * 0.24f
             c.flower(fx, fy, 1.45f, f.bloom, f.variant, time, f.chain >= 0 && m.playing)
             Grass.tuft(c, fx, sp.y + sp.h, Px.u * 0.5f, f.id.hashCode())
+            centres[f.id] = floatArrayOf(fx, fy)
             if (f.chain >= 0) c.fill(fx - Px.dp(10f), sp.y + sp.h + Px.dp(2f), fx + Px.dp(10f), sp.y + sp.h + Px.dp(5f), CHAIN[f.chain])
             if (selected == f.id) { box(c, fx - Px.dp(44f), sp.y + sp.h + Px.dp(7f), fx + Px.dp(44f), sp.y + sp.h + Px.dp(25f), 0.9f); label(c, f.name, fx, sp.y + sp.h + Px.dp(16f), sub, WHITE, Px.dp(80f)) }
             hits += Hit(f.id, K_FLOWER, sp.x, sp.y, sp.x + sp.w, sp.y + sp.h)
@@ -157,39 +171,71 @@ object ClipField {
             // the block's colour as a small square, the clip name, the block name
             c.fill(s.x + Px.dp(8f), s.y + Px.dp(8f), s.x + Px.dp(14f), s.y + Px.dp(14f), Pal.alpha(b.accent, alpha))
             val ta = maxOf(alpha, 0.75f)
-            label(c, b.name, s.x + s.w / 2 + Px.dp(4f), s.y + s.h * 0.42f, txt, Pal.alpha(WHITE, ta), s.w - Px.dp(28f))
+            label(c, b.name, s.x + s.w / 2 + Px.dp(4f), s.y + s.h * 0.4f, txt, Pal.alpha(WHITE, ta), s.w - Px.dp(28f))
             label(c, b.block.uppercase() + if (b.muted) " · MUTED" else "", s.x + s.w / 2 + Px.dp(4f), s.y + s.h * 0.75f, sub, Pal.alpha(GREY, ta), s.w - Px.dp(28f))
             if (b.queued || b.playing) c.fill(s.x + Px.dp(3f), s.y + Px.dp(6f), s.x + Px.dp(5f), s.y + s.h - Px.dp(6f), if (b.playing) PLAYING else QUEUED)
             c.restore()
             hits += Hit(b.id, K_CLIP, s.x, s.y, s.x + s.w, s.y + s.h)
+            centres[b.id] = floatArrayOf(s.x + s.w / 2, s.y + s.h / 2)
         }
         if (m.clips.isEmpty()) label(c, "Record clips in the studio and they'll land here", w / 2, (fieldTop + fieldBottom) / 2, txt, WHITE, w - pad * 4)
 
-        // ---- audio takes: tidy rows, one per channel
+        // ---- audio: three tracks like a DAW, each split into loopable takes, into the master track
+        box(c, pad, audioTop, pad + panelW, h - pad, 0.82f)
+        val hw = Px.dp(74f)
+        val laneL = pad + hw + Px.dp(4f); val laneR = pad + panelW - Px.dp(4f)
         for ((i, ch) in m.channels.withIndex()) {
-            val t = audioTop + i * (rowH + rowGap)
-            val hw = Px.dp(96f)
-            box(c, pad, t, pad + hw, t + rowH, 1f, if (ch.armed) ch.accent else EDGE)
+            val t = audioTop + Px.dp(4f) + i * (rowH + rowGap)
+            box(c, pad + Px.dp(4f), t, pad + hw, t + rowH, 1f, if (ch.armed) ch.accent else EDGE)
             val lit = ch.armed && (m.audioRec == Transport.Rec.RECORDING || blink)
-            with(Iso) { c.disc(pad + Px.dp(14f), t + rowH / 2, 2.5f, Px.u * 0.8f, if (lit) ch.accent else Iso.darken(ch.accent, 0.45f)) }
-            label(c, ch.name + if (ch.armed) " ●" else "", pad + hw / 2 + Px.dp(8f), t + rowH / 2, txt, WHITE, hw - Px.dp(30f))
+            with(Iso) { c.disc(pad + Px.dp(15f), t + rowH / 2, 2.2f, Px.u * 0.8f, if (lit) ch.accent else Iso.darken(ch.accent, 0.45f)) }
+            label(c, ch.name, pad + hw / 2 + Px.dp(10f), t + rowH / 2, sub.apply { textSize = Px.dp(10f) }, WHITE, hw - Px.dp(28f))
             hits += Hit(ch.ch.toString(), K_CHANNEL, pad, t, pad + hw, t + rowH)
-            var tx = pad + hw + Px.dp(6f)
-            val tw = Px.dp(118f)
+            // the lane: takes in order, sized by length, each one its own loop
+            c.fill(laneL, t + rowH / 2, laneR, t + rowH / 2 + Px.dp(1f), 0xFF2A2A2A.toInt())
+            val total = ch.takes.sumOf { maxOf(it.seconds, 0.5f).toDouble() }.toFloat()
+            val gap = Px.dp(3f)
+            val avail = laneR - laneL - gap * (ch.takes.size - 1).coerceAtLeast(0)
+            var tx = laneL
             for (tk in ch.takes) {
-                if (tx + tw > w - pad) break
-                val alpha = if (tk.muted) 0.35f else 0.45f + 0.55f * tk.volume
-                box(c, tx, t, tx + tw, t + rowH, alpha, if (selected == tk.id) WHITE else if (tk.playing) PLAYING else if (tk.queued) QUEUED else EDGE)
-                if (tk.queued || tk.playing) c.fill(tx + Px.dp(3f), t + Px.dp(6f), tx + Px.dp(5f), t + rowH - Px.dp(6f), if (tk.playing) PLAYING else QUEUED)
-                label(c, tk.name + if (tk.muted) " (muted)" else "", tx + tw / 2, t + rowH / 2, txt, Pal.alpha(WHITE, maxOf(alpha, 0.75f)), tw - Px.dp(14f))
-                hits += Hit(tk.id, K_TAKE, tx, t, tx + tw, t + rowH)
-                tx += tw + Px.dp(6f)
+                val tw = if (total > 0) maxOf(Px.dp(22f), avail * maxOf(tk.seconds, 0.5f) / total) else avail
+                val r = minOf(tx + tw, laneR)
+                if (r - tx < Px.dp(8f)) break
+                val alpha = if (tk.muted) 0.35f else 0.5f + 0.5f * tk.volume
+                box(c, tx, t, r, t + rowH, alpha, if (selected == tk.id) WHITE else if (tk.playing) PLAYING else if (tk.queued) QUEUED else Iso.darken(ch.accent, 0.3f))
+                tk.wave?.let { wv ->
+                    val n = wv.size; val mid = t + rowH / 2; val amp = rowH * 0.38f
+                    val step = (r - tx - Px.dp(4f)) / n
+                    for (k in 0 until n) { val a = wv[k] * amp; c.fill(tx + Px.dp(2f) + k * step, mid - a, tx + Px.dp(2f) + k * step + maxOf(1f, step * 0.7f), mid + a + 1, Pal.alpha(ch.accent, alpha * 0.85f)) }
+                }
+                if (tk.queued || tk.playing) c.fill(tx + Px.dp(2f), t + Px.dp(3f), r - Px.dp(2f), t + Px.dp(5f), if (tk.playing) PLAYING else QUEUED)
+                if (r - tx > Px.dp(60f)) label(c, tk.name + if (tk.muted) " · muted" else "", (tx + r) / 2, t + rowH - Px.dp(7f), sub.apply { textSize = Px.dp(8f) }, Pal.alpha(WHITE, maxOf(alpha, 0.8f)), r - tx - Px.dp(6f))
+                hits += Hit(tk.id, K_TAKE, tx, t, r, t + rowH)
+                centres[tk.id] = floatArrayOf((tx + r) / 2, t + rowH / 2)
+                tx = r + gap
             }
-            if (ch.takes.isEmpty()) label(c, "arm it, then ● Rec", tx + Px.dp(70f), t + rowH / 2, sub, GREY, Px.dp(140f))
+            if (ch.takes.isEmpty()) label(c, "tap the name to arm, then ● Rec", (laneL + laneR) / 2, t + rowH / 2, sub.apply { textSize = Px.dp(9f) }, GREY, laneR - laneL)
         }
+        // the master audio track: every track's bus ends up here
+        val mt = audioTop + Px.dp(4f) + m.channels.size * (rowH + rowGap)
+        box(c, pad + Px.dp(4f), mt, pad + hw, mt + rowH, 1f, WHITE)
+        label(c, "Master", pad + hw / 2 + Px.dp(2f), mt + rowH / 2, sub.apply { textSize = Px.dp(10f) }, WHITE, hw - Px.dp(12f))
+        box(c, laneL, mt, laneR, mt + rowH, 1f)
+        val lv = laneL + Px.dp(4f) + (laneR - laneL - Px.dp(8f)) * m.master
+        c.fill(laneL + Px.dp(4f), mt + Px.dp(9f), lv, mt + Px.dp(13f), 0xFFE8E8E8.toInt())
+        c.fill(lv - Px.dp(2f), mt + Px.dp(5f), lv + Px.dp(2f), mt + Px.dp(17f), WHITE)
+        val pk = (m.masterPeak.coerceIn(0f, 1.2f) / 1.2f) * (laneR - laneL - Px.dp(8f))
+        c.fill(laneL + Px.dp(4f), mt + rowH - Px.dp(9f), laneL + Px.dp(4f) + pk, mt + rowH - Px.dp(5f), if (m.masterPeak > 0.95f) 0xFFFF4A3A.toInt() else 0xFF7FD98F.toInt())
+        masterLane[0] = laneL + Px.dp(4f); masterLane[1] = mt; masterLane[2] = laneR - Px.dp(4f); masterLane[3] = mt + rowH
+        hits += Hit("master", K_MASTER, laneL, mt, laneR, mt + rowH)
 
         // ---- daisy chains
-        for ((k, path) in m.chains.withIndex()) tracer(c, path.map { floatArrayOf(it[0] * w, it[1] * h) }, CHAIN[k % 3], Px.u * 0.8f, time)
+        // routed from wherever the flower and its clips lie now, so Shuffle redraws them
+        for ((k, chain) in m.chains.withIndex()) {
+            val pts = (listOf(chain.first) + chain.second).mapNotNull { centres[it] }
+            tracer(c, pts, CHAIN[k % 3], Px.u * 0.8f, time)
+        }
+        if (m.drawing.size > 1) tracer(c, m.drawing, CHAIN[m.chains.size.coerceAtMost(2)], Px.u * 0.8f, time)
         // ---- a line of poetry from the stone, in white across the top
         m.quote?.let { (line, poet) ->
             val qt = pad + topH + Px.dp(6f)
@@ -211,7 +257,7 @@ object ClipField {
         val blocked = listOfNotNull(keepClear)
         val gap = Px.dp(12f)
         for ((id, bw, bh) in items) {
-            fun free(cd: FloatArray) = (placed + blocked).none { it[0] < cd[2] + gap && cd[0] < it[2] + gap && it[1] < cd[3] + gap && cd[1] < it[3] + gap }
+            fun free(cd: FloatArray, gp: Float = gap) = (placed + blocked).none { it[0] < cd[2] + gp && cd[0] < it[2] + gp && it[1] < cd[3] + gp && cd[1] < it[3] + gp }
             fun clearance(cd: FloatArray): Float {
                 var best = Float.MAX_VALUE
                 val cx = (cd[0] + cd[2]) / 2; val cy = (cd[1] + cd[3]) / 2
@@ -229,15 +275,20 @@ object ClipField {
                 if (score > bestScore) { best = cd; bestScore = score }
             }
             if (best != null && !free(best)) {
-                val step = Px.dp(12f)
-                var y = t
-                search@ while (y + bh <= b) {
-                    var x = l
-                    while (x + bw <= r) { val cd = floatArrayOf(x, y, x + bw, y + bh); if (free(cd)) { best = cd; break@search }; x += step }
-                    y += step
+                // crowded: look for any free spot, with less and less breathing room
+                val step = Px.dp(8f)
+                search@ for (gp in floatArrayOf(gap, gap / 2, 1f)) {
+                    var y = t
+                    while (y + bh <= b) {
+                        var x = l
+                        while (x + bw <= r) { val cd = floatArrayOf(x, y, x + bw, y + bh); if (free(cd, gp)) { best = cd; break@search }; x += step }
+                        y += step
+                    }
                 }
             }
-            val s = best ?: continue
+            var s = best ?: continue
+            // last resort: never inside the audio tracks' corner
+            for (k in blocked) if (k[0] < s[2] && s[0] < k[2] && k[1] < s[3] && s[1] < k[3]) { val ny = (k[1] - gap - bh).coerceAtLeast(t); s = floatArrayOf(s[0], ny, s[2], ny + bh) }
             placed += s
             spots[id] = Spot(s[0], s[1], bw, bh, if (id.length == 8) (hash(id, 3) - 0.5f) * 7f else 0f)
         }
@@ -285,6 +336,19 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
 
     init { animated = true }
     private var poem: Pair<String, String>? = null
+    private val waves = HashMap<String, FloatArray>()
+    /** A take's waveform, 48 peaks (computed once). */
+    private fun wave(a: AudioClip): FloatArray? {
+        val d = a.data
+        if (d.isEmpty()) return null
+        return waves.getOrPut(a.id + d.size) {
+            val n = 48; val per = maxOf(1, d.size / n)
+            val out = FloatArray(n) { k -> var pk = 0f; var i = k * per; val e = minOf(d.size, i + per); while (i < e) { pk = maxOf(pk, kotlin.math.abs(d[i])); i += 8 }; pk }
+            val mx = out.maxOrNull()?.takeIf { it > 0f } ?: 1f
+            for (k in out.indices) out[k] = (out[k] / mx).coerceAtLeast(0.04f)
+            out
+        }
+    }
     private var poemAt = 0L
 
     private fun model(): LaunchModel {
@@ -293,13 +357,13 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
         val clips = Studio.valleyClips.map { cl ->
             LaunchModel.Box(cl.id, cl.name, Studio.engine(cl.engine).title, Pal.accent(cl.engine), Studio.isQueued(cl.id), Studio.isPlaying(cl.id), cl.muted, cl.volume)
         }
-        val channels = (0 until AudioClip.CHANNELS).filter { p.planes[it] }.map { ch ->
+        val channels = (0 until AudioClip.CHANNELS).map { ch ->
             LaunchModel.Channel(ch, Studio.CHANNEL_NAMES[ch], Iso.PLANES[ch], Studio.armed[ch], Studio.audioClipsOn(ch).map { a ->
-                LaunchModel.Box(a.id, a.name, "audio", Iso.PLANES[ch], Studio.isQueued(a.id), Studio.isPlaying(a.id), a.muted, a.volume)
+                LaunchModel.Box(a.id, a.name, "audio", Iso.PLANES[ch], Studio.isQueued(a.id), Studio.isPlaying(a.id), a.muted, a.volume, a.seconds, wave(a))
             })
         }
         val flowers = Studio.valleyFlowers.map { f -> LaunchModel.FlowerSlot(f.id, f.name, f.variant, f.bloom, Studio.chainIndex(f.id)) }
-        val chains = p.chains.map { it.path.toList() } + (if (chainPath.size > 1) listOf(chainPath.map { floatArrayOf(it[0] / width, it[1] / height) }) else emptyList())
+        val chains = p.chains.map { it.flowerId to it.clipIds.toList() }
         val status = when {
             t.audioRec == Transport.Rec.ARMED -> "Count-in… ${t.beat + 1}"
             t.audioRec == Transport.Rec.RECORDING -> "Recording: tap ● Rec to stop"
@@ -309,7 +373,7 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
             else -> "Tap clips to queue them, then ▶ Play"
         }
         val q = poem.takeIf { System.currentTimeMillis() - poemAt < 20_000 }
-        return LaunchModel(clips, channels, flowers, chains, t.playing, Studio.sceneQueued, Studio.armed.any { it }, t.audioRec, (t.beat + 1).toInt(), status, p.planes.any { !it }, p.layoutSeed, q)
+        return LaunchModel(clips, channels, flowers, chains, chainPath.toList(), t.playing, Studio.sceneQueued, Studio.armed.any { it }, t.audioRec, (t.beat + 1).toInt(), status, false, p.layoutSeed, q, p.audioMaster, Audio.audioPeak)
     }
 
     override fun paint(c: Canvas) {
@@ -371,7 +435,7 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
 
     private val longPress = Runnable {
         val hh = downHit ?: return@Runnable
-        if (moved || hh.kind !in listOf(ClipField.K_CLIP, ClipField.K_TAKE, ClipField.K_FLOWER, ClipField.K_CHANNEL)) return@Runnable
+        if (moved || hh.kind !in listOf(ClipField.K_CLIP, ClipField.K_TAKE, ClipField.K_FLOWER)) return@Runnable
         burying = hh.id; buryKind = hh.kind; selected = null
         performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
     }
@@ -385,12 +449,15 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
             MotionEvent.ACTION_DOWN -> {
                 downX = x; downY = y; curX = x; curY = y; moved = false
                 if (selected != null && x in fader[0]..fader[2] && y in fader[1]..fader[3]) { faderDrag = true; setFader(y); return true }
+                val ml = ClipField.masterLane
+                if (x in ml[0] - Px.dp(6f)..ml[2] + Px.dp(6f) && y in ml[1]..ml[3]) { masterDrag = true; setMaster(x); return true }
                 downHit = hitAt(x, y)
                 if (downHit != null) postDelayed(longPress, 450)
             }
             MotionEvent.ACTION_MOVE -> {
                 curX = x; curY = y
                 if (faderDrag) { setFader(y); return true }
+                if (masterDrag) { setMaster(x); return true }
                 if (!moved && hypot(x - downX, y - downY) > Px.dp(10f)) {
                     moved = true
                     if (burying == null) removeCallbacks(longPress)
@@ -411,6 +478,7 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
                 val b = burying
                 when {
                     faderDrag -> { faderDrag = false; Studio.save() }
+                    masterDrag -> { masterDrag = false; Studio.save() }
                     b != null -> {
                         if (overStone()) { if (buryKind == ClipField.K_CHANNEL) Studio.removePlane(b.toInt()) else Studio.bury(b) }
                         burying = null
@@ -424,10 +492,13 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
                 }
                 downHit = null
             }
-            MotionEvent.ACTION_CANCEL -> { removeCallbacks(longPress); burying = null; chainFlower = null; chainPath.clear(); faderDrag = false; downHit = null }
+            MotionEvent.ACTION_CANCEL -> { removeCallbacks(longPress); burying = null; chainFlower = null; chainPath.clear(); faderDrag = false; masterDrag = false; downHit = null }
         }
         return true
     }
+
+    private var masterDrag = false
+    private fun setMaster(x: Float) { val ml = ClipField.masterLane; Studio.setAudioMaster((x - ml[0]) / (ml[2] - ml[0]).coerceAtLeast(1f)) }
 
     private fun setFader(y: Float) {
         val id = selected ?: return

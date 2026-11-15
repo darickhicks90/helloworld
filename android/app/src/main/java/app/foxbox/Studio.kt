@@ -100,6 +100,8 @@ object Studio : Transport.Listener, MidiInput.Sink {
         p.flowers.filter { it.inValley }.drop(MAX_PLANTED).forEach { it.inValley = false }
         flower = p.flowers.first()
         armed.fill(false)
+        // The three audio tracks always exist (like tracks in a DAW).
+        p.planes.fill(true)
         applyKey()
         syncRack()
         val first = p.blocks.firstOrNull() ?: "gusts"
@@ -307,6 +309,8 @@ object Studio : Transport.Listener, MidiInput.Sink {
         message("${CHANNEL_NAMES[ch]} channel removed. Its takes come back if you add it again.")
         syncRack(); save(); changed()
     }
+
+    fun setAudioMaster(v: Float) { project.audioMaster = v.coerceIn(0f, 1f); Audio.audioMaster = project.audioMaster }
 
     fun toggleArm(ch: Int) { if (project.planes[ch]) { armed[ch] = !armed[ch]; changed() } }
 

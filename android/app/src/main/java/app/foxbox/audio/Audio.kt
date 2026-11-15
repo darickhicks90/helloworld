@@ -85,6 +85,10 @@ object Audio {
     private val audioBus = Array(3) { FloatArray(BLOCK) }
     /** Level of each audio channel (the biplanes). */
     val channelLevel = floatArrayOf(0.9f, 0.9f, 0.9f)
+    /** The master audio track: level of all three audio tracks together, and its meter. */
+    @Volatile var audioMaster = 0.9f
+    @Volatile var audioPeak = 0f
+    private val masterBus = FloatArray(BLOCK)
 
     private fun block(n: Int) {
         while (true) (queue.poll() ?: break).run()
@@ -113,13 +117,20 @@ object Audio {
         // Audio channels (mono takes).
         for (ch in 0 until 3) audioBus[ch].fill(0f, 0, n)
         transport.renderAudio(audioBus, n, transport.blockStartTick)
+        // The three audio tracks feed the master audio track (its level and meter);
+        // a track on a daisy chain reaches it through that chain's flower.
+        val am = audioMaster
+        masterBus.fill(0f, 0, n)
+        var apk = audioPeak * 0.97f
         for (ch in 0 until 3) {
             val c = rack.channelRoute[ch]
-            val dl = if (c >= 0 && chains[c] != null) chL[c] else mixL
-            val dr = if (c >= 0 && chains[c] != null) chR[c] else mixR
-            val g = channelLevel[ch]; val b = audioBus[ch]
-            for (i in 0 until n) { dl[i] += b[i] * g; dr[i] += b[i] * g }
+            val g = channelLevel[ch] * am; val b = audioBus[ch]
+            if (c >= 0 && chains[c] != null) { val dl = chL[c]; val dr = chR[c]; for (i in 0 until n) { dl[i] += b[i] * g; dr[i] += b[i] * g } }
+            else for (i in 0 until n) masterBus[i] += b[i] * g
+            for (i in 0 until n) apk = max(apk, abs(b[i] * g))
         }
+        for (i in 0 until n) { mixL[i] += masterBus[i]; mixR[i] += masterBus[i] }
+        audioPeak = apk
         for (k in 0 until 3) if (chains[k] != null) {
             rack.processChain(k, chL[k], chR[k], n)
             val l = chL[k]; val r = chR[k]

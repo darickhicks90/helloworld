@@ -50,7 +50,7 @@ static void on_error(AAudioStream *stream, void *user, aaudio_result_t error) {
 
 /* Opens and starts the stream. Returns the actual sample rate, or a negative error. */
 JNIEXPORT jint JNICALL
-Java_app_foxbox_audio_NativeAudio_nOpen(JNIEnv *env, jclass cls, jint sample_rate) {
+Java_app_foxbox_audio_NativeAudio_nOpen(JNIEnv *env, jclass cls, jint sample_rate, jint device_id, jint buffer_frames) {
     if (g_stream != NULL) return AAudioStream_getSampleRate(g_stream);
     (*env)->GetJavaVM(env, &g_vm);
     if (g_cls == NULL) g_cls = (jclass) (*env)->NewGlobalRef(env, cls);
@@ -71,6 +71,7 @@ Java_app_foxbox_audio_NativeAudio_nOpen(JNIEnv *env, jclass cls, jint sample_rat
     AAudioStreamBuilder_setFormat(b, AAUDIO_FORMAT_PCM_FLOAT);
     AAudioStreamBuilder_setChannelCount(b, 2);
     AAudioStreamBuilder_setSampleRate(b, sample_rate);
+    if (device_id > 0) AAudioStreamBuilder_setDeviceId(b, device_id);
     AAudioStreamBuilder_setUsage(b, AAUDIO_USAGE_GAME);
     AAudioStreamBuilder_setContentType(b, AAUDIO_CONTENT_TYPE_MUSIC);
     AAudioStreamBuilder_setDataCallback(b, on_audio, NULL);
@@ -80,7 +81,9 @@ Java_app_foxbox_audio_NativeAudio_nOpen(JNIEnv *env, jclass cls, jint sample_rat
     if (r != AAUDIO_OK) { g_stream = NULL; return r; }
 
     int32_t burst = AAudioStream_getFramesPerBurst(g_stream);
-    if (burst > 0) AAudioStream_setBufferSizeInFrames(g_stream, burst * 2);
+    int32_t want = buffer_frames > 0 ? buffer_frames : burst * 2;
+    if (burst > 0 && want < burst) want = burst;
+    AAudioStream_setBufferSizeInFrames(g_stream, want);
     g_disconnected = 0;
     r = AAudioStream_requestStart(g_stream);
     if (r != AAUDIO_OK) { AAudioStream_close(g_stream); g_stream = NULL; return r; }
@@ -124,6 +127,12 @@ JNIEXPORT jboolean JNICALL
 Java_app_foxbox_audio_NativeAudio_nDisconnected(JNIEnv *env, jclass cls) {
     (void) env; (void) cls;
     return g_disconnected ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jint JNICALL
+Java_app_foxbox_audio_NativeAudio_nCapacity(JNIEnv *env, jclass cls) {
+    (void) env; (void) cls;
+    return g_stream ? AAudioStream_getBufferCapacityInFrames(g_stream) : 0;
 }
 
 JNIEXPORT jboolean JNICALL

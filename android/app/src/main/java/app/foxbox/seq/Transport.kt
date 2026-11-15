@@ -19,11 +19,20 @@ class Transport {
     interface Listener {
         fun onRecorded(clips: List<Clip>)
         fun onChanged()
+        /** An audio take finished (called on the audio thread). */
+        fun onAudioTakeEnded() {}
     }
 
     @Volatile var bpm = 110f
     @Volatile var metronome = true
-    @Volatile var quantize = true
+    @Volatile var quantize = false
+    /** Audio take on the armed biplanes: OFF, counting in (ARMED) or RECORDING. */
+    @Volatile var audioRec = Rec.OFF; private set
+    @Volatile var audioRecStart = 0.0; private set
+    /** Set by the Studio while a take is being recorded. */
+    @Volatile var audioIn: app.foxbox.data.AudioIn? = null
+    /** Input + output latency to compensate when lining takes up (frames). */
+    @Volatile var latencyFrames = 0
     @Volatile var playing = false; private set
     @Volatile var tick = 0.0; private set
     @Volatile var rec = Rec.OFF; private set
@@ -48,6 +57,7 @@ class Transport {
     var engines: List<Engine> = emptyList()
 
     private val players = ArrayList<ClipPlayer>()
+    private val audioPlayers = ArrayList<AudioClipPlayer>()
     private var slot = 0
 
     private class Take {
@@ -71,7 +81,8 @@ class Transport {
 
     fun stop() {
         players.forEach { it.releaseAll() }
-        players.clear(); syncIds()
+        players.clear(); audioPlayers.clear(); syncIds()
+        if (audioRec != Rec.OFF) endAudioTake()
         engines.forEach { it.allOff() }
         playing = false; rec = Rec.OFF; takes.clear(); tick = 0.0
         queued = null; queuedAt = -1.0; onSwitch = null; sceneLen = 0; sceneStart = 0.0
@@ -106,6 +117,7 @@ class Transport {
     fun stopClip(id: String) {
         val it = players.iterator()
         while (it.hasNext()) { val p = it.next(); if (p.clip.id == id) { p.releaseAll(); it.remove() } }
+        audioPlayers.removeAll { it.clip.id == id }
         syncIds(); changed()
     }
 
@@ -123,11 +135,12 @@ class Transport {
      * stops, these clips start together, and `switch` runs (on this thread).
      * An empty list with `stopAfter` ends the music at that point.
      */
-    fun queueScene(clips: List<Pair<Clip, Engine>>, stopAfter: Boolean, switch: Runnable?) {
+    fun queueScene(clips: List<Pair<Clip, Engine>>, stopAfter: Boolean, switch: Runnable?, audio: List<AudioClip> = emptyList()) {
         val startNow = !playing
         if (startNow && !stopAfter) { tick = 0.0; playing = true; sceneLen = 0 }
-        queued = clips; queuedStop = stopAfter; onSwitch = switch
-        queuedLen = clips.maxOfOrNull { it.first.lengthTicks } ?: Ticks.BAR
+        queued = clips; queuedAudio = audio; queuedStop = stopAfter; onSwitch = switch
+        val audioTicks = audio.maxOfOrNull { (it.seconds * bpm / 60.0 * Ticks.PPQ).toInt() } ?: 0
+        queuedLen = maxOf(clips.maxOfOrNull { it.first.lengthTicks } ?: 0, audioTicks).let { if (it <= 0) Ticks.BAR else (Math.ceil(it / Ticks.BAR.toDouble()) * Ticks.BAR).toInt() }
         queuedAt = if (startNow) 0.0 else sceneBoundary()
         changed()
     }
@@ -137,8 +150,10 @@ class Transport {
     private fun switchScene() {
         val at = queuedAt
         val next = queued ?: return
-        players.forEach { it.releaseAll() }; players.clear()
+        players.forEach { it.releaseAll() }; players.clear(); audioPlayers.clear()
         for ((c, e) in next) players += ClipPlayer(c, e, at, slot++)
+        for (a in queuedAudio) audioPlayers += AudioClipPlayer(a, at)
+        queuedAudio = emptyList()
         sceneStart = at; sceneLen = if (next.isEmpty()) 0 else queuedLen
         val sw = onSwitch
         queued = null; onSwitch = null; queuedAt = -1.0
@@ -179,8 +194,10 @@ class Transport {
     fun process(n: Int) {
         if (!playing) return
         val t0 = tick
+        blockStartTick = t0
         val t1 = t0 + n * bpm * Ticks.PPQ / 60.0 / SR
         if (rec == Rec.ARMED && t1 > recStart) { rec = Rec.RECORDING; takes.clear(); changed() }
+        if (audioRec == Rec.ARMED && t1 > audioRecStart) { audioRec = Rec.RECORDING; audioIn?.markStart(latencyFrames); changed() }
         if (queued != null && t1 > queuedAt) { switchScene(); if (!playing) return }
         // Index loops below: no iterator allocation on the audio thread.
 
@@ -209,7 +226,8 @@ class Transport {
 
     private fun step(s: Long) {
         if (s >= 0) for (i in engines.indices) engines[i].onStep(s)
-        if (metronome && rec != Rec.OFF && Math.floorMod(s, 4L) == 0L) click(Math.floorMod(s, 16L) == 0L)
+        val counting = audioRec == Rec.ARMED || rec == Rec.ARMED
+        if ((counting || (metronome && (rec != Rec.OFF || audioRec != Rec.OFF))) && Math.floorMod(s, 4L) == 0L) click(Math.floorMod(s, 16L) == 0L)
     }
 
     private fun finish() {
@@ -231,7 +249,41 @@ class Transport {
         changed()
     }
 
-    private fun syncIds() { playing_ids = players.map { it.clip.id }.toSet() }
+    private fun syncIds() { playing_ids = (players.map { it.clip.id } + audioPlayers.map { it.clip.id }).toSet() }
+    private var queuedAudio: List<AudioClip> = emptyList()
+
+    // ---------------------------------------------------------------- audio takes
+
+    /** Start a take: two bars of count-in, then record until [endAudioTake]. */
+    fun recordAudio() {
+        if (audioRec != Rec.OFF) { endAudioTake(); return }
+        if (!playing) { tick = -2.0 * Ticks.BAR; playing = true; audioRecStart = 0.0 }
+        else audioRecStart = nextBar(tick) + 2.0 * Ticks.BAR
+        audioRec = Rec.ARMED
+        changed()
+    }
+
+    private fun endAudioTake() {
+        if (audioRec == Rec.RECORDING) audioIn?.markEnd(latencyFrames)
+        audioRec = Rec.OFF
+        listener?.onAudioTakeEnded()
+        changed()
+    }
+
+    fun launchAudio(clip: AudioClip, at: Double? = null) {
+        audioPlayers.removeAll { it.clip.id == clip.id }
+        if (!playing) { tick = 0.0; playing = true }
+        audioPlayers += AudioClipPlayer(clip, at ?: if (tick <= 0.0) 0.0 else nextBar(tick))
+        syncIds(); changed()
+    }
+
+    /** Render playing audio clips into the three channel buses. */
+    fun renderAudio(buses: Array<FloatArray>, n: Int, t0: Double) {
+        if (!playing) return
+        val tpf = bpm * Ticks.PPQ / 60.0 / app.foxbox.audio.SR
+        for (i in audioPlayers.indices) { val p = audioPlayers[i]; p.render(buses[p.clip.channel.coerceIn(0, buses.size - 1)], n, t0, tpf) }
+    }
+    @Volatile var blockStartTick = 0.0; private set
     private fun changed() = listener?.onChanged()
 
     // ---------------------------------------------------------------- metronome

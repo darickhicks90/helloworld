@@ -37,10 +37,18 @@ class Btn(c: Context, var text: String, var accent: Int = Pal.ORANGE, private va
     var onLong: (() -> Unit)? = null
     var onDown: (() -> Unit)? = null
     var onUp: (() -> Unit)? = null
+    /** After a long press: drag with screen coordinates; phase 0 start, 1 move, 2 drop, 3 cancel. */
+    var onDrag: ((Float, Float, Int) -> Unit)? = null
+    private var dragging = false
     private var pressed = false
     private var longFired = false
     private val textP = Px.text(14f)
-    private val long = Runnable { longFired = true; onLong?.invoke(); performHapticFeedback(0) }
+    private var lastRawX = 0f; private var lastRawY = 0f
+    private val long = Runnable {
+        longFired = true; performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+        val d = onDrag
+        if (d != null) { dragging = true; pressed = false; invalidate(); parent?.requestDisallowInterceptTouchEvent(true); d(lastRawX, lastRawY, 0) } else onLong?.invoke()
+    }
 
     override fun onMeasure(w: Int, h: Int) {
         val iconW = if (icon != null) Px.dp(26) else 0
@@ -67,13 +75,15 @@ class Btn(c: Context, var text: String, var accent: Int = Pal.ORANGE, private va
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(e: MotionEvent): Boolean {
         when (e.actionMasked) {
-            MotionEvent.ACTION_DOWN -> { pressed = true; longFired = false; onDown?.invoke(); if (onLong != null) postDelayed(long, 500); invalidate() }
+            MotionEvent.ACTION_DOWN -> { lastRawX = e.rawX; lastRawY = e.rawY; pressed = true; longFired = false; dragging = false; onDown?.invoke(); if (onLong != null || onDrag != null) postDelayed(long, 450); invalidate() }
+            MotionEvent.ACTION_MOVE -> { lastRawX = e.rawX; lastRawY = e.rawY; if (dragging) onDrag?.invoke(e.rawX, e.rawY, 1) }
             MotionEvent.ACTION_UP -> {
                 removeCallbacks(long)
+                if (dragging) { dragging = false; onDrag?.invoke(e.rawX, e.rawY, 2); return true }
                 if (pressed && !longFired && e.x in 0f..width.toFloat() && e.y in 0f..height.toFloat()) onClick?.invoke()
                 pressed = false; onUp?.invoke(); invalidate()
             }
-            MotionEvent.ACTION_CANCEL -> { removeCallbacks(long); pressed = false; onUp?.invoke(); invalidate() }
+            MotionEvent.ACTION_CANCEL -> { removeCallbacks(long); if (dragging) { dragging = false; onDrag?.invoke(e.rawX, e.rawY, 3) }; pressed = false; onUp?.invoke(); invalidate() }
         }
         return true
     }

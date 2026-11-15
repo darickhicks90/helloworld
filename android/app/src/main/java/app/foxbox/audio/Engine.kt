@@ -36,18 +36,21 @@ abstract class Engine(val id: String, val title: String) {
         return p.num("bend", "Pitch Bend", -2f, 2f, 0f, Fmt.ST) to p.num("vibrato", "Vibrato", 0f, 1f, 0f, Fmt.PCT)
     }
 
+    /** The block's step sequencer, if it has one (melodic blocks). */
+    open val seq: app.foxbox.seq.NoteSeq? = null
+
     abstract fun noteOn(key: Int, note: Int, vel: Float)
     abstract fun noteOff(key: Int)
     /** Per-note MPE expression: bend in semitones, pressure and slide 0..1. */
     open fun expr(key: Int, kind: Int, v: Float) {}
     open fun allOff() {}
     /** Called by the transport on every 16th-note step while playing. */
-    open fun onStep(step: Long) {}
+    open fun onStep(step: Long) { seq?.onStep(step) }
     /** Add this engine's output into l/r. Call xy.begin() first. */
     abstract fun render(l: FloatArray, r: FloatArray, n: Int)
 
-    open fun saveExtra(o: JSONObject) {}
-    open fun loadExtra(o: JSONObject?) {}
+    open fun saveExtra(o: JSONObject) { seq?.save(o) }
+    open fun loadExtra(o: JSONObject?) { seq?.load(o) }
 
     protected fun noted(note: Int) { noteCount++; lastNote = note }
 

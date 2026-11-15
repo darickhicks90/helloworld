@@ -10,6 +10,6 @@
         <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
         <item name="android:windowSplashScreenBackground">@color/cream</item>
         <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
-        <item name="android:windowSplashScreenIconBackgroundColor">@color/cream</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">@color/aqua</item>
     </style>
 </resources>

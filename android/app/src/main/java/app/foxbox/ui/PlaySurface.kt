@@ -58,9 +58,6 @@ class ChordButtons(c: Context) : PixelView(c) {
         }
     }
 
-    /** Called when strumming starts: silence the tapped chord so the strum is heard. */
-    fun cutSound() { pressed.values.forEach { if (muted.add(it)) Studio.chordOff(keyBase(it)) } }
-
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(e: MotionEvent): Boolean {
         val i = e.actionIndex
@@ -119,6 +116,7 @@ class StrumPad(c: Context, private val chords: ChordButtons) : PixelView(c) {
         return (listOf(-12, 0, 12).flatMap { o -> ch.map { it + o } }).toIntArray()
     }
     private fun releaseStrings() { val e = Studio.target; ringing.forEach { Studio.noteOff(e, 0x11000000 + it) }; ringing.clear() }
+    // Strings use their own keys (0x11…), separate from the chord's (0x10…), so a strum never cuts the chord.
 
     override fun paint(c: Canvas) {
         val w = width.toFloat(); val h = height.toFloat()
@@ -188,7 +186,7 @@ class StrumPad(c: Context, private val chords: ChordButtons) : PixelView(c) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
                 val i = e.actionIndex; val id = e.getPointerId(i); val x = e.getX(i); val y = e.getY(i)
                 if (strum) {
-                    chords.cutSound()
+                    // The chord keeps ringing; strummed strings layer on top of it.
                     lastX[id] = x
                     val s = strings(); val idx = (x / width * s.size).toInt().coerceIn(0, s.size - 1)
                     pluck(idx, s[idx], 0.75f)

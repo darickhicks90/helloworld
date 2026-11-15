@@ -37,7 +37,7 @@ object Pal {
 
     /** Accent colour for each engine. */
     fun accent(id: String) = when (id) {
-        "gusts" -> AQUA; "reflections" -> AQUA_D; "leaves" -> ORANGE_D; "minds" -> ORANGE; "bumble" -> HONEY; else -> BROWN
+        "gusts" -> AQUA; "reflections" -> AQUA_D; "leaves" -> ORANGE_D; "minds" -> ORANGE; "bumble" -> HONEY; "pickup" -> ROSE; else -> BROWN
     }
 
     fun alpha(c: Int, a: Float) = (c and 0x00FFFFFF) or ((a.coerceIn(0f, 1f) * 255).toInt() shl 24)
@@ -178,7 +178,8 @@ object Sprites {
     }
 
     fun icon(pageId: String) = when (pageId) {
-        "gusts" -> cloud; "reflections" -> drop; "leaves" -> leaf; "minds" -> mushroom; "bumble" -> bee; else -> bloom
+        "gusts" -> Iso.iconCloud; "reflections" -> Iso.iconBoat; "leaves" -> Iso.iconTree; "minds" -> Iso.iconMushroom
+        "bumble" -> Iso.iconHive; "pickup" -> Iso.iconTruck; else -> Iso.iconFlower
     }
     private val BEE = listOf("..aa...aa..", ".aWWa.aWWa.", "..aaDDDaa..", "..DhhhhhD..", ".DDDDDDDDD.", ".DhWhhhWhD.", ".DDDDDDDDD.", "..DhhhhhD..", "...DDDDD...")
 

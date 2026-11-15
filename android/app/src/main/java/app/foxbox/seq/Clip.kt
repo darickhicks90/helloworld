@@ -19,23 +19,24 @@ class Clip(
     data class XyPoint(val tick: Int, val x: Float, val y: Float)
 
     var inValley = false
-    var vx = 0.5f
-    var vy = 0.5f
     var variant = 0
+    /** Valley mixer: clip volume (scales note velocity) and mute. */
+    @Volatile var volume = 1f
+    @Volatile var muted = false
 
     val bars get() = lengthTicks / Ticks.BAR.toFloat()
 
     fun toJson(): JSONObject = JSONObject().apply {
         put("id", id); put("engine", engine); put("name", name); put("len", lengthTicks)
-        put("valley", inValley); put("vx", vx.toDouble()); put("vy", vy.toDouble()); put("variant", variant)
+        put("valley", inValley); put("variant", variant); put("volume", volume.toDouble()); put("muted", muted)
         put("notes", JSONArray().apply { notes.forEach { put(JSONArray(listOf(it.tick, it.dur, it.note, it.vel.toDouble()))) } })
         put("xy", JSONArray().apply { xy.forEach { put(JSONArray(listOf(it.tick, it.x.toDouble(), it.y.toDouble()))) } })
     }
 
     companion object {
         fun fromJson(o: JSONObject) = Clip(o.getString("id"), o.getString("engine"), o.getString("name"), o.getInt("len")).apply {
-            inValley = o.optBoolean("valley"); vx = o.optDouble("vx", 0.5).toFloat(); vy = o.optDouble("vy", 0.5).toFloat()
-            variant = o.optInt("variant")
+            inValley = o.optBoolean("valley"); variant = o.optInt("variant")
+            volume = o.optDouble("volume", 1.0).toFloat(); muted = o.optBoolean("muted")
             val n = o.getJSONArray("notes")
             for (i in 0 until n.length()) n.getJSONArray(i).let { notes += Note(it.getInt(0), it.getInt(1), it.getInt(2), it.getDouble(3).toFloat()) }
             val a = o.optJSONArray("xy") ?: JSONArray()
@@ -116,8 +117,9 @@ class ClipPlayer(val clip: Clip, val engine: app.foxbox.audio.Engine, val startT
                 val n = on[idx]
                 val t = (base + n.tick).toDouble()
                 if (t >= a && t < b) {
+                    if (clip.muted) continue
                     val key = keyBase or (idx and 0xFFFF)
-                    engine.noteOn(key, n.note, n.vel)
+                    engine.noteOn(key, n.note, n.vel * clip.volume)
                     if (offs < offKey.size) { offKey[offs] = key; offAt[offs] = startTick + t + maxOf(1, n.dur); offs++ }
                 }
             }

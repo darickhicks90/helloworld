@@ -29,7 +29,23 @@ object Audio {
     val leaves = Leaves()
     val minds = Minds()
     val bumble = Bumble()
-    val engines: List<Engine> = listOf(gusts, reflections, leaves, minds, bumble)
+    val pickup = app.foxbox.engines.Pickup()
+    /** Every engine FoxBox has (one per block type). */
+    val engines: List<Engine> = listOf(gusts, reflections, leaves, minds, bumble, pickup)
+    fun engine(id: String): Engine = engines.first { it.id == id }
+    /** Engines of the blocks in the current session (audio-thread snapshot). */
+    @Volatile var active: Array<Engine> = arrayOf(gusts, minds)
+        private set
+
+    /** Choose which blocks are in the session. */
+    fun setActive(ids: List<String>) {
+        val list = ids.mapNotNull { id -> engines.firstOrNull { it.id == id } }
+        post {
+            engines.forEach { if (it !in list) it.allOff() }
+            active = list.toTypedArray()
+            transport.engines = list
+        }
+    }
     val flowers = FlowerRack()
 
     @Volatile var masterVolume = 0.7f
@@ -48,7 +64,7 @@ object Audio {
     private val burst get() = DeviceAudio.burst
 
     init {
-        transport.engines = engines
+        transport.engines = active.toList()
         leaves.reflectionsSample = { reflections.sample }
     }
 
@@ -65,23 +81,54 @@ object Audio {
         }
     }
 
+    private val chL = Array(3) { FloatArray(BLOCK) }; private val chR = Array(3) { FloatArray(BLOCK) }
+    private val audioBus = Array(3) { FloatArray(BLOCK) }
+    /** Level of each audio channel (the biplanes). */
+    val channelLevel = floatArrayOf(0.9f, 0.9f, 0.9f)
+
     private fun block(n: Int) {
         while (true) (queue.poll() ?: break).run()
         transport.process(n)
         mixL.fill(0f); mixR.fill(0f); revL.fill(0f); revR.fill(0f)
-        for (k in engines.indices) {
-            val e = engines[k]
+        for (k in 0 until 3) { chL[k].fill(0f, 0, n); chR[k].fill(0f, 0, n) }
+        val rack = flowers
+        val chains = rack.chains
+        val routes = rack.blockRoute
+        val act = active
+        for (k in act.indices) {
+            val e = act[k]
+            e.seq?.advance(n)
             eL.fill(0f, 0, n); eR.fill(0f, 0, n)
             e.render(eL, eR, n)
             val v = e.volume.value; val s = e.reverb.value * v
+            // Blocks tied to a daisy chain go through that chain's flower.
+            val c = routes[e.id] ?: -1
+            val dl = if (c >= 0 && chains[c] != null) chL[c] else mixL
+            val dr = if (c >= 0 && chains[c] != null) chR[c] else mixR
             for (i in 0 until n) {
-                mixL[i] += eL[i] * v; mixR[i] += eR[i] * v
+                dl[i] += eL[i] * v; dr[i] += eR[i] * v
                 revL[i] += eL[i] * s; revR[i] += eR[i] * s
             }
         }
+        // Audio channels (mono takes).
+        for (ch in 0 until 3) audioBus[ch].fill(0f, 0, n)
+        transport.renderAudio(audioBus, n, transport.blockStartTick)
+        for (ch in 0 until 3) {
+            val c = rack.channelRoute[ch]
+            val dl = if (c >= 0 && chains[c] != null) chL[c] else mixL
+            val dr = if (c >= 0 && chains[c] != null) chR[c] else mixR
+            val g = channelLevel[ch]; val b = audioBus[ch]
+            for (i in 0 until n) { dl[i] += b[i] * g; dr[i] += b[i] * g }
+        }
+        for (k in 0 until 3) if (chains[k] != null) {
+            rack.processChain(k, chL[k], chR[k], n)
+            val l = chL[k]; val r = chR[k]
+            for (i in 0 until n) { mixL[i] += l[i]; mixR[i] += r[i] }
+        }
         reverbFx.process(revL, revR, mixL, mixR, n)
-        flowers.process(mixL, mixR, n)
+        rack.processAudition(mixL, mixR, n)
         transport.renderClick(mixL, mixR, n)
+        if (testTone) for (i in 0 until n) { val v = kotlin.math.sin(TAU * tonePh) * 0.12f; tonePh = (tonePh + 440f / SRF) % 1f; mixL[i] += v; mixR[i] += v }
         limiter.process(mixL, mixR, n, masterVolume)
         var pk = peak * 0.97f
         for (i in 0 until n) pk = max(pk, abs(mixL[i]))
@@ -90,6 +137,18 @@ object Audio {
     }
 
     // ---------------------------------------------------------------- device output
+
+    /** Dropouts counted by the device since the stream opened. */
+    @Volatile var xruns = 0
+    /** True while the audio test is stepping through buffer sizes. */
+    @Volatile var testing = false
+    /** A quiet test tone for the audio test. */
+    @Volatile var testTone = false
+    private var tonePh = 0f
+    val isNative get() = native
+
+    /** Restart the output (after changing device or buffer settings). */
+    fun restart() { stop(); start() }
 
     /** Which output is running, for display. */
     @Volatile var outputName = "—"
@@ -104,7 +163,7 @@ object Audio {
     fun start() = synchronized(lock) {
         if (running) return@synchronized
         running = true
-        native = NativeAudio.available && runCatching { NativeAudio.nOpen(SR) }.getOrDefault(-1).let { rate ->
+        native = NativeAudio.available && runCatching { NativeAudio.nOpen(SR, AudioPrefs.outputDevice, AudioPrefs.bufferFrames) }.getOrDefault(-1).let { rate ->
             if (rate == SR) true else { if (rate > 0) NativeAudio.nClose(); false }
         }
         if (native) {
@@ -138,17 +197,21 @@ object Audio {
             runCatching {
                 if (NativeAudio.nDisconnected()) {
                     NativeAudio.nClose()
-                    if (NativeAudio.nOpen(SR) != SR) { NativeAudio.nClose(); return@runCatching }
+                    if (NativeAudio.nOpen(SR, AudioPrefs.outputDevice, AudioPrefs.bufferFrames) != SR) { NativeAudio.nClose(); return@runCatching }
                     lastXRuns = 0
                 }
                 val burst = NativeAudio.nBurst().coerceAtLeast(16)
                 val xr = NativeAudio.nXRuns()
                 val size = NativeAudio.nBufferSize()
-                if (xr > lastXRuns) {
-                    lastXRuns = xr; quiet = 0
-                    if (size < burst * 8) NativeAudio.nSetBufferSize(size + burst)
-                } else if (++quiet > 80 && size > burst * 2) {
-                    quiet = 0; NativeAudio.nSetBufferSize(size - burst)
+                xruns = xr
+                // Only the "Automatic" buffer setting adapts; a chosen size is kept.
+                if (AudioPrefs.bufferFrames == 0 && !testing) {
+                    if (xr > lastXRuns) {
+                        lastXRuns = xr; quiet = 0
+                        if (size < burst * 8) NativeAudio.nSetBufferSize(size + burst)
+                    } else if (++quiet > 80 && size > burst * 2) {
+                        quiet = 0; NativeAudio.nSetBufferSize(size - burst)
+                    }
                 }
                 latencyMs = NativeAudio.nBufferSize() * 1000f / SR
             }
@@ -200,7 +263,8 @@ object DeviceAudio {
 
     fun configure(c: android.content.Context) {
         val am = c.getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
-        am.getProperty(android.media.AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)?.toIntOrNull()?.let { if (it in 22050..96000) setSampleRate(it) }
+        AudioPrefs.init(c)
+        setSampleRate(AudioPrefs.sampleRate)
         am.getProperty(android.media.AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER)?.toIntOrNull()?.let { if (it in 16..2048) burst = it }
     }
 }

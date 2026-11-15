@@ -36,6 +36,7 @@ class Gusts : Engine("gusts", "Gusts") {
     private val lfoCut = p.num("lfoCut", "LFO > Cutoff", 0f, 1f, 0.1f, Fmt.PCT)
     private val glide = p.num("glide", "Glide", 0f, 1f, 0f, Fmt.SEC)
     private val expr = expressionParams()
+    override val seq = app.foxbox.seq.NoteSeq(this, p)
 
     init { finishParams("cutoff", "vibrato", 0.75f, 0.2f) }
 

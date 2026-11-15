@@ -18,12 +18,29 @@ class XyState(private val params: Params, defaultX: String, defaultY: String) {
 
     val xTarget: Param
     val yTarget: Param
+    /** Stay where left (on) or spring back to the home position (off). */
+    val stay: Param
+    val homeX: Param
+    val homeY: Param
 
     init {
         params.section("XY Pad")
         xTarget = params.choice("xyX", "X Axis", targets.map { it.name }, idx(defaultX))
         yTarget = params.choice("xyY", "Y Axis", targets.map { it.name }, idx(defaultY))
+        stay = params.toggle("xyStay", "Stay Where Left", true)
+        homeX = params.num("xyHomeX", "Home X", 0f, 1f, 0.5f)
+        homeY = params.num("xyHomeY", "Home Y", 0f, 1f, 0.5f)
     }
+
+    /** Finger lifted: keep the values (stay) or glide back home. */
+    fun release() {
+        if (stay.on) { xParam.norm = x; yParam.norm = y }
+        else { x = homeX.value; y = homeY.value; xParam.norm = x; yParam.norm = y }
+        touching = false
+    }
+
+    /** In stay mode, make the current position the home position. */
+    fun setHome() { homeX.set(x); homeY.set(y) }
 
     val xParam get() = targets[xTarget.index.coerceIn(0, targets.size - 1)]
     val yParam get() = targets[yTarget.index.coerceIn(0, targets.size - 1)]

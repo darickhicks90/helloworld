@@ -134,7 +134,7 @@ abstract class SampleEngine(id: String, title: String, attack: Float, release: F
         activeVoices = count
     }
 
-    override fun saveExtra(o: JSONObject) { o.put("sampleName", sampleName) }
+    override fun saveExtra(o: JSONObject) { super.saveExtra(o); o.put("sampleName", sampleName) }
 }
 
 /**
@@ -148,6 +148,7 @@ class Reflections : SampleEngine("reflections", "Reflections", 0.003f, 0.4f) {
     private val speed = p.num("speed", "Stretch Speed", 0.25f, 2f, 1f, Fmt.X, exp = true)
     private val grainSize = p.num("grain", "Stretch Grain", 0.03f, 0.2f, 0.08f, Fmt.SEC, exp = true)
     private val bendVib = expressionParams()
+    override val seq = app.foxbox.seq.NoteSeq(this, p)
     init { finishParams("bend", "cutoff", 0.8f, 0.25f) }
 
     protected inner class V : SVoice() {
@@ -235,6 +236,7 @@ class Leaves : SampleEngine("leaves", "Leaves", 0.25f, 1.4f) {
     private val octave = p.num("octave", "Octave Chance", 0f, 1f, 0f, Fmt.PCT)
     private val width = p.num("width", "Stereo Width", 0f, 1f, 0.6f, Fmt.PCT)
     private val bendVib = expressionParams()
+    override val seq = app.foxbox.seq.NoteSeq(this, p, defaultOctave = -1)
     init { finishParams("position", "density", 0.75f, 0.4f) }
 
     /** Grain events for the tree animation: a = position (0..1), b = pitch in semitones. */

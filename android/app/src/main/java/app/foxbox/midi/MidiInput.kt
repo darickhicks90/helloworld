@@ -41,6 +41,8 @@ class MidiInput(private val activity: Activity, private val sink: Sink) {
         fun cc(dev: Dev, ch: Int, cc: Int, v: Float)
         fun devicesChanged()
         fun message(text: String)
+        /** MIDI realtime Start (0xFA), Continue (0xFB) and Stop (0xFC). */
+        fun realtime(status: Int) {}
     }
 
     class Dev(val id: Int, val name: String, val bluetooth: Boolean) {
@@ -112,7 +114,7 @@ class MidiInput(private val activity: Activity, private val sink: Sink) {
     private fun parse(d: Dev, msg: ByteArray, off: Int, count: Int) {
         for (i in off until off + count) {
             val b = msg[i].toInt() and 0xFF
-            if (b >= 0xF8) continue
+            if (b >= 0xF8) { if (b == 0xFA || b == 0xFB || b == 0xFC) sink.realtime(b); continue }
             if (d.sysex) { if (b == 0xF7) d.sysex = false; continue }
             if (b and 0x80 != 0) {
                 if (b == 0xF0) { d.sysex = true; continue }

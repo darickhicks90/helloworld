@@ -17,8 +17,8 @@ android {
         applicationId = "app.foxbox"
         minSdk = 29
         targetSdk = 36
-        versionCode = 7
-        versionName = "1.1.0"
+        versionCode = 8
+        versionName = "1.1.1"
         externalNativeBuild { cmake { arguments += listOf("-DANDROID_STL=none") } }
     }
 

@@ -96,7 +96,7 @@ class StudioScreen(c: Context, private val host: Host) : FrameLayout(c) {
         val fl = Btn(context, "", Pal.accent(Studio.FLOWERS)).apply { icon = Sprites.icon(Studio.FLOWERS); onClick = { select(Studio.FLOWERS) } }
         tabBtns[Studio.FLOWERS] = fl
         rail.addView(fl, lp(Px.dp(56), 0, 1f))
-        rail.addView(Btn(context, "", Pal.GREEN).apply { icon = Iso.iconValley; onClick = { host.showValley() } }, lp(Px.dp(56), 0, 1.2f))
+        rail.addView(Btn(context, "", Pal.GREEN).apply { icon = Sprites.fox; onClick = { host.showValley() } }, lp(Px.dp(56), 0, 1.2f))
         // Pages of removed blocks are dropped.
         pages.keys.filter { it != Studio.FLOWERS && it !in Studio.project.blocks }.forEach { content.removeView(pages.remove(it)) }
         if (Studio.page !in Studio.pages) select(Studio.pages.first())

@@ -24,9 +24,9 @@ class ChordPanel(c: Context) : LinearLayout(c) {
         val oct = Stepper(c, "Octave", 70, { (Studio.project.octave + 3).toString() }) { Studio.setKey(octave = Studio.project.octave + it) }
         val scale = Stepper(c, "Scale", 100, { Studio.scale.name }) { Studio.setKey(scale = Studio.project.scale + it) }
         val sev = Btn(c, "7th", Pal.AQUA).apply { onClick = { Studio.setKey(seventh = !Studio.project.seventh) } }
-        addView(row(c, key, oct).apply { key.layoutParams = lp(0, Px.dp(40), 1f); oct.layoutParams = lp(0, Px.dp(40), 1f) }, lp(MATCH, WRAP))
-        addView(row(c, scale, sev).apply { scale.layoutParams = lp(0, Px.dp(40), 1f) }, lp(MATCH, WRAP))
-        addView(chords, lp(MATCH, 0, 1f))
+        addView(row(c, key, oct).apply { key.layoutParams = lp(0, Px.dp(38), 1f); oct.layoutParams = lp(0, Px.dp(38), 1f) }, lp(MATCH, WRAP))
+        addView(row(c, scale, sev).apply { scale.layoutParams = lp(0, Px.dp(38), 1f) }, lp(MATCH, WRAP))
+        addView(chords, lp(MATCH, 0, 1f).apply { topMargin = Px.dp(4) })
         onStudio { sev.on = Studio.project.seventh; key.invalidate(); oct.invalidate(); scale.invalidate(); chords.invalidate() }
     }
 }
@@ -39,22 +39,23 @@ class ChordButtons(c: Context) : PixelView(c) {
     var accent = Pal.ORANGE
     /** Most recently pressed chord degree still held, or null. */
     val held: Int? get() = pressed.values.lastOrNull()
-    private val roman = Px.text(9f, headFont = true, align = Paint.Align.LEFT)
-    private val name = Px.text(15f, align = Paint.Align.RIGHT)
+    private val roman = Px.text(10f, headFont = true, align = Paint.Align.LEFT)
+    private val name = Px.text(18f, align = Paint.Align.RIGHT)
 
     private val count get() = Studio.scale.steps.size
     private fun keyBase(d: Int) = 0x10000000 + d * 8
 
     override fun paint(c: Canvas) {
         val rh = height.toFloat() / count
+        val gap = Px.dp(3f)
         for (d in 0 until count) {
             val ch = Studio.chord(d)
             val on = d in pressed.values
             val t = d * rh
-            c.pixelBox(u, t + u, width - u, t + rh - u, if (on) accent else if (d % 2 == 0) Pal.CREAM else Pal.PAPER)
+            c.pixelBox(u, t + gap, width - u, t + rh - gap, if (on) accent else if (d % 2 == 0) Pal.CREAM else Pal.PAPER)
             roman.color = if (on) Pal.CREAM else Pal.BROWN; name.color = if (on) Pal.CREAM else Pal.BROWN_D
-            c.drawText(ch.roman, Px.dp(10f), t + rh / 2 + Px.dp(4f), roman)
-            c.drawText(ch.name, width - Px.dp(10f), t + rh / 2 + Px.dp(5f), name)
+            c.drawText(ch.roman, Px.dp(12f), t + rh / 2 + Px.dp(4f), roman)
+            c.drawText(ch.name, width - Px.dp(12f), t + rh / 2 + Px.dp(6f), name)
         }
     }
 

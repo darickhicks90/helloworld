@@ -17,21 +17,16 @@ def m(points):
     """Mirror a left-half polygon across x = 54."""
     return [(108 - x, y) for x, y in points]
 
-HEAD = [(31, 27), (44, 40), (54, 41), (64, 40), (77, 27), (81, 57), (54, 83), (27, 57)]
-LEFT_FACET = [(31, 27), (44, 40), (54, 41), (54, 63), (27, 57)]
-INNER_EAR = [(34, 33), (42, 41), (36, 47)]
-MASK = [(27, 57), (45, 60), (54, 71), (63, 60), (81, 57), (54, 83)]
-BROW = [(54, 41), (49, 52), (54, 60), (59, 52)]
-EYE = [(39, 52), (48, 55.5), (45, 57.5)]
-NOSE = [(50, 74.5), (58, 74.5), (54, 79)]
+# A flat, symmetrical mark: three shapes and a nose, no shading or eyes.
+HEAD = [(28, 25), (45, 39), (63, 39), (80, 25), (83, 56), (54, 85), (25, 56)]
+INNER_EAR = [(33, 33), (42, 41), (35, 47)]
+MASK = [(25, 56), (44, 58), (54, 70), (64, 58), (83, 56), (54, 85)]
+NOSE = [(49.5, 75), (58.5, 75), (54, 80.5)]
 
 SHAPES = [
     (HEAD, ORANGE),
-    (LEFT_FACET, ORANGE_DARK),
     (INNER_EAR, CREAM), (m(INNER_EAR), CREAM),
-    (BROW, ORANGE_LIGHT),
     (MASK, CREAM),
-    (EYE, INK), (m(EYE), INK),
     (NOSE, INK),
 ]
 
@@ -60,8 +55,6 @@ def vector_background(path):
            '<vector xmlns:android="http://schemas.android.com/apk/res/android"',
            '    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">',
            f'    <path android:fillColor="{AQUA}" android:pathData="M0,0h108v108h-108z" />',
-           f'    <path android:fillColor="{AQUA_DARK}" android:fillAlpha="0.35" android:pathData="M54,18a36,36 0,1 1,0 72a36,36 0,1 1,0 -72z" />',
-           f'    <path android:fillColor="{AQUA}" android:pathData="M54,21a33,33 0,1 1,0 66a33,33 0,1 1,0 -66z" />',
            '</vector>']
     open(path, 'w').write('\n'.join(out) + '\n')
 
@@ -87,8 +80,6 @@ if __name__ == '__main__':
     def icon(img, k):
         d = ImageDraw.Draw(img)
         s = 512 * k / 108
-        d.ellipse([18 * s, 18 * s, 90 * s, 90 * s], fill='#3A9C95')
-        d.ellipse([21 * s, 21 * s, 87 * s, 87 * s], fill=AQUA)
         draw_fox(img, s, 0, 0)
     supersampled(512, 512, icon).save(os.path.join(here, 'icon-512.png'))
 

@@ -43,19 +43,19 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
     private val homes = mapOf(
         "gusts" to listOf(0.18f to 0.385f, 0.38f to 0.37f, 0.60f to 0.39f),
         "bumble" to listOf(0.05f to 0.56f, 0.12f to 0.58f, 0.19f to 0.555f),
-        "reflections" to listOf(0.08f to 0.80f, 0.17f to 0.90f, 0.21f to 0.74f),
-        "minds" to listOf(0.33f to 0.69f, 0.41f to 0.73f, 0.34f to 0.84f),
-        "pickup" to listOf(0.53f to 0.69f, 0.64f to 0.72f, 0.75f to 0.69f),
-        "leaves" to listOf(0.72f to 0.555f, 0.82f to 0.575f, 0.92f to 0.545f),
-        "flowers" to listOf(0.45f to 0.85f, 0.52f to 0.82f, 0.59f to 0.86f, 0.66f to 0.83f, 0.73f to 0.87f),
+        "reflections" to listOf(0.07f to 0.82f, 0.16f to 0.89f, 0.19f to 0.78f),
+        "minds" to listOf(0.24f to 0.62f, 0.33f to 0.64f, 0.31f to 0.75f),
+        "pickup" to listOf(0.70f to 0.68f, 0.81f to 0.71f, 0.74f to 0.84f),
+        "leaves" to listOf(0.80f to 0.55f, 0.88f to 0.57f, 0.96f to 0.545f),
+        "flowers" to listOf(0.34f to 0.90f, 0.41f to 0.93f, 0.59f to 0.93f, 0.66f to 0.91f, 0.74f to 0.95f),
     )
     private val lanes = floatArrayOf(0.12f, 0.20f, 0.28f)
     private val trailX0 = 0.23f
     private val planeX = 0.90f
-    private val roofAt = 0.32f to 0.535f
-    private val wallAt = 0.40f to 0.54f
-    private val towerAt = 0.48f to 0.535f
-    private val cabinAt = 0.88f to 0.94f
+    /** The village (the transport) sits in the middle; this is its front gate. */
+    private val villageAt = 0.5f to 0.79f
+    private val cabinAt = 0.89f to 0.95f
+    private val signP = Px.text(9f, Pal.BROWN_D)
 
     /** Hit areas, rebuilt every frame: id → (cx, cy, radius). */
     private class Hit(val id: String, val kind: Int, val x: Float, val y: Float, val r: Float, val extra: Int = 0)
@@ -96,12 +96,12 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
                 }
             }
             val t = Audio.transport
-            items += roofAt.second * h to { c.villageRoof(roofAt.first * w, roofAt.second * h, g, t.playing, Studio.sceneQueued, time); hits += Hit("roof", K_ROOF, roofAt.first * w, roofAt.second * h - 6 * g, 11 * g) }
-            items += wallAt.second * h to { c.villageWall(wallAt.first * w, wallAt.second * h, g, false); hits += Hit("wall", K_WALL, wallAt.first * w, wallAt.second * h - 3 * g, 10 * g) }
-            items += towerAt.second * h to {
-                c.waterTower(towerAt.first * w, towerAt.second * h, g, Studio.armed.any { it }, t.audioRec == Transport.Rec.RECORDING, time)
-                hits += Hit("tower", K_TOWER, towerAt.first * w - 2 * g, towerAt.second * h - 14 * g, 12 * g)
-                if (t.audioRec == Transport.Rec.ARMED) { hud.color = Pal.CREAM; c.textCentered("${t.beat + 1}", towerAt.first * w - 2 * g, towerAt.second * h - 32 * g, hud) }
+            val vx = villageAt.first * w; val vy = villageAt.second * h; val gv = g * 0.8f
+            items += vy - 30 * gv to {
+                c.village(vx, vy, gv, t.playing, Studio.sceneQueued, Studio.armed.any { it }, t.audioRec == Transport.Rec.RECORDING, time, signP)
+                for ((id, kind, spot) in listOf(Triple("roof", K_ROOF, Iso.VILLAGE_PLAY), Triple("wall", K_WALL, Iso.VILLAGE_STOP), Triple("tower", K_TOWER, Iso.VILLAGE_REC)))
+                    hits += Hit(id, kind, vx + spot[0] * gv, vy + spot[1] * gv, spot[2] * gv)
+                if (t.audioRec == Transport.Rec.ARMED) { hud.color = Pal.CREAM; c.textCentered("count-in ${t.beat + 1}", vx + Iso.VILLAGE_REC[0] * gv, vy - 40 * gv, hud) }
             }
             items += cabinAt.second * h to { c.cabin(cabinAt.first * w, cabinAt.second * h, g, time, true); hits += Hit("cabin", K_CABIN, cabinAt.first * w, cabinAt.second * h - 10 * g, 16 * g) }
             Studio.valleyFlowers.forEachIndexed { i, f ->
@@ -158,42 +158,23 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
         return list.take(spots.size).mapIndexed { i, clip -> clip to spots[i] }
     }
 
+    private var land: android.graphics.Bitmap? = null
+
+    /** The SNES-style backdrop is painted once per size, then only the water sparkles move. */
     private fun drawLand(c: Canvas, w: Float, h: Float, t: Float) {
-        // A late-afternoon sky in muted, grown-up tones.
-        c.bands(0f, 0f, w, h * 0.46f, intArrayOf(0xFF2F5D6B.toInt(), 0xFF3E7480.toInt(), 0xFF5C8F8E.toInt(), 0xFF8DAE9C.toInt(), 0xFFC8C29A.toInt(), 0xFFE7C58E.toInt(), 0xFFF0B97E.toInt()))
+        var bmp = land
+        if (bmp == null || bmp.width != width || bmp.height != height) {
+            bmp = android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.ARGB_8888)
+            ValleyLand.paint(Canvas(bmp), w, h, g())
+            land = bmp
+        }
+        c.drawBitmap(bmp, 0f, 0f, null)
         val u = Px.u
-        // far ridges with 2:1 slopes
-        fun ridge(base: Float, amp: Float, step: Int, col: Int, seed: Int) {
-            var x = 0f
-            while (x < w) {
-                val k = ((x / u).toInt() + seed)
-                val y = base - amp * (0.5f + 0.5f * sin(k * 0.035f) * sin(k * 0.011f + seed))
-                c.fill(x, (y / u).toInt() * u, x + u * step, h * 0.6f, col); x += u * step
-            }
-        }
-        ridge(h * 0.44f, h * 0.10f, 1, 0xFF6F8C7A.toInt(), 3)
-        ridge(h * 0.47f, h * 0.06f, 1, 0xFF5E7E5C.toInt(), 17)
-        // meadow
-        c.bands(0f, h * 0.46f, w, h, intArrayOf(0xFF7E9A55.toInt(), 0xFF6F8E4C.toInt(), 0xFF638345.toInt(), 0xFF57773F.toInt(), 0xFF4C6A39.toInt()))
-        val rnd = Random(7)
-        repeat(160) {
-            val x = rnd.nextFloat() * w; val y = h * (0.5f + rnd.nextFloat() * 0.5f)
-            c.fill((x / u).toInt() * u, (y / u).toInt() * u, (x / u).toInt() * u + u, (y / u).toInt() * u + u * (1 + rnd.nextInt(2)), if (rnd.nextBoolean()) 0xFF8DAA60.toInt() else 0xFF465F33.toInt())
-        }
-        // a dirt road up to the village
-        val g = g()
-        var yy = h * 0.55f
-        while (yy < h * 0.66f) { val k = (yy - h * 0.55f) / (h * 0.11f); val cx = w * (0.40f + k * 0.06f); c.fill(Iso.snap(cx - (3 + k * 8) * g, g), Iso.snap(yy, g), Iso.snap(cx + (3 + k * 8) * g, g), Iso.snap(yy, g) + g, 0xFFA48A62.toInt()); yy += g }
-        // pond (an iso ellipse) with a shimmer
-        with(Iso) {
-            c.disc(w * 0.13f, h * 0.84f, w * 0.13f / g, g, 0xFF3C5E4A.toInt(), 0.5f)
-            c.disc(w * 0.13f, h * 0.84f, w * 0.13f / g - 1.5f, g, 0xFF3F7F86.toInt(), 0.5f)
-            c.disc(w * 0.12f, h * 0.83f, w * 0.10f / g, g, 0xFF4F939A.toInt(), 0.45f)
-        }
-        for (k in 0 until 10) {
-            val sx = ((k * 53 + t * 9 * (1 + k % 3)) % (w * 0.2f)) + w * 0.03f
-            val sy = h * (0.79f + (k * 7 % 10) * 0.012f)
-            c.fill((sx / u).toInt() * u, (sy / u).toInt() * u, (sx / u).toInt() * u + u * (2 + k % 3), (sy / u).toInt() * u + u, 0x88E6F2EE.toInt())
+        for (k in 0 until 12) {
+            val ph = (t * 0.7f + k * 0.37f) % 1f
+            if (ph > 0.6f) continue
+            val sx = w * (0.03f + ((k * 0.137f) % 0.2f)); val sy = h * (0.79f + (k * 7 % 11) * 0.011f)
+            c.fill((sx / u).toInt() * u, (sy / u).toInt() * u, (sx / u).toInt() * u + u * (1 + (k % 3)), (sy / u).toInt() * u + u, Pal.alpha(0xFFFFFFFF.toInt(), 0.75f - ph))
         }
     }
 
@@ -337,7 +318,6 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
         val m = Px.dp(10f)
         c.pixelBox(m, m, m + Px.dp(104f), m + Px.dp(40f), Pal.CREAM)
         hud.color = Pal.BROWN_D; c.textCentered("◀ Studio", m + Px.dp(52f), m + Px.dp(20f), hud)
-        c.drawText("VALLEY", m + Px.dp(4f), m + Px.dp(62f), title.apply { textAlign = android.graphics.Paint.Align.LEFT })
         val t = Audio.transport
         val p = poem
         if (p != null && System.currentTimeMillis() - poemAt < 20_000) {
@@ -365,12 +345,12 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
 
     private val fox = Fox()
     private inner class Fox {
-        var x = 0.55f; var y = 0.62f
-        var tx = 0.55f; var ty = 0.62f
+        var x = 0.36f; var y = 0.60f
+        var tx = 0.36f; var ty = 0.60f
         var state = 0 // 0 walk, 1 sit, 2 scratch, 3 stare
         var until = 0f
         var flip = false
-        private val spots = listOf(0.46f to 0.62f, 0.58f to 0.61f, 0.47f to 0.77f, 0.60f to 0.78f, 0.28f to 0.64f, 0.70f to 0.78f, 0.39f to 0.93f, 0.81f to 0.77f, 0.25f to 0.60f)
+        private val spots = listOf(0.36f to 0.60f, 0.64f to 0.60f, 0.38f to 0.82f, 0.62f to 0.84f, 0.24f to 0.62f, 0.75f to 0.62f, 0.47f to 0.95f, 0.55f to 0.95f, 0.63f to 0.74f)
         fun draw(c: Canvas, w: Float, h: Float, t: Float) {
             val g = Px.u * 0.75f
             if (t > until) {
@@ -524,5 +504,96 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
         const val K_ROOF = 4; const val K_WALL = 5; const val K_TOWER = 6; const val K_CABIN = 7; const val K_PLUS = 8
         /** Daisy-chain tracer colours: red, yellow, blue. */
         val CHAIN = intArrayOf(0xFFE0533F.toInt(), 0xFFF0C23B.toInt(), 0xFF4A86D8.toInt())
+    }
+}
+
+/** The Valley's painted backdrop: sky, mountains, hills, tiled meadow, road and pond. */
+object ValleyLand {
+    fun paint(c: Canvas, w: Float, h: Float, g: Float) {
+        val u = Px.u
+        // sky: bold SNES gradient with dithered seams between bands
+        val sky = intArrayOf(0xFF233A7A.toInt(), 0xFF2F55A0.toInt(), 0xFF4277BE.toInt(), 0xFF6A9DD2.toInt(), 0xFFA7C7DC.toInt(), 0xFFE9D7B0.toInt(), 0xFFF6BE86.toInt())
+        dithered(c, 0f, 0f, w, h * 0.48f, sky)
+        // a low sun behind the mountains
+        with(Iso) {
+            c.disc(w * 0.83f, h * 0.43f, 13f, u, 0x55FFE7A8, 1f)
+            c.disc(w * 0.83f, h * 0.43f, 9f, u, 0xFFFFE7A8.toInt(), 1f)
+            c.disc(w * 0.83f, h * 0.43f, 7f, u, 0xFFFFF6DA.toInt(), 1f)
+        }
+        // far mountains with snow caps and lit left faces
+        val peaks = floatArrayOf(0.04f, 0.30f, 0.15f, 0.20f, 0.27f, 0.34f, 0.40f, 0.24f, 0.55f, 0.31f, 0.68f, 0.22f, 0.80f, 0.29f, 0.93f, 0.25f)
+        var i = 0
+        while (i < peaks.size) {
+            val px = peaks[i] * w; val top = h * peaks[i + 1]; val base = h * 0.50f; val half = (base - top) * 1.5f
+            with(Iso) {
+                c.poly(0xFF5D5F9C.toInt(), px - half, base, px, top, px + half, base)
+                c.poly(0xFF4A4C84.toInt(), px, top, px + half, base, px + half * 0.2f, base)
+                val sn = (base - top) * 0.22f
+                c.poly(0xFFE9EEF8.toInt(), px - sn * 1.5f, top + sn, px, top, px + sn * 1.5f, top + sn, px + sn * 0.4f, top + sn * 0.7f, px - sn * 0.3f, top + sn * 1.1f)
+            }
+            i += 2
+        }
+        // rolling hills with a tree line
+        var x = 0f
+        while (x < w) {
+            val k = x / w
+            val y = h * (0.47f - 0.035f * sin(k * 9f) - 0.02f * sin(k * 23f + 1f))
+            c.fill(x, (y / u).toInt() * u, x + u, h, 0xFF4F8A4A.toInt())
+            c.fill(x, (y / u).toInt() * u, x + u, (y / u).toInt() * u + u, 0xFF7DB860.toInt())
+            x += u
+        }
+        val rnd = Random(3)
+        repeat(60) {
+            val tx = rnd.nextFloat() * w; val ty = h * (0.47f - 0.035f * sin(tx / w * 9f) - 0.02f * sin(tx / w * 23f + 1f))
+            with(Iso) { c.disc(tx, ty, 2.5f + rnd.nextFloat() * 1.5f, u, 0xFF2F6236.toInt()); c.disc(tx - u, ty - u, 1.2f, u, 0xFF3F7A3A.toInt()) }
+        }
+        // meadow: tiled grass, the way a SNES map is built from tiles
+        dithered(c, 0f, h * 0.52f, w, h, intArrayOf(0xFF6DAA4A.toInt(), 0xFF64A045.toInt(), 0xFF5C9641.toInt(), 0xFF548C3C.toInt()))
+        val tile = u * 8
+        var ty = h * 0.52f
+        var row = 0
+        while (ty < h) {
+            var tx = (row % 2) * tile / 2
+            while (tx < w) {
+                val bx = (tx / u).toInt() * u; val by = (ty / u).toInt() * u
+                c.fill(bx + u * 2, by + u * 3, bx + u * 3, by + u * 5, 0xFF447A34.toInt()); c.fill(bx + u, by + u * 4, bx + u * 2, by + u * 5, 0xFF447A34.toInt()); c.fill(bx + u * 3, by + u * 4, bx + u * 4, by + u * 5, 0xFF447A34.toInt())
+                c.fill(bx + u * 6, by + u, bx + u * 7, by + u * 2, 0xFF8CC860.toInt())
+                tx += tile
+            }
+            ty += tile; row++
+        }
+        // the road from the village gate down to the bottom edge
+        var yy = h * 0.79f
+        while (yy < h) {
+            val cx = w * 0.5f
+            c.fill(Iso.snap(cx - 7 * g, g), Iso.snap(yy, g), Iso.snap(cx + 7 * g, g), Iso.snap(yy, g) + g, 0xFFC9A46A.toInt())
+            c.fill(Iso.snap(cx - 8 * g, g), Iso.snap(yy, g), Iso.snap(cx - 7 * g, g), Iso.snap(yy, g) + g, 0xFF8E6C40.toInt())
+            c.fill(Iso.snap(cx + 7 * g, g), Iso.snap(yy, g), Iso.snap(cx + 8 * g, g), Iso.snap(yy, g) + g, 0xFF8E6C40.toInt())
+            if (((yy / g).toInt() * 7) % 5 == 0) c.fill(Iso.snap(cx + ((yy / g).toInt() % 9 - 4) * g, g), Iso.snap(yy, g), Iso.snap(cx + ((yy / g).toInt() % 9 - 4) * g, g) + g, Iso.snap(yy, g) + g, 0xFFA8834F.toInt())
+            yy += g
+        }
+        // pond: sandy shore, light rim, deep middle
+        with(Iso) {
+            c.disc(w * 0.13f, h * 0.85f, w * 0.135f / u, u, 0xFFD8C38E.toInt(), 0.5f)
+            c.disc(w * 0.13f, h * 0.85f, w * 0.125f / u, u, 0xFF6FB7CF.toInt(), 0.5f)
+            c.disc(w * 0.13f, h * 0.855f, w * 0.115f / u, u, 0xFF3F8FB0.toInt(), 0.48f)
+            c.disc(w * 0.12f, h * 0.86f, w * 0.07f / u, u, 0xFF2F6F94.toInt(), 0.45f)
+        }
+    }
+
+    /** Vertical bands with a checkerboard row where two colours meet (classic 16-bit dithering). */
+    fun dithered(c: Canvas, l: Float, t: Float, r: Float, b: Float, colors: IntArray) {
+        val u = Px.u
+        val n = colors.size
+        for (i in 0 until n) {
+            val y0 = ((t + (b - t) * i / n) / u).toInt() * u
+            val y1 = ((t + (b - t) * (i + 1) / n) / u).toInt() * u + u
+            c.fill(l, y0, r, minOf(b, y1), colors[i])
+            if (i + 1 < n) for (row in 0..1) {
+                var x = l + ((row) % 2) * u
+                val yr = y1 - u * (2 - row)
+                while (x < r) { c.fill(x, yr, x + u, yr + u, colors[i + 1]); x += u * 2 }
+            }
+        }
     }
 }

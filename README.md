@@ -72,12 +72,16 @@ Valley.
      | Pickup | pickup trucks |
      | Leaves | trees |
 
-     The art is isometric, with no faces.
+     The art is in a Super Nintendo RPG style, with no faces on the
+     sprites.
    - **Tap** a sprite to queue it and select it. A **fader** appears: drag
      it for volume (the sprite fades with it). **Double-tap** to mute.
-   - **The village is the transport:** the **roof** plays the queued scene
-     (it starts when the current loop comes round), the **wall** stops,
-     and the **water tower** counts in two bars and records audio.
+   - **The walled village in the middle is the transport.** Each part has
+     a painted sign:
+     - **▶ PLAY**, the green-roofed house, plays the queued scene. It starts
+       when the current loop comes round.
+     - **■ STOP**, the stone wall, stops.
+     - **● REC**, the water tower, counts in two bars and records audio.
    - **Daisy chains:** drag a line from a planted flower through any clips.
      Every clip it touches goes through that flower's effects. Up to 3
      chains, traced in red, yellow and blue. Double-tap a flower to undo
@@ -125,7 +129,8 @@ Every block has an **amp envelope** and a **filter with its own envelope**.
 - per-pad tune, level, decay, start, pan and reverse
 - a vintage sample rate and bit depth (SP-1200/MPC grit), saturation and
   swing
-- a 16-step pattern per pad
+- a 16-step pattern per pad, plus a **Sequencer ON/OFF** switch for the
+  whole instrument (off by default)
 - its XY pad is a 1990s truck dashboard with the ignition key as the
   cursor
 

@@ -338,7 +338,19 @@ class XyPad(c: Context, private val themeId: String, private val pickAxis: (XySt
         }
         private val small = Px.text(8f, 0xFF2A221E.toInt(), headFont = true)
         override fun marker(c: Canvas, x: Float, y: Float, t: Float) = c.spriteCentered(key, x, y, Px.u * 1.4f)
-        private val key = Sprite(listOf(".yyy.......", "yy.yy......", "y...yyyyyyy", "yy.yy..y.y.", ".yyy.......", "..r........"), mapOf('y' to 0xFFE9C46A.toInt(), 'r' to 0xFFD8473A.toInt()))
+        /** A car key: black rubber head with lock/unlock buttons and a ring hole, and a cut steel blade. */
+        private val key = Sprite(listOf(
+            "..kkkkkk...........",
+            ".kKKKKKKk..........",
+            "kKKoKKrKKk.........",
+            "kKKKKKKKKsssssssss.",
+            "kKKbKKbKKsSSSSSSSSs",
+            "kKKKKKKKKsSsSSsSsS.",
+            "kKKcKKKKKsss.s..s..",
+            ".kKKKKKKk..........",
+            "..kkkkkk...........",
+        ), mapOf('k' to 0xFF141414.toInt(), 'K' to 0xFF2E2E30.toInt(), 'o' to 0xFF7A7A80.toInt(), 'r' to 0xFFD8473A.toInt(),
+            'b' to 0xFF5A5A60.toInt(), 'c' to 0xFF101010.toInt(), 's' to 0xFF8E9399.toInt(), 'S' to 0xFFD4D8DD.toInt()))
     }
 
     // ------------------------------------------------------------------ Flowers: the flower being designed

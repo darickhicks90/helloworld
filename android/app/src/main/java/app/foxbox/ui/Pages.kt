@@ -53,7 +53,7 @@ class InstrumentPage(c: Context, id: String, host: Host) : LinearLayout(c) {
             viewBtn.onClick = { showSteps(steps?.visibility != VISIBLE) }
             col.addView(row(c, seqBtn, viewBtn).apply { seqBtn.layoutParams = lp(0, Px.dp(42), 1f); viewBtn.layoutParams = lp(0, Px.dp(42), 1f) }, lp(MATCH, WRAP))
         }
-        addView(col, lp(Px.dp(200), MATCH).apply { leftMargin = Px.dp(6) })
+        addView(col, lp(Px.dp(244), MATCH).apply { leftMargin = Px.dp(6) })
         val right = FrameLayout(c)
         strum = StrumPad(c, chords.chords).apply { this.accent = accent }
         right.addView(strum, FrameLayout.LayoutParams(MATCH, MATCH))
@@ -155,6 +155,7 @@ class PickupPage(c: Context, private val host: Host) : LinearLayout(c) {
     private val editor = LinearLayout(c).apply { orientation = VERTICAL }
     private val pattern = PatternPanel(c)
     private val modeBtn = Btn(c, "Pattern", Pal.ROSE)
+    private val seqBtn = Btn(c, "Sequencer", Pal.ORANGE, 120)
     private val nameP = Px.text(13f, Pal.BROWN_D)
     private var builtFor = -1
     private var recBtn: Btn? = null
@@ -166,6 +167,9 @@ class PickupPage(c: Context, private val host: Host) : LinearLayout(c) {
         addView(SquareBox(c, pads), lp(WRAP, MATCH).apply { leftMargin = Px.dp(6) })
         val col = LinearLayout(c).apply { orientation = VERTICAL }
         modeBtn.onClick = { val showPattern = pattern.visibility != VISIBLE; pattern.visibility = if (showPattern) VISIBLE else GONE; editor.visibility = if (showPattern) GONE else VISIBLE; refresh() }
+        // Like Minds: one switch that stops or starts the whole pad sequencer.
+        seqBtn.onClick = { pu.seqOn.set(if (pu.seqOn.on) 0f else 1f); if (!pu.seqOn.on) Audio.post { pu.allOff() }; Studio.save(); Studio.changed() }
+        col.addView(seqBtn, lp(MATCH, Px.dp(44)))
         col.addView(modeBtn, lp(MATCH, Px.dp(42)))
         right.addView(ScrollView(c).apply { addView(editor) }, FrameLayout.LayoutParams(MATCH, MATCH))
         right.addView(pattern, FrameLayout.LayoutParams(MATCH, MATCH))
@@ -180,6 +184,7 @@ class PickupPage(c: Context, private val host: Host) : LinearLayout(c) {
         if (i != builtFor) buildEditor(i)
         modeBtn.text = if (pattern.visibility == VISIBLE) "Pad ${i + 1}: sound" else "Pad ${i + 1}: pattern"
         modeBtn.requestLayout(); modeBtn.invalidate()
+        seqBtn.on = pu.seqOn.on; seqBtn.text = if (pu.seqOn.on) "Sequencer ON" else "Sequencer OFF"; seqBtn.requestLayout(); seqBtn.invalidate()
         recBtn?.let { b -> val on = host.micTarget() == "pad$i"; b.on = on; b.blink = on; b.text = if (on) "■ Stop" else "● Rec"; b.requestLayout() }
         pads.invalidate(); pattern.invalidate()
     }
@@ -247,7 +252,6 @@ class PickupPage(c: Context, private val host: Host) : LinearLayout(c) {
 
     /** The selected pad's 16 steps (tap: off → hit → accent → off), plus the pad sequencer's switches. */
     private inner class PatternPanel(c: Context) : LinearLayout(c) {
-        private val seqBtn = Btn(c, "Seq", Pal.ROSE)
         private val steps = object : PixelView(c) {
             init { animated = true }
             override fun paint(c: Canvas) {
@@ -273,15 +277,12 @@ class PickupPage(c: Context, private val host: Host) : LinearLayout(c) {
         }
         init {
             orientation = VERTICAL
-            seqBtn.onClick = { pu.seqOn.set(if (pu.seqOn.on) 0f else 1f); Studio.save(); update() }
             val len = Stepper(c, "Steps", 84, { pu.length.value.toInt().toString() }) { pu.length.set(pu.length.value + it); Studio.save() }
             val clear = Btn(c, "Clear pad").apply { onClick = { pu.pattern[Studio.selectedPad].fill(0f); Studio.save(); steps.invalidate() } }
-            addView(row(c, seqBtn, len, clear), lp(MATCH, Px.dp(44)))
+            addView(row(c, len, clear), lp(MATCH, Px.dp(44)))
             addView(steps, lp(MATCH, 0, 1f))
             addView(row(c, Knob(c, pu.swing, Pal.ROSE)), lp(MATCH, WRAP))
-            update()
         }
-        private fun update() { seqBtn.on = pu.seqOn.on; seqBtn.text = if (pu.seqOn.on) "Seq ON" else "Seq OFF"; seqBtn.requestLayout(); seqBtn.invalidate() }
     }
 }
 

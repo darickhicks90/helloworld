@@ -40,7 +40,7 @@ class Pickup : Engine("pickup", "Pickup") {
     private val warmth = p.num("warmth", "Saturation", 0f, 1f, 0.25f, Fmt.PCT)
     private val pitch = p.num("pitch", "Master Pitch", -12f, 12f, 0f, Fmt.ST)
     init { p.section("Pad Sequencer") }
-    val seqOn = p.toggle("padSeq", "Pad Sequencer", true)
+    val seqOn = p.toggle("padSeq", "Pad Sequencer", false)
     val swing = p.num("swing", "Swing", 0f, 0.6f, 0.12f, Fmt.PCT)
     val length = p.num("padSteps", "Steps", 1f, 16f, 16f, step = 1f)
 

@@ -3,7 +3,7 @@
 FoxBox is a music app for Android, built to be played sideways (landscape).
 You **write** loops with up to six **Fox Box Blocks** (instruments), record
 audio takes from a class-compliant interface, then **perform** it all in the
-stones.
+clip launcher.
 
 ## How it works
 

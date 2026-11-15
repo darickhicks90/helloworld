@@ -62,10 +62,11 @@ stones.
    to work on the stones.
 7. **The stones** are where you perform (the button under Flowers on the
    rail):
-   - Everything is an etched stone lying in the grass, drawn in a detailed
-     Game Boy Color style.
-   - Each block has a column of clip stones, and each audio channel has a
-     column of take stones.
+   - Everything is an irregular etched stone lying in a faded late-summer
+     meadow, in warm sepia 16-bit pixel art with film grain.
+   - Each block's clips and each audio channel's takes lie in a loose
+     cluster under a carved name stone. Stones only appear for clips that
+     exist.
    - **Tap** a stone to queue it and select it. A **fader** appears: drag it
      for volume (the stone fades with it). **Double-tap** to mute.
    - The top row is the transport: **▶ PLAY** starts the queued stones (when

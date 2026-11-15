@@ -61,17 +61,18 @@ object StoneField {
         var x = pad
         val blink = (time * 3).toInt() % 2 == 0
         fun topStone(id: String, kind: Int, label: String, wd: Float, seed: Int, glow: Int, tones: Stones.Tones = Stones.GRANITE) {
-            stone(c, x, pad, x + wd, pad + topH, seed, tones, 255)
-            Stones.engrave(c, label, x + wd / 2, pad + topH / 2 - g, big, tones, glow)
-            hits += Hit(id, kind, x, pad, x + wd, pad + topH)
-            x += wd + Px.dp(6f)
+            val dy = ((seed * 37) % 7 - 3) * Px.dp(1.2f); val hh = topH * (0.92f + (seed % 3) * 0.05f)
+            stone(c, x, pad + dy, x + wd, pad + dy + hh, seed, tones, 255)
+            Stones.engrave(c, label, x + wd / 2, pad + dy + hh / 2 - g, big, tones, glow)
+            hits += Hit(id, kind, x, pad + dy, x + wd, pad + dy + hh)
+            x += wd + Px.dp(4f) + (seed % 4) * Px.dp(3f)
         }
         topStone("back", K_BACK, "◀", Px.dp(52f), 11, 0, Stones.SLATE)
-        topStone("play", K_PLAY, "▶ PLAY", Px.dp(118f), 21, if (m.playing) 0xFF2F9A93.toInt() else if (m.sceneQueued && blink) 0xFF3FB8AF.toInt() else 0)
+        topStone("play", K_PLAY, "▶ PLAY", Px.dp(118f), 21, if (m.playing) 0xFF2F6F6A.toInt() else if (m.sceneQueued && blink) 0xFF4E8C84.toInt() else 0)
         topStone("stop", K_STOP, "■ STOP", Px.dp(118f), 32, 0)
         val recLit = m.audioRec == Transport.Rec.RECORDING || ((m.audioRec == Transport.Rec.ARMED || m.armedAny) && blink)
-        topStone("rec", K_REC, if (m.audioRec == Transport.Rec.ARMED) "● ${m.beat}" else "● REC", Px.dp(118f), 43, if (recLit) 0xFFD0402F.toInt() else 0)
-        val sl = x; val sr = w - pad
+        topStone("rec", K_REC, if (m.audioRec == Transport.Rec.ARMED) "● ${m.beat}" else "● REC", Px.dp(118f), 43, if (recLit) 0xFFB0301F.toInt() else 0)
+        val sl = x; val sr = minOf(w - pad, x + Px.dp(330f))
         if (sr - sl > Px.dp(80f)) {
             stone(c, sl, pad, sr, pad + topH, 57, Stones.SANDSTONE, 255)
             small.textSize = Px.dp(11f)
@@ -79,68 +80,75 @@ object StoneField {
             Stones.engrave(c, m.status, (sl + sr) / 2, pad + topH / 2 - g, small, Stones.SANDSTONE)
         }
 
-        // ---- the grid of stones: one column per block, then per audio channel
-        val gardenH = h * 0.24f
-        val top = pad + topH + Px.dp(10f)
+        // ---- stones scattered in loose clusters: one cluster per block, then per audio channel
+        val gardenH = h * 0.22f
+        val top = pad + topH + Px.dp(8f)
         val bottom = h - gardenH
         val cols = m.columns.size + if (m.canAddChannel) 1 else 0
-        val gap = Px.dp(7f)
-        val colW = minOf(Px.dp(150f), (w - pad * 2 - gap * (cols - 1)) / cols.coerceAtLeast(1))
-        val headH = Px.dp(32f)
-        val cellH = (bottom - top - headH - gap * ROWS) / ROWS
-        var cx = (w - (colW * cols + gap * (cols - 1))) / 2
+        val regionW = (w - pad * 2) / cols.coerceAtLeast(1)
+        val colW = minOf(Px.dp(150f), regionW - Px.dp(8f))
+        val headH = Px.dp(38f)
+        val slotH = (bottom - top - headH) / ROWS
+        fun jit(seed: Int, k: Int, range: Float) = ((Math.floorMod(seed * 31 + k * 977, 1000) / 1000f) - 0.5f) * 2f * range
         for ((ci, col) in m.columns.withIndex()) {
-            val tones = if (col.kind == 1) Stones.SLATE else Stones.GRANITE
-            stone(c, cx, top, cx + colW, top + headH, 100 + ci * 7, tones, 255)
+            val rc = pad + regionW * (ci + 0.5f)
+            val tones = if (col.kind == 1) Stones.SLATE else Stones.SANDSTONE
+            val hs = col.id.hashCode() + 101
+            val hw = colW * (0.72f + jit(hs, 1, 0.08f)); val hx = rc + jit(hs, 2, (regionW - hw) * 0.3f); val hy = top + jit(hs, 3, Px.dp(3f))
+            stone(c, hx - hw / 2, hy, hx + hw / 2, hy + headH, hs, tones, 255)
             head.textSize = Px.dp(8f)
-            Stones.engrave(c, col.title.uppercase(), cx + colW / 2 + (if (col.kind == 1) Px.dp(6f) else 0f), top + headH / 2 - g, head, tones)
+            Stones.engrave(c, col.title.uppercase(), hx + (if (col.kind == 1) Px.dp(6f) else 0f), hy + headH / 2 - g, head, tones)
             if (col.kind == 1) {
                 // an inlaid gem in the channel's colour; it glows when armed
-                val gx = cx + Px.dp(14f); val gy = top + headH / 2 - g
+                val gx = hx - hw / 2 + Px.dp(18f); val gy = hy + headH / 2 - g
                 val lit = col.armed && (m.audioRec == Transport.Rec.RECORDING || blink)
                 with(Iso) { c.disc(gx, gy, 3f, g, tones.line); c.disc(gx, gy, 2f, g, if (lit) Iso.lighten(col.accent, 0.35f) else Iso.darken(col.accent, 0.25f)) }
                 if (col.armed) c.fill(gx - 3 * g, gy + 4 * g, gx + 3 * g, gy + 5 * g, col.accent)
-                hits += Hit(col.id, K_CHANNEL, cx, top, cx + colW, top + headH)
-            } else hits += Hit(col.id, K_BLOCK, cx, top, cx + colW, top + headH)
-            for (r in 0 until ROWS) {
-                val t = top + headH + gap + r * (cellH + gap)
-                val cell = col.cells.getOrNull(r)
-                if (cell == null) { hollow(c, cx + Px.dp(6f), t + Px.dp(4f), cx + colW - Px.dp(6f), t + cellH - Px.dp(4f), g); continue }
+                hits += Hit(col.id, K_CHANNEL, hx - hw / 2, hy, hx + hw / 2, hy + headH)
+            } else hits += Hit(col.id, K_BLOCK, hx - hw / 2, hy, hx + hw / 2, hy + headH)
+            for ((r, cell) in col.cells.withIndex()) {
+                if (cell == null || r >= ROWS) continue
+                val sd = cell.seed
+                val sw = colW * (0.74f + jit(sd, 1, 0.1f)); val sh = slotH * (1.0f + jit(sd, 2, 0.08f))
+                val sx = rc + jit(sd, 3, (regionW - sw) * 0.45f) + (if (r % 2 == 1) Px.dp(6f) else -Px.dp(6f))
+                val sy = top + headH + r * slotH + (slotH - sh) / 2 + jit(sd, 4, (slotH - sh) * 0.45f)
+                val l = sx - sw / 2; val t = sy; val rr = sx + sw / 2; val b = sy + sh
                 val alpha = ((if (cell.muted) 0.35f else 0.4f + 0.6f * cell.volume) * 255).toInt()
-                val st = Stones.kind(cell.seed)
+                val st = Stones.kind(sd)
                 val lift = if (cell.playing && (time * 4).toInt() % 2 == 0) -g else 0f
-                stone(c, cx, t + lift, cx + colW, t + cellH + lift, cell.seed, st, alpha)
-                val glow = when { cell.playing && cell.queued -> Pal.ORANGE_D; cell.playing -> Pal.ORANGE; cell.queued -> 0xFF22706B.toInt(); else -> 0 }
+                stone(c, l, t + lift, rr, b + lift, sd, st, alpha)
+                val glow = when { cell.playing && cell.queued -> 0xFF8E3A12.toInt(); cell.playing -> 0xFFB8521B.toInt(); cell.queued -> 0xFF2F6F6A.toInt(); else -> 0 }
                 val gs = g * 1.1f
-                Stones.glyph(c, col.glyph, cx + Px.dp(10f), t + lift + cellH / 2 - 4 * gs, gs, st, glow)
+                Stones.glyph(c, col.glyph, l + sw * 0.17f, t + lift + sh / 2 - 4 * gs, gs, st, glow)
                 name.textSize = Px.dp(12f)
                 val label = cell.name.take(14)
-                while (name.measureText(label) > colW - Px.dp(40f) && name.textSize > Px.dp(8f)) name.textSize -= Px.dp(0.5f)
-                Stones.engrave(c, label, cx + colW / 2 + Px.dp(10f), t + lift + cellH / 2 - g, name, st, glow)
-                if (cell.muted) { small.textSize = Px.dp(9f); Stones.engrave(c, "muted", cx + colW - Px.dp(22f), t + cellH - Px.dp(10f), small, st) }
-                if (cell.queued) for (k in 0..2) c.fill(cx + Px.dp(10f) + k * g * 2, t + lift + Px.dp(7f), cx + Px.dp(10f) + k * g * 2 + g, t + lift + Px.dp(7f) + g, if (cell.playing) Pal.ORANGE else 0xFF22706B.toInt())
-                hits += Hit(cell.id, if (col.kind == 1) K_TAKE else K_CLIP, cx, t, cx + colW, t + cellH)
+                while (name.measureText(label) > sw * 0.5f && name.textSize > Px.dp(7f)) name.textSize -= Px.dp(0.5f)
+                Stones.engrave(c, label, sx + sw * 0.1f, t + lift + sh / 2 - g, name, st, glow)
+                if (cell.muted) { small.textSize = Px.dp(9f); Stones.engrave(c, "muted", sx + sw * 0.2f, b - sh * 0.22f, small, st) }
+                if (cell.queued) for (k in 0..2) c.fill(sx - g * 3 + k * g * 2, t + lift + sh * 0.2f, sx - g * 3 + k * g * 2 + g, t + lift + sh * 0.2f + g, if (cell.playing) 0xFFB8521B.toInt() else 0xFF2F6F6A.toInt())
+                hits += Hit(cell.id, if (col.kind == 1) K_TAKE else K_CLIP, l, t, rr, b)
             }
-            cx += colW + gap
         }
         if (m.canAddChannel) {
-            stone(c, cx, top, cx + colW, top + headH, 333, Stones.SLATE, 190)
+            val rc = pad + regionW * (m.columns.size + 0.5f)
+            val hw = colW * 0.66f; val hy = top + Px.dp(4f)
+            stone(c, rc - hw / 2, hy, rc + hw / 2, hy + headH, 333, Stones.SLATE, 200)
             head.textSize = Px.dp(8f)
-            Stones.engrave(c, "+ AUDIO", cx + colW / 2, top + headH / 2 - g, head, Stones.SLATE)
-            hits += Hit("plus", K_PLUS, cx, top, cx + colW, top + headH)
+            Stones.engrave(c, "+ AUDIO", rc, hy + headH / 2 - g, head, Stones.SLATE)
+            hits += Hit("plus", K_PLUS, rc - hw / 2, hy, rc + hw / 2, hy + headH)
         }
 
         // ---- the garden: planted flowers among the grass
         val gy = h - gardenH
         for ((i, f) in m.flowers.take(5).withIndex()) {
-            val fx = w * (0.18f + i * 0.16f); val fy = gy + gardenH * 0.42f
+            val fx = w * (0.14f + i * 0.17f + ((i * 37) % 5 - 2) * 0.01f); val fy = gy + gardenH * (0.36f + (i % 2) * 0.12f)
             c.flower(fx, fy, 1.4f, f.bloom, f.variant, time, f.chain >= 0 && m.playing)
             if (f.chain >= 0) with(Iso) { c.disc(fx, fy + gardenH * 0.45f, 3f, g * 1.5f, Pal.alpha(CHAIN[f.chain], 0.85f), 0.5f) }
-            small.textSize = Px.dp(9f); small.color = Pal.CREAM
+            small.textSize = Px.dp(9f); small.color = Pal.BROWN_D
             if (selected == f.id) c.textCentered(f.name, fx, h - Px.dp(6f), small)
             hits += Hit(f.id, K_FLOWER, fx - Px.dp(28f), fy - Px.dp(30f), fx + Px.dp(28f), fy + Px.dp(40f))
         }
-        if (m.flowers.isEmpty()) { small.textSize = Px.dp(11f); small.color = Pal.CREAM; c.textCentered("Plant flowers from the Flowers page, then drag a line from one through stones", w / 2, gy + gardenH / 2, small) }
+        if (m.flowers.isEmpty()) { small.textSize = Px.dp(11f); small.color = Pal.BROWN_D; c.textCentered("Plant flowers from the Flowers page, then drag a line from one through stones", w / 2, gy + gardenH / 2, small) }
 
         // ---- daisy chains
         for ((k, path) in m.chains.withIndex()) tracer(c, path.map { floatArrayOf(it[0] * w, it[1] * h) }, CHAIN[k % 3], g * 1.5f, time, 0.9f)
@@ -151,13 +159,6 @@ object StoneField {
         val bmp = Stones.bitmap((r - l).toInt(), (b - t).toInt() + (g() * 2).toInt(), g(), seed, tones)
         paint.alpha = alpha
         c.drawBitmap(bmp, l, t, paint)
-        Stones.tufts(c, l, r, b + g(), g(), seed)
-    }
-
-    /** An empty slot: a shallow dimple in the turf. */
-    private fun hollow(c: Canvas, l: Float, t: Float, r: Float, b: Float, g: Float) {
-        c.fill(l + g * 2, t, r - g * 2, t + g, Stones.GRASS[3]); c.fill(l, t + g * 2, l + g, b - g * 2, Stones.GRASS[3])
-        c.fill(l + g * 2, b - g, r - g * 2, b, Stones.GRASS[0]); c.fill(r - g, t + g * 2, r, b - g * 2, Stones.GRASS[0])
     }
 
     fun tracer(c: Canvas, pts: List<FloatArray>, col: Int, g: Float, t: Float, a: Float) {
@@ -266,7 +267,7 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
         val ky = top + fh - Px.dp(6f) - value * (fh - Px.dp(12f))
         c.fill(fx + Px.dp(7f), ky, fx + Px.dp(11f), top + fh - Px.dp(6f), if (isFlower) Pal.ROSE else Pal.AQUA)
         c.pixelBox(fx - Px.dp(2f), ky - Px.dp(6f), fx + Px.dp(20f), ky + Px.dp(6f), Stones.SANDSTONE.light, border = Stones.SANDSTONE.line, shade = false)
-        small.color = Pal.CREAM
+        small.color = Pal.BROWN_D
         c.textCentered(if (isFlower) "bloom" else "vol", fx + Px.dp(9f), top - Px.dp(12f), small)
         fader[0] = fx - Px.dp(14f); fader[1] = top - Px.dp(14f); fader[2] = fx + Px.dp(32f); fader[3] = top + fh + Px.dp(14f)
         faderTop = top + Px.dp(6f); faderH = fh - Px.dp(12f)

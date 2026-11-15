@@ -14,13 +14,14 @@ object Stones {
     /** Four tones, light to dark, plus an outline. */
     class Tones(val hi: Int, val light: Int, val mid: Int, val dark: Int, val line: Int)
 
-    val GRANITE = Tones(0xFFEEF0EE.toInt(), 0xFFC9CDD2.toInt(), 0xFF9AA0A8.toInt(), 0xFF5E6170.toInt(), 0xFF2B2A33.toInt())
-    val SANDSTONE = Tones(0xFFF4EBDD.toInt(), 0xFFD9C8B0.toInt(), 0xFFAD9A82.toInt(), 0xFF6E5F52.toInt(), 0xFF33291F.toInt())
-    val SLATE = Tones(0xFFDCE6E4.toInt(), 0xFFA9BAB8.toInt(), 0xFF768A8C.toInt(), 0xFF46545C.toInt(), 0xFF1F272C.toInt())
+    // Warm, faded, sepia-toned river stones.
+    val GRANITE = Tones(0xFFEDE4D3.toInt(), 0xFFC8BBA5.toInt(), 0xFF9C8F7B.toInt(), 0xFF66594A.toInt(), 0xFF33281E.toInt())
+    val SANDSTONE = Tones(0xFFF2E2C4.toInt(), 0xFFD6BC92.toInt(), 0xFFAE9068.toInt(), 0xFF72593E.toInt(), 0xFF38281A.toInt())
+    val SLATE = Tones(0xFFDCDCCF.toInt(), 0xFFADB0A2.toInt(), 0xFF7E8475.toInt(), 0xFF4E5448.toInt(), 0xFF262A22.toInt())
     private val KINDS = listOf(GRANITE, SANDSTONE, SLATE)
-    private val MOSS = intArrayOf(0xFFB5D96A.toInt(), 0xFF6DAA45.toInt(), 0xFF3E7A34.toInt())
-    /** Grass tones (GBC style): highlight, light, mid, dark. */
-    val GRASS = intArrayOf(0xFFB5D96A.toInt(), 0xFF6DAA45.toInt(), 0xFF3E7A34.toInt(), 0xFF1E3B1E.toInt())
+    private val MOSS = intArrayOf(0xFFB9B26A.toInt(), 0xFF8A8A48.toInt(), 0xFF5C6034.toInt())
+    /** A faded late-summer meadow: straw, olive, moss and shadow. */
+    val GRASS = intArrayOf(0xFFD8C890.toInt(), 0xFFA59F62.toInt(), 0xFF77773F.toInt(), 0xFF46482A.toInt())
 
     fun kind(seed: Int) = KINDS[Math.floorMod(seed, KINDS.size)]
     private fun hash(a: Int, b: Int): Int { var x = a * 73856093 xor b * 19349663; x = x xor (x ushr 13); x *= 0x5bd1e995; return x xor (x ushr 15) }
@@ -37,61 +38,65 @@ object Stones {
     }
 
     private fun paintStone(c: Canvas, wPx: Int, hPx: Int, g: Float, seed: Int, t: Tones, moss: Boolean) {
-        val cols = (wPx / g).toInt() - 1; val rows = (hPx / g).toInt() - 2
-        if (cols < 4 || rows < 4) return
+        val cols = (wPx / g).toInt(); val rows = (hPx / g).toInt() - 2
+        if (cols < 6 || rows < 6) return
         fun px(x: Int, y: Int, col: Int) = c.fill(x * g, y * g, (x + 1) * g, (y + 1) * g, col)
-        // rounded, chipped silhouette: an inset per row, with a little noise
-        val ins = IntArray(rows) { y ->
-            val edge = minOf(y, rows - 1 - y)
-            val round = when (edge) { 0 -> 3; 1 -> 1; 2 -> 1; else -> 0 }
-            round + (if (Math.floorMod(hash(seed, y), 7) == 0) 1 else 0)
+        // an irregular pebble outline: an ellipse bent by a few slow waves
+        val cx = cols / 2f; val cy = rows / 2f; val rx = cols / 2f - 1.5f; val ry = rows / 2f - 1.5f
+        val p1 = Math.floorMod(hash(seed, 1), 628) / 100f; val p2 = Math.floorMod(hash(seed, 2), 628) / 100f; val p3 = Math.floorMod(hash(seed, 3), 628) / 100f
+        val a1 = 0.05f + Math.floorMod(hash(seed, 4), 8) / 100f
+        val mask = BooleanArray(cols * rows)
+        val nx = FloatArray(cols * rows); val ny = FloatArray(cols * rows)
+        for (y in 0 until rows) for (x in 0 until cols) {
+            val dx = (x + 0.5f - cx) / rx; val dy = (y + 0.5f - cy) / ry
+            val a = kotlin.math.atan2(dy, dx)
+            val lim = 1f - a1 - a1 * kotlin.math.sin(2 * a + p1) - 0.05f * kotlin.math.sin(3 * a + p2) - 0.03f * kotlin.math.sin(5 * a + p3)
+            val d = kotlin.math.sqrt(dx * dx + dy * dy)
+            if (d <= lim) { mask[y * cols + x] = true; nx[y * cols + x] = dx; ny[y * cols + x] = dy }
         }
-        // drop shadow on the grass
-        for (y in 1 until rows) for (x in ins[y] + 1 until cols - ins[y] + 1) px(x, y + 1, 0x55102A12)
-        for (y in 0 until rows) {
-            val l = ins[y]; val r = cols - 1 - ins[y]
-            for (x in l..r) {
-                val edgeX = x == l || x == r; val edgeY = y == 0 || y == rows - 1 || x < ins.getOrElse(y - 1) { 99 } || x > cols - 1 - ins.getOrElse(y - 1) { 99 } ||
-                    x < ins.getOrElse(y + 1) { 99 } || x > cols - 1 - ins.getOrElse(y + 1) { 99 }
-                val col = when {
-                    edgeX || edgeY -> t.line
-                    y == 1 || x == l + 1 -> t.hi                      // lit top-left rim
-                    y >= rows - 3 || x >= r - 1 -> t.dark            // shaded bottom-right
-                    y == 2 || x == l + 2 -> t.light
-                    else -> t.mid
-                }
-                px(x, y, col)
+        fun inside(x: Int, y: Int) = x in 0 until cols && y in 0 until rows && mask[y * cols + x]
+        // soft shadow pressed into the meadow
+        for (y in 0 until rows) for (x in 0 until cols) if (inside(x - 1, y - 2) && !inside(x, y)) px(x, y, 0x553A2A12)
+        for (y in 0 until rows) for (x in 0 until cols) if (inside(x, y)) {
+            val edge = !inside(x - 1, y) || !inside(x + 1, y) || !inside(x, y - 1) || !inside(x, y + 1)
+            val dx = nx[y * cols + x]; val dy = ny[y * cols + x]
+            val nearEdge = !inside(x + 2, y) || !inside(x, y + 2)
+            val light = -(dx * 0.55f + dy * 0.85f) + (1f - kotlin.math.sqrt(dx * dx + dy * dy)) * 0.5f + (Math.floorMod(hash(seed + x, y), 9) - 4) * 0.025f
+            val col = when {
+                edge -> t.line
+                nearEdge && dx + dy > 0.2f -> t.dark
+                light > 0.55f -> t.hi
+                light > 0.15f -> t.light
+                light > -0.35f -> t.mid
+                else -> t.dark
             }
+            px(x, y, col)
         }
-        // speckles and a few cracks
-        for (k in 0 until (cols * rows) / 24) {
+        // speckles, and a hairline crack on some
+        for (k in 0 until (cols * rows) / 26) {
             val h = hash(seed + 17, k)
-            val x = Math.floorMod(h, cols - 6) + 3; val y = Math.floorMod(h ushr 8, rows - 6) + 3
-            if (x <= ins[y] + 2 || x >= cols - 3 - ins[y]) continue
+            val x = Math.floorMod(h, cols); val y = Math.floorMod(h ushr 8, rows)
+            if (!inside(x - 1, y) || !inside(x + 1, y) || !inside(x, y - 1) || !inside(x, y + 1)) continue
             px(x, y, if (k % 3 == 0) t.light else t.dark)
         }
-        if (seed % 4 == 1) { var x = cols / 2 + Math.floorMod(seed, 5) - 2; for (y in rows - 3 downTo rows - 7) { px(x, y, t.dark); if (y % 2 == 0) x++ } }
-        // moss creeping over the top-left edge
-        if (moss) for (k in 0 until cols / 2) {
-            val x = ins[0] + 1 + k; if (x >= cols - 3) break
-            val depth = 1 + Math.floorMod(hash(seed, k + 99), 3) - (k / 4)
-            for (y in 0 until depth.coerceAtLeast(0)) px(x, y, MOSS[minOf(y, 2)])
+        if (seed % 4 == 1) { var x = (cx + Math.floorMod(seed, 5) - 2).toInt(); var y = (cy + 1).toInt(); repeat(5) { if (inside(x, y) && inside(x + 1, y) && inside(x, y + 1)) px(x, y, t.dark); y++; if (it % 2 == 0) x++ } }
+        // moss on the upper-left shoulder
+        if (moss) for (y in 0 until rows) for (x in 0 until cols) if (inside(x, y)) {
+            val dx = nx[y * cols + x]; val dy = ny[y * cols + x]
+            if (dy < -0.45f && dx < 0.15f && Math.floorMod(hash(seed + 5, x * 31 + y), 5) < 3) px(x, y, MOSS[Math.floorMod(x + y, 3)])
         }
-    }
-
-    /** Grass blades growing up over a stone's bottom edge, so it sits in the turf. */
-    fun tufts(c: Canvas, l: Float, r: Float, b: Float, g: Float, seed: Int) {
-        val cols = ((r - l) / g).toInt()
-        var x = 2 + Math.floorMod(seed, 5)
+        // grass blades grow up over the bottom edge so the stone sits in the meadow
+        var x = 2 + Math.floorMod(seed, 4)
         var k = 0
         while (x < cols - 2) {
-            val h = 2 + Math.floorMod(hash(seed, k), 3)
-            for (j in 0 until h) {
-                val col = if (j == h - 1) GRASS[0] else if (j == 0) GRASS[3] else GRASS[2]
-                c.fill(l + x * g, b - (j + 1) * g, l + (x + 1) * g, b - j * g, col)
-                if (j < h - 1 && k % 2 == 0) c.fill(l + (x + 1) * g, b - (j + 1) * g, l + (x + 2) * g, b - j * g, GRASS[2])
+            var by = -1
+            for (y in rows - 1 downTo 0) if (inside(x, y)) { by = y; break }
+            if (by > 0) {
+                val h = 2 + Math.floorMod(hash(seed, k), 3)
+                for (j in 0 until h + 1) px(x, by + 1 - j, if (j == h) GRASS[0] else if (j == 0) GRASS[3] else GRASS[2])
+                if (k % 2 == 0) px(x + 1, by, GRASS[2])
             }
-            x += 3 + Math.floorMod(hash(seed, k + 7), 9); k++
+            x += 2 + Math.floorMod(hash(seed, k + 7), 7); k++
         }
     }
 
@@ -139,7 +144,7 @@ object Stones {
             listOf("........", "...w....", "..wyw...", "...w....", "...#....", "........", ".#......", "........"),
             listOf("#.......", "#..#....", "...#....", "........", ".....#..", "....##..", ".....#..", "........"),
         )
-        val col = mapOf('#' to GRASS[2], 'o' to GRASS[0], 'O' to GRASS[2], 'p' to 0xFF9AA0A8.toInt(), 'P' to 0xFF5E6170.toInt(), 'w' to 0xFFF7EFDC.toInt(), 'y' to 0xFFF6C26B.toInt())
+        val col = mapOf('#' to GRASS[2], 'o' to GRASS[0], 'O' to GRASS[3], 'p' to 0xFFC8BBA5.toInt(), 'P' to 0xFF66594A.toInt(), 'w' to 0xFFEDE4D3.toInt(), 'y' to 0xFFC98A4B.toInt())
         val tw = (w / (g * 8)).toInt() + 1; val th = (h / (g * 8)).toInt() + 1
         for (ty in 0 until th) for (tx in 0 until tw) {
             val hh = Math.floorMod(hash(tx, ty), 100)
@@ -150,7 +155,36 @@ object Stones {
                 c.fill(l, t, l + g, t + g, col.getValue(ch))
             }
         }
-        // darker band where the ground meets the garden strip is drawn by the screen
+        // film grain and a stepped vignette, like a faded photograph
+        val gr = Math.max(1f, g)
+        var y = 0f
+        var row = 0
+        while (y < h) {
+            var xx = 0f
+            var col2 = 0
+            while (xx < w) {
+                val hh = Math.floorMod(hash(col2 + 1000, row + 77), 100)
+                if (hh < 5) c.fill(xx, y, xx + gr, y + gr, 0x22140A00)
+                else if (hh < 8) c.fill(xx, y, xx + gr, y + gr, 0x22FFF4DC)
+                xx += gr; col2++
+            }
+            y += gr; row++
+        }
+        val cell = g * 6
+        var vy = 0f
+        while (vy < h) {
+            var vx = 0f
+            while (vx < w) {
+                val dx = (vx + cell / 2) / w * 2 - 1; val dy = (vy + cell / 2) / h * 2 - 1
+                val d = kotlin.math.sqrt(dx * dx * 0.8f + dy * dy)
+                val step = ((d - 0.75f) / 0.12f).toInt().coerceIn(0, 4)
+                if (step > 0) c.fill(vx, vy, vx + cell, vy + cell, (step * 0x12 shl 24) or 0x2A1A0E)
+                vx += cell
+            }
+            vy += cell
+        }
+        // a warm sepia wash over everything
+        c.fill(0f, 0f, w.toFloat(), h.toFloat(), 0x14C98A4B)
         grassBmp = bmp
         return bmp
     }

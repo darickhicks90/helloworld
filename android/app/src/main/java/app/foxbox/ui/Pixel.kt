@@ -225,54 +225,121 @@ private val FLOWER_SCHEMES = listOf(
 )
 private const val INK = 0xFF201418.toInt()
 
+private fun shade(c: Int, k: Float): Int {
+    val r = (c shr 16 and 255); val g = (c shr 8 and 255); val b = (c and 255)
+    return if (k >= 0) (0xFF shl 24) or ((r + ((255 - r) * k).toInt()) shl 16) or ((g + ((255 - g) * k).toInt()) shl 8) or (b + ((255 - b) * k).toInt())
+    else (0xFF shl 24) or (((r * (1 + k)).toInt()) shl 16) or (((g * (1 + k)).toInt()) shl 8) or ((b * (1 + k)).toInt())
+}
+
+private const val FN = 64
+private val flowerCache = object : LinkedHashMap<Long, Bitmap>(64, 0.75f, true) {
+    override fun removeEldestEntry(e: MutableMap.MutableEntry<Long, Bitmap>?) = size > 80
+}
+
 /**
- * An ornate pixel flower with an ink outline: a closed bud at bloom 0,
- * opening to two rings of petals around a seeded centre at bloom 1.
- * `s` = art pixels per flower pixel.
+ * A flower drawn on a fine pixel grid: shaded petals (deep at the base,
+ * light at the tips), a seeded centre, a curving stem and two veined leaves.
+ * A closed bud at bloom 0, opening fully at bloom 1. `s` sets the size.
+ * Rendered once per variant/bloom step and cached.
  */
 fun Canvas.flower(cx: Float, cy: Float, s: Float, bloom: Float, variant: Int, time: Float, sparkle: Boolean) {
-    val u = Px.u * s
-    val gx = (cx / u).toInt(); val gy = (cy / u).toInt()
-    val sc = FLOWER_SCHEMES[Math.floorMod(variant, FLOWER_SCHEMES.size)]
-    val (o, oh, inn, cen) = listOf(sc[0], sc[1], sc[2], sc[3])
-    fun shape(px: (Int, Int, Int) -> Unit) {
-        for (k in 1..10) px(0, k, Pal.GREEN_D)
-        for ((dx, dy) in listOf(1 to 5, 2 to 5, 2 to 4, 3 to 4, -1 to 7, -2 to 7, -2 to 6, -3 to 6)) px(dx, dy, Pal.GREEN)
-        px(3, 4, Pal.GREEN_L); px(-3, 6, Pal.GREEN_L)
-        if (bloom < 0.08f) {
-            px(0, -3, oh); px(-1, -2, o); px(0, -2, o); px(1, -2, o); px(-1, -1, o); px(0, -1, oh); px(1, -1, o)
-            px(-1, 0, Pal.GREEN); px(0, 0, Pal.GREEN_D); px(1, 0, Pal.GREEN)
-            return
-        }
-        val r = 1.5f + bloom * 4.5f
-        val steps = maxOf(2, r.toInt())
-        for (i in 0 until 8) {
-            val a = i * Math.PI.toFloat() / 4
-            val ca = kotlin.math.cos(a); val sa = kotlin.math.sin(a)
-            for (t in 0 until steps) {
-                val d = r * 0.35f + t * (r * 0.65f / steps)
-                val x = ca * d; val y = sa * d
-                px(Math.round(x), Math.round(y), if (t == steps - 1) oh else o)
-                px(Math.round(x - sa * 0.9f), Math.round(y + ca * 0.9f), o)
-            }
-        }
-        if (bloom > 0.35f) for (i in 0 until 6) {
-            val a = i * Math.PI.toFloat() / 3 + Math.PI.toFloat() / 6
-            for (t in 0..1) { val d = r * 0.55f * (0.5f + t * 0.5f); px(Math.round(kotlin.math.cos(a) * d), Math.round(kotlin.math.sin(a) * d), inn) }
-        }
-        for (dx in -1..1) for (dy in -1..1) px(dx, dy, cen)
-        if (bloom > 0.6f) { val seed = if (cen == Pal.BROWN) Pal.SUN else Pal.BROWN; px(-1, -1, seed); px(1, 1, seed); px(1, -1, seed); px(-1, 1, seed) }
-        px(0, 0, if (cen == 0xFFFFF6E5.toInt()) Pal.SUN else 0xFFFFF6E5.toInt())
-    }
-    // Ink outline first, then colours on top.
-    shape { x, y, _ ->
-        fill((gx + x - 1) * u, (gy + y) * u, (gx + x + 2) * u, (gy + y + 1) * u, INK)
-        fill((gx + x) * u, (gy + y - 1) * u, (gx + x + 1) * u, (gy + y + 2) * u, INK)
-    }
-    shape { x, y, c -> fill((gx + x) * u, (gy + y) * u, (gx + x + 1) * u, (gy + y + 1) * u, c) }
+    val cell = maxOf(1f, Px.u * s * 0.5f)
+    val bq = (bloom.coerceIn(0f, 1f) * 16).toInt()
+    val key = (Math.floorMod(variant, 1000).toLong() shl 40) or (bq.toLong() shl 32) or (cell * 100).toInt().toLong()
+    val bmp = flowerCache.getOrPut(key) { renderFlower(variant, bq / 16f, cell) }
+    // the bitmap's (32, 20) cell is the flower's centre
+    drawBitmap(bmp, cx - 32 * cell, cy - 20 * cell, null)
     if (sparkle) for (i in 0 until 6) {
         val a = time * 2f + i * 1.047f
-        val rr = u * (8f + 3f * kotlin.math.sin(time * 5 + i))
+        val rr = cell * (18f + 4f * kotlin.math.sin(time * 5 + i))
         if (kotlin.math.sin(time * 9f + i * 2.3f) > 0.2f) dot(cx + kotlin.math.cos(a) * rr, cy + kotlin.math.sin(a) * rr * 0.8f, if (i % 2 == 0) Pal.CREAM else FLOWER_SCHEMES[i % FLOWER_SCHEMES.size][1])
     }
+}
+
+private fun renderFlower(variant: Int, bloom: Float, cell: Float): Bitmap {
+    val grid = IntArray(FN * FN)
+    fun put(x: Int, y: Int, c: Int) { if (x in 0 until FN && y in 0 until FN) grid[y * FN + x] = c }
+    val sc = FLOWER_SCHEMES[Math.floorMod(variant, FLOWER_SCHEMES.size)]
+    val petal = sc[0]; val tip = sc[1]; val inner = sc[2]; val centre = sc[3]
+    val ox = 32; val oy = 20
+    val lean = (Math.floorMod(variant * 7, 5) - 2) * 0.35f
+    // stem: a gentle curve with a lit edge
+    val stemDark = 0xFF3F6A34.toInt(); val stemMid = 0xFF5E8C46.toInt(); val stemLight = 0xFF8DB866.toInt()
+    for (k in 2..26) {
+        val x = ox + Math.round(lean * kotlin.math.sin(k / 26f * 3.1f) * 2.5f)
+        put(x, oy + k, stemMid); put(x + 1, oy + k, stemDark); if (k % 3 == 0) put(x, oy + k, stemLight)
+    }
+    // two leaves with a midrib
+    fun leaf(baseY: Int, dir: Int, len: Int) {
+        val bx = ox + Math.round(lean * kotlin.math.sin(baseY / 26f * 3.1f) * 2.5f)
+        for (t in 0..len) {
+            val f = t / len.toFloat()
+            val wid = (kotlin.math.sin(f * Math.PI).toFloat() * 2.6f)
+            val lx = bx + dir * (t + 1); val ly = oy + baseY - Math.round(f * len * 0.55f)
+            for (w in -Math.round(wid)..Math.round(wid)) put(lx, ly + w, if (w < 0) stemLight else if (w > 0) stemDark else stemMid)
+            put(lx, ly, if (t % 2 == 0) shade(stemLight, 0.25f) else stemMid)
+        }
+    }
+    leaf(18, -1, 8); leaf(23, 1, 7)
+    if (bloom < 0.08f) {
+        // a closed bud wrapped in sepals
+        for (y in -6..1) for (x in -3..3) {
+            val dy = (y + 2.5f) / 4.2f; val dx = x / (3.2f * (1f - maxOf(0f, -dy) * 0.55f))
+            if (dx * dx + dy * dy <= 1f) put(ox + x, oy + y, if (x < 0) shade(petal, 0.15f) else if (x > 1) shade(petal, -0.25f) else petal)
+        }
+        for (x in -3..3) put(ox + x, oy + 1 - kotlin.math.abs(x) / 2, if (x < 0) stemLight else stemMid)
+    } else {
+        val n = 5 + Math.floorMod(variant, 3)
+        val len = 3.5f + bloom * 9f
+        val wid = 1.6f + bloom * 2.6f
+        val rot = Math.floorMod(variant * 13, 10) * 0.1f
+        // back ring of petals (darker) then the front ring
+        for (ring in 0..1) {
+            if (ring == 0 && bloom < 0.45f) continue
+            val l = if (ring == 0) len * 0.9f else len
+            for (i in 0 until n) {
+                val a = rot + (i + if (ring == 0) 0.5f else 0f) * (2 * Math.PI.toFloat() / n)
+                val ca = kotlin.math.cos(a); val sa = kotlin.math.sin(a) * 0.82f
+                val steps = (l * 2).toInt()
+                for (t in 0..steps) {
+                    val f = t / steps.toFloat()
+                    val along = f * l
+                    val half = wid * kotlin.math.sin(Math.PI.toFloat() * (0.15f + f * 0.85f)).coerceAtLeast(0.4f)
+                    var w = -half
+                    while (w <= half) {
+                        val x = ox + Math.round(ca * along - sa / 0.82f * w * 0.82f)
+                        val y = oy + Math.round(sa * along + ca * w * 0.82f)
+                        val tone = when { f < 0.3f -> shade(petal, -0.3f); f > 0.78f -> tip; w > half * 0.45f -> shade(petal, -0.12f); else -> petal }
+                        put(x, y, if (ring == 0) shade(tone, -0.22f) else tone)
+                        w += 0.5f
+                    }
+                    if (ring == 1 && t % 2 == 0 && f in 0.25f..0.7f) put(ox + Math.round(ca * along), oy + Math.round(sa * along), shade(petal, -0.2f)) // vein
+                }
+            }
+        }
+        // inner petals and the seeded centre
+        if (bloom > 0.35f) for (i in 0 until n) {
+            val a = rot + (i + 0.5f) * (2 * Math.PI.toFloat() / n)
+            for (t in 1..3) put(ox + Math.round(kotlin.math.cos(a) * t * (1f + bloom)), oy + Math.round(kotlin.math.sin(a) * t * (1f + bloom) * 0.82f), inner)
+        }
+        val cr = 1.6f + bloom * 1.6f
+        for (y in -4..4) for (x in -4..4) {
+            val d = kotlin.math.sqrt((x * x + y * y / 0.8f).toFloat())
+            if (d <= cr) put(ox + x, oy + y, if ((x + y) % 2 == 0) shade(centre, -0.28f) else if (x < 0 && y < 0) shade(centre, 0.3f) else centre)
+        }
+    }
+    // soft outline: each outside pixel next to a coloured one takes a darkened copy of it
+    val out = grid.copyOf()
+    for (y in 0 until FN) for (x in 0 until FN) if (grid[y * FN + x] == 0) {
+        var nb = 0
+        if (x > 0 && grid[y * FN + x - 1] != 0) nb = grid[y * FN + x - 1]
+        else if (x < FN - 1 && grid[y * FN + x + 1] != 0) nb = grid[y * FN + x + 1]
+        else if (y > 0 && grid[(y - 1) * FN + x] != 0) nb = grid[(y - 1) * FN + x]
+        else if (y < FN - 1 && grid[(y + 1) * FN + x] != 0) nb = grid[(y + 1) * FN + x]
+        if (nb != 0) out[y * FN + x] = shade(nb, -0.62f)
+    }
+    val bmp = Bitmap.createBitmap((FN * cell).toInt() + 1, (FN * cell).toInt() + 1, Bitmap.Config.ARGB_8888)
+    val c = Canvas(bmp)
+    for (y in 0 until FN) for (x in 0 until FN) { val v = out[y * FN + x]; if (v != 0) c.fill(x * cell, y * cell, (x + 1) * cell, (y + 1) * cell, v) }
+    return bmp
 }

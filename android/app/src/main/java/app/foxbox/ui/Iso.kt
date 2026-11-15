@@ -175,7 +175,10 @@ object Iso {
         }
         fill(l - 2 * g, b, r + 2 * g, b + g, stroke)
         text.color = stroke
-        textCentered("R.I.P.", (l + r) / 2, tt + 8 * g, text)
+        // size the words to fit inside the stone
+        text.textSize = g * 3.4f
+        while (text.measureText("R.I.P.") > (r - l) - 4 * g && text.textSize > 6f) text.textSize -= 1f
+        textCentered("R.I.P.", (l + r) / 2, tt + 8.5f * g, text)
         // grass bits on each side
         val grass = Pal.alpha(0xFF6FA84A.toInt(), alpha + 0.1f)
         for (side in listOf(-1f, 1f)) for (k in 0 until 5) {

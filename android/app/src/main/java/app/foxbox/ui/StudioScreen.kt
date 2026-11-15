@@ -304,9 +304,9 @@ class DragLayer(c: Context) : PixelView(c) {
 
     override fun paint(c: Canvas) {
         val ic = icon ?: return
-        val h = minOf(height / 6f, Px.dp(120f))
+        val h = minOf(height / 3.2f, Px.dp(190f))
         val cx = width / 2f; val bottom = height - Px.dp(8f)
-        stone[0] = cx - h * 0.8f; stone[1] = bottom - h * 1.2f; stone[2] = cx + h * 0.8f; stone[3] = bottom
+        stone[0] = cx - h * 0.6f; stone[1] = bottom - h * 1.1f; stone[2] = cx + h * 0.6f; stone[3] = bottom
         with(Iso) { c.tombstone(cx, bottom, h, overStone(), ripP) }
         c.spriteCentered(ic, x, y - Px.dp(30f), Px.u * 1.4f, alpha = 220)
     }

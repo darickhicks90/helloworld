@@ -25,6 +25,10 @@ class LaunchModel(
     val beat: Int,
     val status: String,
     val canAddChannel: Boolean,
+    /** Shuffle seed: where things lie. */
+    val seed: Int = 0,
+    /** A line of poetry and its poet, shown at the top while set. */
+    val quote: Pair<String, String>? = null,
 ) {
     class Box(val id: String, val name: String, val block: String, val accent: Int, val queued: Boolean, val playing: Boolean, val muted: Boolean, val volume: Float)
     class Channel(val ch: Int, val name: String, val accent: Int, val armed: Boolean, val takes: List<Box>)
@@ -40,6 +44,8 @@ class LaunchModel(
 object ClipField {
     const val K_CLIP = 0; const val K_TAKE = 1; const val K_FLOWER = 2; const val K_CHANNEL = 3
     const val K_PLAY = 4; const val K_STOP = 5; const val K_REC = 6; const val K_BACK = 7; const val K_PLUS = 8
+    const val K_SHUFFLE = 9; const val K_POEM = 10
+    const val POEM_ID = "poem-stone"
     /** Daisy-chain tracer colours: red, yellow, blue. */
     val CHAIN = intArrayOf(0xFFE0533F.toInt(), 0xFFF0C23B.toInt(), 0xFF4A8FD8.toInt())
     private const val BLACK = 0xF20B0B0B.toInt()
@@ -63,7 +69,8 @@ object ClipField {
     private val spots = HashMap<String, Spot>()
     private var spotSig = ""
 
-    private fun hash(s: String, k: Int): Float { var x = s.hashCode() * 31 + k * 977; x = x xor (x ushr 13); x *= 0x5bd1e995; x = x xor (x ushr 15); return Math.floorMod(x, 10000) / 10000f }
+    private var seed = 0
+    private fun hash(s: String, k: Int): Float { var x = (s.hashCode() xor (seed * 0x27d4eb2d)) * 31 + k * 977; x = x xor (x ushr 13); x *= 0x5bd1e995; x = x xor (x ushr 15); return Math.floorMod(x, 10000) / 10000f }
 
     fun box(c: Canvas, l: Float, t: Float, r: Float, b: Float, alpha: Float = 1f, edge: Int = EDGE) {
         val a = (alpha.coerceIn(0f, 1f) * 255).toInt()
@@ -104,24 +111,45 @@ object ClipField {
         val recLit = m.audioRec == Transport.Rec.RECORDING || ((m.audioRec == Transport.Rec.ARMED || m.armedAny) && blink)
         top("rec", K_REC, if (m.audioRec == Transport.Rec.ARMED) "● ${m.beat}" else "● Rec", Px.dp(96f), 0xFFFF4A3A.toInt(), recLit)
         if (m.canAddChannel) top("plus", K_PLUS, "+ Audio", Px.dp(96f), WHITE)
+        top("shuffle", K_SHUFFLE, "⤨ Shuffle", Px.dp(110f), WHITE)
         val sr = w - pad
         if (sr - x > Px.dp(80f)) {
             box(c, x, pad, sr, pad + topH, 0.85f)
             label(c, m.status, (x + sr) / 2, pad + topH / 2, txt, WHITE, sr - x - Px.dp(16f))
         }
 
-        // ---- the garden strip and audio rows along the bottom; clips get the rest
-        val gardenH = h * 0.17f
+        // ---- audio rows along the bottom; everything else is scattered over the grass above
         val rowH = Px.dp(36f); val rowGap = Px.dp(5f)
         val audioH = if (m.channels.isEmpty()) 0f else m.channels.size * (rowH + rowGap)
-        val audioTop = h - gardenH - audioH
-        val fieldTop = pad + topH + Px.dp(10f); val fieldBottom = audioTop - Px.dp(8f)
+        val audioTop = h - pad - audioH
+        val fieldTop = pad + topH + Px.dp(10f); val fieldBottom = h - pad
+        // the audio rows' corner is kept clear; the grass beside them is fair game
+        val audioRect = if (audioH > 0f) floatArrayOf(0f, audioTop - Px.dp(8f), w * 0.58f, h) else null
+        val items = ArrayList<Triple<String, Float, Float>>()
+        m.clips.forEach { items += Triple(it.id, Px.dp(124f + hash(it.id, 1) * 40f), Px.dp(46f + hash(it.id, 2) * 10f)) }
+        m.flowers.forEach { items += Triple(it.id, Px.dp(66f), Px.dp(108f)) }
+        items += Triple(POEM_ID, Px.dp(128f), Px.dp(96f))
+        val sig = "${w.toInt()}x${h.toInt()}:${audioTop.toInt()}:${m.seed}:" + items.joinToString(",") { it.first }
+        if (sig != spotSig) { seed = m.seed; place(items, pad, fieldTop, w - pad, fieldBottom, audioRect); spotSig = sig }
 
-        // ---- MIDI clips: scattered, irregular, each keeps its spot
-        val sig = "${w.toInt()}x${h.toInt()}:${fieldBottom.toInt()}:" + m.clips.joinToString(",") { it.id }
-        if (sig != spotSig) { place(m.clips, pad, fieldTop, w - pad, fieldBottom); spotSig = sig }
-        for (b in m.clips) {
-            val s = spots[b.id] ?: continue
+        // the poetry stone
+        spots[POEM_ID]?.let { sp ->
+            PoemStone.draw(c, sp.x, sp.y, sp.w, sp.h, Px.u * 0.4f)
+            hits += Hit(POEM_ID, K_POEM, sp.x, sp.y, sp.x + sp.w, sp.y + sp.h)
+        }
+        // flowers growing in the grass, with blades in front of their stems
+        for (f in m.flowers) {
+            val sp = spots[f.id] ?: continue
+            val fx = sp.x + sp.w / 2; val fy = sp.y + sp.h * 0.24f
+            c.flower(fx, fy, 1.45f, f.bloom, f.variant, time, f.chain >= 0 && m.playing)
+            Grass.tuft(c, fx, sp.y + sp.h, Px.u * 0.5f, f.id.hashCode())
+            if (f.chain >= 0) c.fill(fx - Px.dp(10f), sp.y + sp.h + Px.dp(2f), fx + Px.dp(10f), sp.y + sp.h + Px.dp(5f), CHAIN[f.chain])
+            if (selected == f.id) { box(c, fx - Px.dp(44f), sp.y + sp.h + Px.dp(7f), fx + Px.dp(44f), sp.y + sp.h + Px.dp(25f), 0.9f); label(c, f.name, fx, sp.y + sp.h + Px.dp(16f), sub, WHITE, Px.dp(80f)) }
+            hits += Hit(f.id, K_FLOWER, sp.x, sp.y, sp.x + sp.w, sp.y + sp.h)
+        }
+
+        // ---- MIDI clips: scattered, irregular, each keeps its spot until you shuffle
+        for (b in m.clips) {            val s = spots[b.id] ?: continue
             val alpha = if (b.muted) 0.35f else 0.45f + 0.55f * b.volume
             val pulse = if (b.playing && blink) 1f else 0f
             c.save(); c.rotate(s.tilt, s.x + s.w / 2, s.y + s.h / 2)
@@ -160,50 +188,58 @@ object ClipField {
             if (ch.takes.isEmpty()) label(c, "arm it, then ● Rec", tx + Px.dp(70f), t + rowH / 2, sub, GREY, Px.dp(140f))
         }
 
-        // ---- the garden: planted flowers in the grass
-        val gy = h - gardenH
-        for ((i, f) in m.flowers.take(5).withIndex()) {
-            val fx = w * (0.2f + i * 0.15f); val fy = gy + gardenH * 0.32f
-            c.flower(fx, fy, 1.2f, f.bloom, f.variant, time, f.chain >= 0 && m.playing)
-            if (f.chain >= 0) c.fill(fx - Px.dp(8f), h - Px.dp(5f), fx + Px.dp(8f), h - Px.dp(2f), CHAIN[f.chain])
-            hits += Hit(f.id, K_FLOWER, fx - Px.dp(26f), fy - Px.dp(26f), fx + Px.dp(26f), h)
-        }
-        if (m.flowers.isEmpty()) { box(c, w / 2 - Px.dp(200f), gy + gardenH / 2 - Px.dp(14f), w / 2 + Px.dp(200f), gy + gardenH / 2 + Px.dp(14f), 0.8f); label(c, "Plant flowers on the Flowers page to make daisy chains", w / 2, gy + gardenH / 2, sub, WHITE, Px.dp(390f)) }
-
         // ---- daisy chains
         for ((k, path) in m.chains.withIndex()) tracer(c, path.map { floatArrayOf(it[0] * w, it[1] * h) }, CHAIN[k % 3], Px.u * 0.8f, time)
+        // ---- a line of poetry from the stone, in white across the top
+        m.quote?.let { (line, poet) ->
+            val qt = pad + topH + Px.dp(6f)
+            box(c, pad, qt, w - pad, qt + Px.dp(40f), 0.9f)
+            label(c, line.replace(" / ", "  ·  "), w / 2, qt + Px.dp(14f), txt, WHITE, w - pad * 4)
+            label(c, "— $poet", w / 2, qt + Px.dp(31f), sub, WHITE, w - pad * 4)
+        }
+
     }
 
-    /** Scatter boxes across the field without overlaps; earlier clips keep their places. */
-    private fun place(clips: List<LaunchModel.Box>, l: Float, t: Float, r: Float, b: Float) {
+    /**
+     * Scatter items over the field: for each one, try many random spots and
+     * keep the one furthest from everything already placed (spread out, but
+     * random), never overlapping when there's room. Same seed, same layout.
+     */
+    private fun place(items: List<Triple<String, Float, Float>>, l: Float, t: Float, r: Float, b: Float, keepClear: FloatArray?) {
         spots.clear()
         val placed = ArrayList<FloatArray>()
-        val gap = Px.dp(10f)
-        for (cl in clips) {
-            val bw = Px.dp(124f + hash(cl.id, 1) * 40f); val bh = Px.dp(46f + hash(cl.id, 2) * 10f)
-            fun free(cand: FloatArray) = placed.none { it[0] < cand[2] + gap && cand[0] < it[2] + gap && it[1] < cand[3] + gap && cand[1] < it[3] + gap }
-            fun overlap(cand: FloatArray) = placed.sumOf { (maxOf(0f, minOf(it[2], cand[2]) - maxOf(it[0], cand[0])) * maxOf(0f, minOf(it[3], cand[3]) - maxOf(it[1], cand[1]))).toDouble() }
-            var best: FloatArray? = null
-            // a random spot first (so the layout looks scattered), then any free spot, then the least crowded one
-            for (k in 0 until 60) {
-                val x = l + hash(cl.id, 10 + k) * (r - l - bw).coerceAtLeast(1f)
-                val y = t + hash(cl.id, 90 + k) * (b - t - bh).coerceAtLeast(1f)
-                val cand = floatArrayOf(x, y, x + bw, y + bh)
-                if (free(cand)) { best = cand; break }
-                if (best == null || overlap(cand) < overlap(best)) best = cand
+        val blocked = listOfNotNull(keepClear)
+        val gap = Px.dp(12f)
+        for ((id, bw, bh) in items) {
+            fun free(cd: FloatArray) = (placed + blocked).none { it[0] < cd[2] + gap && cd[0] < it[2] + gap && it[1] < cd[3] + gap && cd[1] < it[3] + gap }
+            fun clearance(cd: FloatArray): Float {
+                var best = Float.MAX_VALUE
+                val cx = (cd[0] + cd[2]) / 2; val cy = (cd[1] + cd[3]) / 2
+                for (p in placed) best = minOf(best, hypot(cx - (p[0] + p[2]) / 2, cy - (p[1] + p[3]) / 2))
+                // the field's edges count too, so things don't hug them
+                best = minOf(best, (cx - l) * 1.6f, (r - cx) * 1.6f, (cy - t) * 1.6f, (b - cy) * 1.6f)
+                return best
+            }
+            var best: FloatArray? = null; var bestScore = -1f
+            for (k in 0 until 40) {
+                val x = l + hash(id, 10 + k) * (r - l - bw).coerceAtLeast(1f)
+                val y = t + hash(id, 90 + k) * (b - t - bh).coerceAtLeast(1f)
+                val cd = floatArrayOf(x, y, x + bw, y + bh)
+                val score = clearance(cd) + if (free(cd)) 100000f else 0f
+                if (score > bestScore) { best = cd; bestScore = score }
             }
             if (best != null && !free(best)) {
                 val step = Px.dp(12f)
                 var y = t
                 search@ while (y + bh <= b) {
-                    var x = l + hash(cl.id, 7) * step * 4
-                    while (x + bw <= r) { val cand = floatArrayOf(x, y, x + bw, y + bh); if (free(cand)) { best = cand; break@search }; x += step }
+                    var x = l
+                    while (x + bw <= r) { val cd = floatArrayOf(x, y, x + bw, y + bh); if (free(cd)) { best = cd; break@search }; x += step }
                     y += step
                 }
             }
             val s = best ?: continue
             placed += s
-            spots[cl.id] = Spot(s[0], s[1], bw, bh, (hash(cl.id, 3) - 0.5f) * 7f)
+            spots[id] = Spot(s[0], s[1], bw, bh, if (id.length == 8) (hash(id, 3) - 0.5f) * 7f else 0f)
         }
     }
 
@@ -248,6 +284,8 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
     private val small = Px.text(10f, 0xFFFFFFFF.toInt())
 
     init { animated = true }
+    private var poem: Pair<String, String>? = null
+    private var poemAt = 0L
 
     private fun model(): LaunchModel {
         val t = Audio.transport
@@ -270,7 +308,8 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
             clips.isEmpty() && channels.isEmpty() -> "Record clips in the studio, or tap + Audio"
             else -> "Tap clips to queue them, then ▶ Play"
         }
-        return LaunchModel(clips, channels, flowers, chains, t.playing, Studio.sceneQueued, Studio.armed.any { it }, t.audioRec, (t.beat + 1).toInt(), status, p.planes.any { !it })
+        val q = poem.takeIf { System.currentTimeMillis() - poemAt < 20_000 }
+        return LaunchModel(clips, channels, flowers, chains, t.playing, Studio.sceneQueued, Studio.armed.any { it }, t.audioRec, (t.beat + 1).toInt(), status, p.planes.any { !it }, p.layoutSeed, q)
     }
 
     override fun paint(c: Canvas) {
@@ -279,8 +318,8 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
         ClipField.draw(c, w, h, model(), time, selected, hits)
         drawFader(c, w, h)
         if (burying != null) {
-            val sh = minOf(h / 6f, Px.dp(120f))
-            stone[0] = w / 2 - sh * 0.8f; stone[1] = h - Px.dp(8f) - sh * 1.2f; stone[2] = w / 2 + sh * 0.8f; stone[3] = h - Px.dp(8f)
+            val sh = minOf(h / 3.2f, Px.dp(190f))
+            stone[0] = w / 2 - sh * 0.6f; stone[1] = h - Px.dp(8f) - sh * 1.1f; stone[2] = w / 2 + sh * 0.6f; stone[3] = h - Px.dp(8f)
             with(Iso) { c.tombstone(w / 2, h - Px.dp(8f), sh, overStone(), ripP) }
             c.dot(curX - Px.u, curY - Px.u, 0xFFFFFFFF.toInt(), 3)
         }
@@ -405,6 +444,8 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
             ClipField.K_STOP -> Studio.stopScene()
             ClipField.K_REC -> Studio.recordAudio()
             ClipField.K_PLUS -> Studio.addPlane()
+            ClipField.K_SHUFFLE -> { selected = null; Studio.shuffleLayout() }
+            ClipField.K_POEM -> { poem = Poems.random(); poemAt = System.currentTimeMillis() }
             ClipField.K_CHANNEL -> Studio.toggleArm(hh.id.toInt())
             else -> {
                 val now = System.currentTimeMillis()

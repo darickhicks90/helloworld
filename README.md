@@ -62,10 +62,14 @@ clip launcher.
    to work in the clip launcher.
 7. **The clip launcher** is where you perform (the button under Flowers on
    the rail):
-   - Plain black boxes with white text over close-up, retro-game-style
+   - Plain black boxes with white text over detailed, retro-game-style
      grass.
-   - MIDI clips are scattered irregularly around the screen, and each keeps
-     its place. A small coloured square shows which block it belongs to.
+   - MIDI clips, planted flowers and a mossy poetry stone are spread out
+     at random over the grass. Each keeps its place until you tap
+     **⤨ Shuffle**, which deals everything out to new spots. A small
+     coloured square shows which block a clip belongs to.
+   - Tap the **poetry stone** for a line of Romantic poetry across the top
+     of the screen.
    - Audio takes sit in tidy rows, one row per channel.
    - **Tap** a box to queue it and select it. A **fader** appears: drag it
      for volume (the box fades with it). **Double-tap** to mute.
@@ -76,7 +80,7 @@ clip launcher.
    - Takes are rounded to whole bars and each channel holds up to
      **6 minutes**. Latency is compensated automatically; fine-tune it with
      **Recording offset**.
-   - **Daisy chains:** planted flowers grow along the bottom. Drag a line
+   - **Daisy chains:** planted flowers grow in the grass. Drag a line
      from one through any boxes: they all go through that flower's effects.
      Up to 3 chains, traced in red, yellow and blue. Double-tap a flower to
      undo its chain; select it for a **bloom** fader.

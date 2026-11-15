@@ -59,6 +59,8 @@ class Project(val dir: File) {
     val chains = mutableListOf<DaisyChain>()
     val flowers = mutableListOf<Flower>()
     var engineState = JSONObject()
+    /** Seed for where things lie on the clip launcher (Shuffle picks a new one). */
+    var layoutSeed = 0
 
     val samplesDir get() = File(dir, "samples")
     val midiDir get() = File(dir, "midi")
@@ -76,7 +78,7 @@ class Project(val dir: File) {
         put("queued", JSONArray(queued.toList()))
         put("chains", JSONArray().apply { chains.forEach { put(it.toJson()) } })
         put("flowers", JSONArray().apply { flowers.forEach { put(it.toJson()) } })
-        put("engines", engineState)
+        put("engines", engineState); put("layoutSeed", layoutSeed)
     }
 
     fun fromJson(o: JSONObject) {
@@ -97,6 +99,7 @@ class Project(val dir: File) {
         chains.clear(); o.optJSONArray("chains")?.let { a -> for (i in 0 until minOf(3, a.length())) chains += DaisyChain.fromJson(a.getJSONObject(i)) }
         flowers.clear(); o.optJSONArray("flowers")?.let { a -> for (i in 0 until a.length()) flowers += Flower.fromJson(a.getJSONObject(i)) }
         engineState = o.optJSONObject("engines") ?: JSONObject()
+        layoutSeed = o.optInt("layoutSeed")
     }
 
     /** Capture every block's params + extra state. */

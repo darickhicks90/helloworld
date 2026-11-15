@@ -42,19 +42,20 @@ object Grass {
         // dark mottled ground between the roots
         repeat(cw * ch / 40) { put(rnd.nextInt(cw), rnd.nextInt(ch), if (rnd.nextBoolean()) 0xFF1B2A12.toInt() else 0xFF0E170A.toInt()) }
         for ((li, tones) in LAYERS.withIndex()) {
-            val count = (cw * ch / 520) * (6 - li) / 3 + 40
-            val scale = 0.55f + li * 0.22f
+            // a little further back than before: shorter, finer, denser blades
+            val count = (cw * ch / 260) * (6 - li) / 3 + 80
+            val scale = 0.55f + li * 0.18f
             repeat(count) {
                 val x0 = rnd.nextFloat() * (cw + 20) - 10
-                val root = rnd.nextFloat() * (ch + ch * 0.35f)
-                val len = (ch * (0.18f + rnd.nextFloat() * 0.28f) * scale).coerceAtLeast(6f)
-                val bend = (rnd.nextFloat() - 0.5f) * len * 0.9f
-                val wid = (1.2f + rnd.nextFloat() * 1.8f) * scale
+                val root = rnd.nextFloat() * (ch + ch * 0.2f)
+                val len = (ch * (0.07f + rnd.nextFloat() * 0.12f) * scale).coerceAtLeast(5f)
+                val bend = (rnd.nextFloat() - 0.5f) * len * 0.8f
+                val wid = (0.8f + rnd.nextFloat() * 1.1f) * scale
                 blade(::put, x0, root, len, bend, wid, tones, rnd)
             }
             // clover and seed heads tucked in the middle layers
-            if (li == 2 || li == 3) repeat(cw * ch / 9000 + 3) { clover(::put, rnd.nextInt(cw), rnd.nextInt(ch), tones, rnd) }
-            if (li == 3) repeat(cw * ch / 14000 + 2) { seedHead(::put, rnd.nextInt(cw), rnd.nextInt(ch), rnd) }
+            if (li == 2 || li == 3) repeat(cw * ch / 5000 + 4) { clover(::put, rnd.nextInt(cw), rnd.nextInt(ch), tones, rnd) }
+            if (li == 3) repeat(cw * ch / 9000 + 3) { seedHead(::put, rnd.nextInt(cw), rnd.nextInt(ch), rnd) }
         }
         // a few fallen petals and a ladybird, for life
         repeat(cw * ch / 16000 + 2) { val x = rnd.nextInt(cw); val y = rnd.nextInt(ch); put(x, y, 0xFFF4E8D0.toInt()); put(x + 1, y, 0xFFE9D9BC.toInt()) }
@@ -88,6 +89,25 @@ object Grass {
             if (r - l >= 2 && s % 3 == 0 && f in 0.2f..0.8f) put(Math.round(x), y.toInt(), t[2])
         }
         if (rnd.nextInt(7) == 0) put(Math.round(x0 + bend), (root - steps).toInt(), t[3])
+    }
+
+    /** A tuft of blades drawn in front of something so it looks rooted in the grass (cell = pixel size). */
+    fun tuft(c: Canvas, x: Float, y: Float, cell: Float, seed: Int) {
+        val rnd = Random(seed)
+        val t = LAYERS[4]
+        repeat(14) {
+            val bx = x + (rnd.nextFloat() - 0.5f) * cell * 18
+            val len = 6 + rnd.nextInt(9)
+            val bend = (rnd.nextFloat() - 0.5f) * len * 0.8f
+            val w = if (rnd.nextInt(3) == 0) 1 else 0
+            for (s in 0..len) {
+                val f = s / len.toFloat()
+                val px = Math.round((bx / cell) + bend * f * f) * cell
+                val py = Math.round(y / cell - s) * cell
+                val col = when { f > 0.8f -> t[3]; it % 2 == 0 -> t[2]; else -> t[1] }
+                c.fill(px, py, px + cell * (1 + if (f < 0.5f) w else 0), py + cell, col)
+            }
+        }
     }
 
     private fun clover(put: (Int, Int, Int) -> Unit, x: Int, y: Int, t: IntArray, rnd: Random) {

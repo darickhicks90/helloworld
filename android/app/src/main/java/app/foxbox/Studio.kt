@@ -521,6 +521,9 @@ object Studio : Transport.Listener, MidiInput.Sink {
         Audio.post { rack.chains = chains; rack.blockRoute = routes; rack.channelRoute = channel }
     }
 
+    /** Shuffle: everything on the clip launcher moves to new spots. */
+    fun shuffleLayout() { project.layoutSeed = kotlin.random.Random.nextInt(1, 1_000_000); save(); changed() }
+
     val sceneQueued get() = t.queuedAt >= 0
 
     /** The roof: play what's queued. Starts now if stopped, or when the current loop comes round. */

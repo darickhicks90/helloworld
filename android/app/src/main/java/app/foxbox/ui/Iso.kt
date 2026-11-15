@@ -14,7 +14,8 @@ import kotlin.math.sqrt
  * `g` is the size of one art pixel in screen pixels.
  */
 object Iso {
-    const val INK = 0xFF2A1C16.toInt()
+    /** Outlines are warm dark brown, like the XY pad sprites. */
+    const val INK = 0xFF3D2414.toInt()
     private val paint = Paint().apply { isAntiAlias = false; style = Paint.Style.FILL }
     private val path = Path()
 
@@ -100,7 +101,7 @@ object Iso {
     fun box(base: Int) = Box(lighten(base, 0.22f), darken(base, 0.28f), base)
 
     /** Soft shadow on the ground under an object. */
-    fun Canvas.shadow(cx: Float, cy: Float, r: Float, g: Float) = disc(cx, cy, r, g, Pal.alpha(0xFF1E3A22.toInt(), 0.28f), 0.45f)
+    fun Canvas.shadow(cx: Float, cy: Float, r: Float, g: Float) = disc(cx, cy, r, g, Pal.alpha(0xFF2C5A30.toInt(), 0.28f), 0.45f)
 
     /** Draws in art pixels relative to (cx, by): x to the right, y up is negative. Front-facing 3/4 view, SNES RPG style. */
     class Pen(val c: Canvas, cx: Float, by: Float, val g: Float) {
@@ -134,23 +135,24 @@ object Iso {
 
     // ------------------------------------------------------------------ palettes (variants)
 
+    // Everything below uses the XY pads' palette: cream, aqua, sun, orange, warm greens and brown.
     private val CLOUDS = listOf(
-        intArrayOf(0xFFFFFBF2.toInt(), 0xFFE9E2D2.toInt(), 0xFFB9C9C6.toInt()),
-        intArrayOf(0xFFFFF0E0.toInt(), 0xFFF3CFB0.toInt(), 0xFFD89A7A.toInt()),
-        intArrayOf(0xFFEEF3F6.toInt(), 0xFFC9D5DE.toInt(), 0xFF8EA1B3.toInt()),
-        intArrayOf(0xFFFFF6D8.toInt(), 0xFFF2DFA2.toInt(), 0xFFC9A860.toInt()),
+        intArrayOf(0xFFFFFDF5.toInt(), 0xFFF7EFDC.toInt(), 0xFF8FD9D1.toInt(), 0xFF22706B.toInt()),
+        intArrayOf(0xFFFFF1DE.toInt(), 0xFFF6C9A4.toInt(), 0xFFF4A259.toInt(), 0xFFB8521B.toInt()),
+        intArrayOf(0xFFFFFDF5.toInt(), 0xFFDAF0E4.toInt(), 0xFF8FD9D1.toInt(), 0xFF22706B.toInt()),
+        intArrayOf(0xFFFFF7D6.toInt(), 0xFFF3DE96.toInt(), 0xFFF6C26B.toInt(), 0xFFB8822A.toInt()),
     )
-    private val HULLS = listOf(0xFFB8521B.toInt(), 0xFF3F8C86.toInt(), 0xFFEDE3CC.toInt(), 0xFF7A4A2A.toInt())
+    private val HULLS = listOf(0xFFB8521B.toInt(), 0xFF22706B.toInt(), 0xFFF7EFDC.toInt(), 0xFF7A4A2A.toInt())
     private val TREES = listOf(
-        intArrayOf(0xFF8DBF5A.toInt(), 0xFF5E9444.toInt(), 0xFF35663A.toInt()),
-        intArrayOf(0xFFF2A95A.toInt(), 0xFFD9772E.toInt(), 0xFF9C4A1E.toInt()),
-        intArrayOf(0xFFF6C9D2.toInt(), 0xFFE39AAE.toInt(), 0xFFB0677E.toInt()),
-        intArrayOf(0xFFB7C76A.toInt(), 0xFF7E944A.toInt(), 0xFF4D6234.toInt()),
+        intArrayOf(0xFFA9CF6A.toInt(), 0xFF6FA84A.toInt(), 0xFF3F7A3A.toInt()),
+        intArrayOf(0xFFF4A259.toInt(), 0xFFE8742C.toInt(), 0xFFB8521B.toInt()),
+        intArrayOf(0xFFF2A0B0.toInt(), 0xFFD9786A.toInt(), 0xFFA8584E.toInt()),
+        intArrayOf(0xFFF6C26B.toInt(), 0xFFD9A03A.toInt(), 0xFF9C6A22.toInt()),
     )
-    private val CAPS = listOf(0xFFC2552E.toInt(), 0xFF8A5A34.toInt(), 0xFF4E9C95.toInt(), 0xFFB9718F.toInt())
-    private val HIVES = listOf(0xFFF1E6CC.toInt(), 0xFFE2B455.toInt(), 0xFF7FC2BA.toInt(), 0xFFB98C5E.toInt())
-    private val TRUCKS = listOf(0xFFE8742C.toInt(), 0xFF3FB8AF.toInt(), 0xFFEDE3CC.toInt(), 0xFF9C4A2A.toInt())
-    val PLANES = intArrayOf(0xFFD8473A.toInt(), 0xFFF0C23B.toInt(), 0xFF3F7FCF.toInt())
+    private val CAPS = listOf(0xFFE8742C.toInt(), 0xFFB8521B.toInt(), 0xFF3FB8AF.toInt(), 0xFFD9786A.toInt())
+    private val HIVES = listOf(0xFFF7EFDC.toInt(), 0xFFD9A03A.toInt(), 0xFF8FD9D1.toInt(), 0xFFF4A259.toInt())
+    private val TRUCKS = listOf(0xFFE8742C.toInt(), 0xFF3FB8AF.toInt(), 0xFFF7EFDC.toInt(), 0xFFA8774C.toInt())
+    val PLANES = intArrayOf(0xFFD9605A.toInt(), 0xFFF0B84A.toInt(), 0xFF4A8FC8.toInt())
 
     // ------------------------------------------------------------------ Gusts: cloud
 
@@ -160,6 +162,8 @@ object Iso {
         val puffs = floatArrayOf(-7f, 1f, 5f, -2f, -3f, 7f, 3f, -4f, 7f, 7f, 0f, 6f, 12f, 2f, 4.5f)
         // underside shade, body, then a highlight on each puff
         var i = 0
+        while (i < puffs.size) { disc(cx + puffs[i] * g + drift, cy + puffs[i + 1] * g + g * 1.5f, puffs[i + 2] + 1, g, p[3], 0.75f); disc(cx + puffs[i] * g + drift, cy + puffs[i + 1] * g - g, puffs[i + 2] + 1, g, p[3], 0.75f); i += 3 }
+        i = 0
         while (i < puffs.size) { disc(cx + puffs[i] * g + drift, cy + puffs[i + 1] * g + g * 1.5f, puffs[i + 2], g, p[2], 0.75f); i += 3 }
         i = 0
         while (i < puffs.size) { disc(cx + puffs[i] * g + drift, cy + puffs[i + 1] * g, puffs[i + 2], g, p[1], 0.75f); i += 3 }
@@ -256,8 +260,8 @@ object Iso {
             pn.r(-2f, y0 - 3, 2f, y0 - 2, darken(col, 0.5f))
         }
         val y1 = -2f - stories * 5
-        pn.o(-7f, y1 - 2, 7f, y1, 0xFF8C8F93.toInt())
-        pn.o(-7f, y1 - 5, 7f, y1 - 2, 0xFFB9BCC0.toInt())
+        pn.o(-7f, y1 - 2, 7f, y1, 0xFFA8774C.toInt())
+        pn.o(-7f, y1 - 5, 7f, y1 - 2, 0xFFECDCB9.toInt())
         pn.r(-3f, -3f, 3f, -2f, INK)
         if (active) for (k in 0 until 6) {
             val a = t * (2f + k * 0.3f) + k
@@ -277,16 +281,16 @@ object Iso {
         pn.o(1f, -10f, 16f, -4f, body); pn.r(1f, -10f, 16f, -9f, light)
         pn.r(2f, -12f, 15f, -10f, darken(body, 0.55f))                      // the open bed, seen from above
         pn.o(-6f, -18f, 2f, -4f, body); pn.r(-6f, -18f, 2f, -17f, light)    // cab
-        pn.o(-5f, -16f, 1f, -11f, 0xFF9FD3DC.toInt()); pn.r(-4f, -15f, -3f, -12f, 0xFFF2FAFB.toInt())
+        pn.o(-5f, -16f, 1f, -11f, 0xFF8FD9D1.toInt()); pn.r(-4f, -15f, -3f, -12f, 0xFFF2FAFB.toInt())
         pn.o(-15f, -10f, -6f, -4f, body); pn.r(-15f, -10f, -6f, -9f, light) // hood
         pn.r(-15f, -6f, 16f, -4f, dark)
         pn.r(-15f, -9f, -13f, -7f, 0xFFFFF4C8.toInt())                     // headlight
         pn.r(-1f, -9f, 0f, -8f, dark)
-        pn.o(-16f, -5f, -13f, -3f, 0xFFB9BCC0.toInt()); pn.o(15f, -5f, 17f, -3f, 0xFFB9BCC0.toInt())
-        for (x in listOf(-9f, 9f)) { pn.d(x, -3f, 3.5f, INK); pn.d(x, -3f, 2.5f, 0xFF3A3A3A.toInt()); pn.d(x, -3f, 1.1f, 0xFFC9CCD0.toInt()) }
+        pn.o(-16f, -5f, -13f, -3f, 0xFFECDCB9.toInt()); pn.o(15f, -5f, 17f, -3f, 0xFFECDCB9.toInt())
+        for (x in listOf(-9f, 9f)) { pn.d(x, -3f, 3.5f, INK); pn.d(x, -3f, 2.5f, 0xFF5A4030.toInt()); pn.d(x, -3f, 1.1f, 0xFFECDCB9.toInt()) }
         if (active) for (k in 0 until 3) {
             val ph = (t * 1.2f + k * 0.33f) % 1f
-            pn.d(18f + ph * 6, -4f - ph * 5, 1f + ph * 2f, Pal.alpha(0xFFDDD6CA.toInt(), 1 - ph))
+            pn.d(18f + ph * 6, -4f - ph * 5, 1f + ph * 2f, Pal.alpha(0xFFF7EFDC.toInt(), 1 - ph))
         }
     }
 
@@ -296,17 +300,17 @@ object Iso {
         shadow(cx, cy, 16f, g)
         val pn = Pen(this, cx, cy, g)
         val logs = 0xFF8A5A36.toInt()
-        pn.o(6f, -27f, 9f, -18f, 0xFF8C8F93.toInt()); pn.r(6f, -27f, 9f, -26f, 0xFFB9BCC0.toInt())
+        pn.o(6f, -27f, 9f, -18f, 0xFFA8774C.toInt()); pn.r(6f, -27f, 9f, -26f, 0xFFECDCB9.toInt())
         pn.o(-13f, -11f, 13f, 0f, logs)
         for (y in listOf(-9f, -6f, -3f)) pn.r(-13f, y, 13f, y + 1, darken(logs, 0.35f))
         pn.r(11f, -11f, 13f, 0f, darken(logs, 0.2f))
-        pn.house(0f, 26f, 0f, 11f, logs, 0xFF6E3F2A.toInt(), -11f)
+        pn.house(0f, 26f, 0f, 11f, logs, 0xFFB8521B.toInt(), -11f)
         pn.o(-2f, -7f, 2f, 0f, 0xFF4A2E1A.toInt()); pn.r(1f, -4f, 2f, -3f, 0xFFF6C26B.toInt())
         pn.o(-10f, -8f, -5f, -4f, 0xFFF6C26B.toInt()); pn.r(-8f, -8f, -7f, -4f, 0xFF4A2E1A.toInt())
         pn.o(5f, -8f, 10f, -4f, 0xFFF6C26B.toInt()); pn.r(7f, -8f, 8f, -4f, 0xFF4A2E1A.toInt())
         if (smoke) for (k in 0 until 6) {
             val ph = (t * 0.25f + k / 6f) % 1f
-            pn.d(7.5f + ph * 8 + sin(t + k) * 1.5f, -29f - ph * 18, 1.2f + ph * 2.5f, Pal.alpha(0xFFEDE6DA.toInt(), 0.8f * (1 - ph)))
+            pn.d(7.5f + ph * 8 + sin(t + k) * 1.5f, -29f - ph * 18, 1.2f + ph * 2.5f, Pal.alpha(0xFFF7EFDC.toInt(), 0.8f * (1 - ph)))
         }
     }
 
@@ -327,57 +331,57 @@ object Iso {
         val wood = 0xFF8A5A36.toInt(); val woodL = 0xFFB9875A.toInt()
         val blink = (t * 3).toInt() % 2 == 0
         // cobbled square
-        pn.r(-45f, -47f, 45f, 0f, 0xFFB9A57E.toInt())
+        pn.r(-45f, -47f, 45f, 0f, 0xFFECDCB9.toInt())
         var row = 0
         var y = -46f
-        while (y < -1f) { var x = -44f + (row % 2) * 2; while (x < 44f) { pn.r(x, y, x + 1, y + 1, 0xFFA08C66.toInt()); x += 4 }; y += 2; row++ }
+        while (y < -1f) { var x = -44f + (row % 2) * 2; while (x < 44f) { pn.r(x, y, x + 1, y + 1, 0xFFD9C49C.toInt()); x += 4 }; y += 2; row++ }
         // palisade on three sides
         pn.o(-46f, -51f, 46f, -47f, wood); var px = -46f; while (px <= 46f) { pn.r(px, -52f, px + 1, -51f, woodL); px += 3 }
         pn.o(-48f, -51f, -46f, 0f, wood); pn.o(46f, -51f, 48f, 0f, wood)
         // back row: homes, a well and trees
-        pn.d(-40f, -44f, 4f, 0xFF35663A.toInt()); pn.d(40f, -44f, 4f, 0xFF35663A.toInt())
-        pn.house(-28f, 14f, 7f, 7f, 0xFFF1E6CC.toInt(), 0xFFC2452E.toInt(), -30f)
+        pn.d(-40f, -44f, 4f, 0xFF3F7A3A.toInt()); pn.d(40f, -44f, 4f, 0xFF3F7A3A.toInt())
+        pn.house(-28f, 14f, 7f, 7f, 0xFFF7EFDC.toInt(), 0xFFB8521B.toInt(), -30f)
         pn.o(-30f, -35f, -26f, -30f, 0xFF6E4A2E.toInt())
-        pn.house(28f, 14f, 7f, 7f, 0xFFF1E6CC.toInt(), 0xFF3F6FB0.toInt(), -30f)
+        pn.house(28f, 14f, 7f, 7f, 0xFFF7EFDC.toInt(), 0xFF22706B.toInt(), -30f)
         pn.o(26f, -35f, 30f, -30f, 0xFF6E4A2E.toInt())
-        pn.o(-5f, -36f, 5f, -31f, 0xFF9A958D.toInt()); pn.r(-4f, -35f, 4f, -34f, 0xFF3F7F86.toInt())
-        pn.o(-6f, -43f, -5f, -36f, wood); pn.o(5f, -43f, 6f, -36f, wood); pn.o(-7f, -45f, 7f, -43f, 0xFFC2452E.toInt())
+        pn.o(-5f, -36f, 5f, -31f, 0xFFD2BE9A.toInt()); pn.r(-4f, -35f, 4f, -34f, 0xFF3FB8AF.toInt())
+        pn.o(-6f, -43f, -5f, -36f, wood); pn.o(5f, -43f, 6f, -36f, wood); pn.o(-7f, -45f, 7f, -43f, 0xFFB8521B.toInt())
 
         // ▶ PLAY: a house with a green roof and a play arrow painted on it
         val px0 = VILLAGE_PLAY[0]
-        val roof = if (playing) 0xFF4CC25A.toInt() else if (queued && blink) 0xFF8BE08F.toInt() else 0xFF2E8F45.toInt()
-        pn.house(px0, 18f, 8f, 9f, 0xFFF1E6CC.toInt(), roof, -6f)
+        val roof = if (playing) 0xFF3FB8AF.toInt() else if (queued && blink) 0xFF8FD9D1.toInt() else 0xFF22706B.toInt()
+        pn.house(px0, 18f, 8f, 9f, 0xFFF7EFDC.toInt(), roof, -6f)
         pn.p(0xFFFFFFFF.toInt(), px0 - 3, -22f, px0 - 3, -15f, px0 + 4, -18.5f)
         pn.o(px0 - 2, -11f, px0 + 2, -6f, 0xFF6E4A2E.toInt())
         // ■ STOP: a stone wall with a red plaque
-        pn.o(-10f, -14f, 10f, -2f, 0xFF9A958D.toInt())
-        for (yy in listOf(-11f, -8f, -5f)) pn.r(-10f, yy, 10f, yy + 1, 0xFF6F6A63.toInt())
-        for ((xx, yy) in listOf(-6f to -14f, 2f to -14f, -2f to -11f, 6f to -11f, -6f to -8f, 2f to -8f, -2f to -5f, 6f to -5f)) pn.r(xx, yy, xx + 1, yy + 3, 0xFF6F6A63.toInt())
-        pn.r(-10f, -14f, 10f, -13f, 0xFFC9C4BC.toInt())
-        pn.o(-4f, -12f, 4f, -4f, 0xFFC93A2E.toInt()); pn.r(-2f, -10f, 2f, -6f, 0xFFFFFFFF.toInt())
+        pn.o(-10f, -14f, 10f, -2f, 0xFFD2BE9A.toInt())
+        for (yy in listOf(-11f, -8f, -5f)) pn.r(-10f, yy, 10f, yy + 1, 0xFFA08A6A.toInt())
+        for ((xx, yy) in listOf(-6f to -14f, 2f to -14f, -2f to -11f, 6f to -11f, -6f to -8f, 2f to -8f, -2f to -5f, 6f to -5f)) pn.r(xx, yy, xx + 1, yy + 3, 0xFFA08A6A.toInt())
+        pn.r(-10f, -14f, 10f, -13f, 0xFFEADDC2.toInt())
+        pn.o(-4f, -12f, 4f, -4f, 0xFFD9605A.toInt()); pn.r(-2f, -10f, 2f, -6f, 0xFFFFFFFF.toInt())
         // ● REC: the water tower with a red record light
         val rx = VILLAGE_REC[0]
         for (lx in listOf(rx - 6, rx + 5)) pn.o(lx, -16f, lx + 1, -2f, wood)
         pn.line(rx - 5, -14f, rx + 5, -4f, wood); pn.line(rx + 5, -14f, rx - 5, -4f, wood)
         pn.o(rx - 7f, -28f, rx + 7f, -16f, 0xFF9C6A44.toInt())
         for (yy in listOf(-25f, -21f, -18f)) pn.r(rx - 7f, yy, rx + 7f, yy + 1, 0xFF5A3A22.toInt())
-        pn.po(0xFF6E3F2A.toInt(), rx - 9f, -28f, rx + 9f, -28f, rx, -35f)
+        pn.po(0xFFB8521B.toInt(), rx - 9f, -28f, rx + 9f, -28f, rx, -35f)
         val lit = recording || (armed && blink)
-        pn.d(rx, -22f, 3f, INK); pn.d(rx, -22f, 2.2f, if (lit) 0xFFFF3B30.toInt() else 0xFFA8382E.toInt())
-        if (lit) pn.d(rx, -22f, 5f, Pal.alpha(0xFFFF3B30.toInt(), 0.25f))
+        pn.d(rx, -22f, 3f, INK); pn.d(rx, -22f, 2.2f, if (lit) 0xFFF0503F.toInt() else 0xFFB8521B.toInt())
+        if (lit) pn.d(rx, -22f, 5f, Pal.alpha(0xFFF0503F.toInt(), 0.25f))
         // low picket fence in front, with a gate in the middle
         for (seg in listOf(-46f to -14f, 14f to 46f)) { pn.r(seg.first, -2f, seg.second, -1f, woodL); var k = seg.first; while (k <= seg.second) { pn.o(k, -3f, k + 1, 0f, woodL); k += 4 } }
         // signs: big, painted, impossible to miss
-        sign(pn, VILLAGE_PLAY[0], "▶ PLAY", if (playing) 0xFF4CC25A.toInt() else 0xFFF1E6CC.toInt(), label)
-        sign(pn, VILLAGE_STOP[0], "■ STOP", 0xFFF1E6CC.toInt(), label)
-        sign(pn, VILLAGE_REC[0], "● REC", if (lit) 0xFFFF6B5E.toInt() else 0xFFF1E6CC.toInt(), label)
+        sign(pn, VILLAGE_PLAY[0], "▶ PLAY", if (playing) 0xFF3FB8AF.toInt() else 0xFFF7EFDC.toInt(), label)
+        sign(pn, VILLAGE_STOP[0], "■ STOP", 0xFFF7EFDC.toInt(), label)
+        sign(pn, VILLAGE_REC[0], "● REC", if (lit) 0xFFF28A7A.toInt() else 0xFFF7EFDC.toInt(), label)
     }
 
     private fun sign(pn: Pen, x: Float, text: String, board: Int, label: Paint) {
         pn.o(x - 0.5f, 6f, x + 0.5f, 10f, 0xFF5A3A22.toInt())
         pn.o(x - 10f, 1f, x + 10f, 7f, board)
         pn.r(x - 10f, 1f, x + 10f, 2f, lighten(board, 0.4f))
-        label.color = 0xFF2A1C16.toInt(); label.textAlign = Paint.Align.CENTER
+        label.color = 0xFF3D2414.toInt(); label.textAlign = Paint.Align.CENTER
         pn.c.textCentered(text, pn.ox + x * pn.g, pn.oy + 4.2f * pn.g, label)
     }
 
@@ -402,8 +406,8 @@ object Iso {
             if (prop) r.substring(0, 24) + "PP" else r
         }
         Sprite(rows, mapOf('B' to c, 'b' to darken(c, 0.3f), 'T' to darken(c, 0.2f), 'W' to lighten(c, 0.25f), 'w' to darken(c, 0.1f),
-            's' to 0xFF7A4A2A.toInt(), 'c' to 0xFF2A1C16.toInt(), 'N' to 0xFFC9C3B8.toInt(), 'K' to 0xFF2A1C16.toInt(),
-            'P' to if (frame == 0) 0xFF55504C.toInt() else 0xFFB9B4AC.toInt()), outline = INK)
+            's' to 0xFF7A4A2A.toInt(), 'c' to 0xFF3D2414.toInt(), 'N' to 0xFFECDCB9.toInt(), 'K' to 0xFF3D2414.toInt(),
+            'P' to if (frame == 0) 0xFF7A4A2A.toInt() else 0xFFECDCB9.toInt()), outline = INK)
     }
 
     // ------------------------------------------------------------------ the tombstone
@@ -415,7 +419,7 @@ object Iso {
         val w = 8f; val h = 15f
         val l = snap(cx - w * g, g); val r = snap(cx + w * g, g); val b = snap(bottom - 3 * g, g); val tt = snap(b - h * g, g)
         val stroke = Pal.alpha(0xFFF7EFDC.toInt(), alpha)
-        val inside = Pal.alpha(if (hot) 0xFFB8521B.toInt() else 0xFF2A1C16.toInt(), alpha * 0.45f)
+        val inside = Pal.alpha(if (hot) 0xFFB8521B.toInt() else 0xFF3D2414.toInt(), alpha * 0.45f)
         // body with a rounded top
         fill(l + g, tt + 3 * g, r - g, b, inside)
         disc((l + r) / 2, tt + 4 * g, w - 1, g, inside, 0.5f)
@@ -449,7 +453,7 @@ object Iso {
         listOf("O.O....", "OOO.D..", "WOO.D.W", ".OOO.OW", ".OOOOOO", ".OOOOO.", "...DD.."),
     )
     private val FOX_STARE = listOf("O...O", "OOOOO", "OkOkO", "WOWOW", ".WWW.", ".OOO.", "OOOOO", "OD.DO")
-    private val foxColors = mapOf('O' to 0xFFE8742C.toInt(), 'W' to 0xFFF7EFDC.toInt(), 'D' to 0xFF3D2414.toInt(), 'k' to 0xFF2A1C16.toInt())
+    private val foxColors = mapOf('O' to 0xFFE8742C.toInt(), 'W' to 0xFFF7EFDC.toInt(), 'D' to 0xFF3D2414.toInt(), 'k' to 0xFF3D2414.toInt())
     val foxWalk by lazy { FOX_WALK.map { Sprite(it, foxColors, outline = INK) } }
     val foxSit by lazy { Sprite(FOX_SIT, foxColors, outline = INK) }
     val foxScratch by lazy { FOX_SCRATCH.map { Sprite(it, foxColors, outline = INK) } }
@@ -458,10 +462,10 @@ object Iso {
     // ------------------------------------------------------------------ small icons for the block rail
 
     val iconHive by lazy { Sprite(listOf(".DDDDDDDD.", "DwwwwwwwwD", ".hhhhhhhh.", ".hhhhhhhh.", ".hDDDDDDh.", ".rrrrrrrr.", ".hhhhhhhh.", ".hhh..hhh.", ".BB....BB."), mapOf('h' to 0xFFE2B455.toInt(), 'r' to 0xFFB8822A.toInt())) }
-    val iconTruck by lazy { Sprite(listOf("....OOOO....", "....OaaO....", "OOOOOaaOOOO.", "OOOOOOOOOOOw", "rrrrrrrrrrrr", ".DD.....DD..", ".DD.....DD.."), mapOf('a' to 0xFF9FD3DC.toInt())) }
+    val iconTruck by lazy { Sprite(listOf("....OOOO....", "....OaaO....", "OOOOOaaOOOO.", "OOOOOOOOOOOw", "rrrrrrrrrrrr", ".DD.....DD..", ".DD.....DD.."), mapOf('a' to 0xFF8FD9D1.toInt())) }
     val iconCloud by lazy { Sprite(listOf("...WWW....", "..WWWWW.W.", ".WWWWWWWWW", "WWWWWWWWWW", "aaaaaaaaaa"), outline = Pal.AQUA_D) }
     val iconBoat by lazy { Sprite(listOf("....b.....", "....b.....", "BBBBBBBBBB", ".BrrrrrrB.", "..BBBBBB..", "aaaaaaaaaa"), mapOf('r' to 0xFF5A3A22.toInt())) }
-    val iconTree by lazy { Sprite(listOf("..GGGG..", ".GgGGGG.", "GgGGGGGG", "GGGGGGqG", ".GGGGqG.", "...BB...", "...BB..."), mapOf('q' to 0xFF35663A.toInt())) }
+    val iconTree by lazy { Sprite(listOf("..GGGG..", ".GgGGGG.", "GgGGGGGG", "GGGGGGqG", ".GGGGqG.", "...BB...", "...BB..."), mapOf('q' to 0xFF3F7A3A.toInt())) }
     val iconMushroom by lazy { Sprite(listOf("..rrrr....", ".rOOOOr...", "rOOOOOOr..", "..WW..rr..", "..WW.rOOr.", "..WW..WW..", ".WWWW.WW.."), mapOf('r' to 0xFFB8521B.toInt())) }
     val iconFlower by lazy { Sprite(listOf("..o.o..", ".oOoOo.", "oOOWOOo", ".oOoOo.", "..oGo..", "...G...", "..GG...")) }
     val iconValley by lazy { Sprite(listOf("......aa.....", "....aaaaaa...", "..GGG....GG..", ".GGGGG..GGGG.", "GGgGGGGGGGgGG", "GGGGGGgGGGGGG"), outline = null) }

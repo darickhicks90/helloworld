@@ -72,8 +72,8 @@ Valley.
      | Pickup | pickup trucks |
      | Leaves | trees |
 
-     The art is in a Super Nintendo RPG style, with no faces on the
-     sprites.
+     The art is in a Super Nintendo RPG style, painted in the same
+     palette as the XY pads, with no faces on the sprites.
    - **Tap** a sprite to queue it and select it. A **fader** appears: drag
      it for volume (the sprite fades with it). **Double-tap** to mute.
    - **The walled village in the middle is the transport.** Each part has

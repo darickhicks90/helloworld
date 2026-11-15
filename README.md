@@ -3,7 +3,7 @@
 FoxBox is a music app for Android, built to be played sideways (landscape).
 You **write** loops with up to six **Fox Box Blocks** (instruments), record
 audio takes from a class-compliant interface, then **perform** it all in the
-Valley.
+stones.
 
 ## How it works
 
@@ -16,7 +16,7 @@ Valley.
    - To remove a block, hold its icon until it clicks, then drag it onto the
      **R.I.P.** tombstone. Its clips are kept and come back if you add the
      block again.
-   - **Flowers** (effects) and the **Valley** are always on the rail.
+   - **Flowers** (effects) and the **stones** are always on the rail.
 3. **Melodic blocks** (Gusts, Reflections, Leaves, Bumble) have:
    - an **XY pad**. Tap **X ▾ / Y ▾** to choose what each axis controls. Tap
      **STAY / HOME** to switch modes. **Stay** keeps the values where you
@@ -39,7 +39,7 @@ Valley.
      WAV, sample packs, blocks & add-ons, and preset import
    - **Audio:** output and input device (USB interfaces, headsets, built-in
      mic), sample rate, bit depth and buffer size (defaults 48 kHz, 24-bit,
-     128 frames), which input each biplane records, recording offset, an
+     128 frames), which input each audio channel records, recording offset, an
      **audio test** that suggests the best buffer for your phone, and a
      **troubleshooting wizard**
    - **MIDI:** controllers and roles, Bluetooth pairing, and **mapping with
@@ -58,50 +58,31 @@ Valley.
    - **Gate:** a 16-step pattern with depth, rate, length, swing and smoothing
    - a **Mod Matrix:** 6 slots
 
-   **Audition** hears the flower on everything. **Plant in Valley** puts it
-   to work there.
-7. **The Valley** is where you perform:
-   - Each block's clips live in their own place:
-
-     | Block | Valley sprite |
-     | --- | --- |
-     | Gusts | clouds |
-     | Reflections | rowboats on the pond |
-     | Bumble | stacks of beehive boxes |
-     | Minds | mushroom clusters |
-     | Pickup | pickup trucks |
-     | Leaves | trees |
-
-     The art is in a Super Nintendo RPG style, painted in the same
-     palette as the XY pads, with no faces on the sprites.
-   - **Tap** a sprite to queue it and select it. A **fader** appears: drag
-     it for volume (the sprite fades with it). **Double-tap** to mute.
-   - **The walled village in the middle is the transport.** Each part has
-     a painted sign:
-     - **▶ PLAY**, the green-roofed house, plays the queued scene. It starts
-       when the current loop comes round.
-     - **■ STOP**, the stone wall, stops.
-     - **● REC**, the water tower, counts in two bars and records audio.
-   - **Daisy chains:** drag a line from a planted flower through any clips.
-     Every clip it touches goes through that flower's effects. Up to 3
-     chains, traced in red, yellow and blue. Double-tap a flower to undo
-     its chain, and use its fader to set how much it blooms.
-   - Hold any sprite until it clicks and drag it to **R.I.P.** to lay it to
+   **Audition** hears the flower on everything. **Plant in garden** puts it
+   to work on the stones.
+7. **The stones** are where you perform (the button under Flowers on the
+   rail):
+   - Everything is an etched stone lying in the grass, drawn in a detailed
+     Game Boy Color style.
+   - Each block has a column of clip stones, and each audio channel has a
+     column of take stones.
+   - **Tap** a stone to queue it and select it. A **fader** appears: drag it
+     for volume (the stone fades with it). **Double-tap** to mute.
+   - The top row is the transport: **▶ PLAY** starts the queued stones (when
+     the current loop comes round), **■ STOP** stops, and **● REC** counts in
+     two bars and records the armed audio channels.
+   - **+ AUDIO** adds a channel (red, yellow, blue). Tap a channel's name
+     stone to arm or disarm it; its inlaid gem glows when armed.
+   - Takes are rounded to whole bars so they loop in time. Each channel
+     holds up to **6 minutes**. Latency is compensated automatically;
+     fine-tune it with **Recording offset**.
+   - **Daisy chains:** flowers planted from the Flowers page grow in the
+     garden along the bottom. Drag a line from one through any stones: they
+     all go through that flower's effects. Up to 3 chains, traced in red,
+     yellow and blue. Double-tap a flower to undo its chain; select it to
+     get a **bloom** fader.
+   - Hold a stone until it clicks and drag it to **R.I.P.** to lay it to
      rest.
-   - A very small fox wanders the grass, sits, scratches, and stares back
-     at you. The cabin still has poetry.
-8. **Audio takes (the biplanes):**
-   - Tap **＋** in the sky to add a biplane: **red, yellow, blue**, one mono
-     channel each. Tap a plane to arm or disarm it.
-   - The water tower (or **audio rec**) gives two bars of count-in, then
-     records every armed plane until you tap it again.
-   - Each take becomes a puff of **chemtrail** behind its plane. Takes are
-     rounded to whole bars so they loop in time.
-   - Takes are playable clips: queue, fade, mute, chain and bury them just
-     like the others.
-   - Each plane holds up to **6 minutes** (18 per project).
-   - Latency is compensated automatically. Fine-tune it with
-     **Recording offset**.
 
 ## The blocks
 
@@ -200,7 +181,7 @@ To build it yourself, open `android/` in Android Studio, or run
 
 ```
 MainActivity.kt   screens, dialogs (File, Audio settings/test/wizard, MIDI mapping, presets), files, permissions
-Studio.kt         the controller: project, blocks, routing, chords, recording, audio takes, Valley, undo, MIDI map
+Studio.kt         the controller: project, blocks, routing, chords, recording, audio takes, the stones, undo, MIDI map
 audio/            DSP blocks, parameters, XY pad state, shared envelopes/filter, the audio engine
                   (AAudio via cpp/foxbox_audio.c, AudioTrack fallback)
 blocks/           the block registry (a block HAS an engine; max 6 per session)
@@ -209,7 +190,7 @@ fx/               Flowers: effects + modulation matrix, the rack and the daisy c
 seq/              Transport, clips + MIDI files, audio takes, the shared step sequencer, music theory
 data/             projects, presets, add-ons/packs, WAV files, decoding, audio input, recording
 midi/             USB and Bluetooth MIDI input, CC mapping and MIDI learn
-ui/               pixel-art + isometric art, XY pad, chords & strum, block pages, studio, Valley, projects
+ui/               pixel art, etched stones (GBC style), XY pad, chords & strum, block pages, studio, projects
 ```
 
 The pixel fonts (Press Start 2P and Pixelify Sans, SIL Open Font License)

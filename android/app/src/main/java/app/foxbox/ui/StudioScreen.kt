@@ -96,7 +96,7 @@ class StudioScreen(c: Context, private val host: Host) : FrameLayout(c) {
         val fl = Btn(context, "", Pal.accent(Studio.FLOWERS)).apply { icon = Sprites.icon(Studio.FLOWERS); onClick = { select(Studio.FLOWERS) } }
         tabBtns[Studio.FLOWERS] = fl
         rail.addView(fl, lp(Px.dp(56), 0, 1f))
-        rail.addView(Btn(context, "", Pal.GREEN).apply { icon = Sprites.fox; onClick = { host.showValley() } }, lp(Px.dp(56), 0, 1.2f))
+        rail.addView(Btn(context, "", Pal.GREEN).apply { icon = Iso.iconStones; onClick = { host.showValley() } }, lp(Px.dp(56), 0, 1.2f))
         // Pages of removed blocks are dropped.
         pages.keys.filter { it != Studio.FLOWERS && it !in Studio.project.blocks }.forEach { content.removeView(pages.remove(it)) }
         if (Studio.page !in Studio.pages) select(Studio.pages.first())
@@ -197,9 +197,9 @@ class StudioScreen(c: Context, private val host: Host) : FrameLayout(c) {
         (chips.parent as? android.view.ViewGroup)?.removeView(chips)
         if (Studio.page == Studio.FLOWERS) {
             auditionBtn = Btn(c, "Audition", Pal.AQUA).apply { onClick = { Studio.setAudition(!Studio.auditioning) } }.also { bar(it) }
-            bar(Btn(c, "✿ Plant in Valley", Pal.GREEN).apply { onClick = { Studio.flower?.let { Studio.plantFlower(it) } } })
+            bar(Btn(c, "✿ Plant in garden", Pal.GREEN).apply { onClick = { Studio.flower?.let { Studio.plantFlower(it) } } })
             bar(Btn(c, "+ New flower", Pal.ORANGE).apply { onClick = { Studio.newFlower() } })
-            bar(Btn(c, "Tip: in the Valley, drag a line from a flower through clips", Pal.BROWN))
+            bar(Btn(c, "Tip: on the stones, drag a line from a flower through clips", Pal.BROWN))
             return
         }
         val e = Studio.current

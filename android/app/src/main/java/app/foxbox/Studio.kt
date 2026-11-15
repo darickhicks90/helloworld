@@ -294,9 +294,9 @@ object Studio : Transport.Listener, MidiInput.Sink {
 
     fun addPlane(): Int {
         val ch = project.planes.indexOfFirst { !it }
-        if (ch < 0) { message("All three biplanes are flying"); return -1 }
+        if (ch < 0) { message("All three audio channels are in use"); return -1 }
         project.planes[ch] = true; armed[ch] = true
-        message("${CHANNEL_NAMES[ch]} biplane added and armed: tap the water tower to record")
+        message("${CHANNEL_NAMES[ch]} channel added and armed: tap REC to record")
         save(); changed(); return ch
     }
 
@@ -304,7 +304,7 @@ object Studio : Transport.Listener, MidiInput.Sink {
         project.planes[ch] = false; armed[ch] = false
         val gone = audioClipsOn(ch)
         Audio.post { gone.forEach { t.stopClip(it.id) } }
-        message("${CHANNEL_NAMES[ch]} biplane landed. Its takes come back if you add it again.")
+        message("${CHANNEL_NAMES[ch]} channel removed. Its takes come back if you add it again.")
         syncRack(); save(); changed()
     }
 
@@ -364,7 +364,7 @@ object Studio : Transport.Listener, MidiInput.Sink {
             main.post {
                 project.audioClips += made
                 made.forEach { project.queued += it.id }
-                if (made.isNotEmpty()) message("Recorded " + made.joinToString { it.name } + " (queued in the Valley)")
+                if (made.isNotEmpty()) message("Recorded " + made.joinToString { it.name } + " (queued on the stones)")
                 else message("No audio came in. Check the input in Audio settings.")
                 save(); changed()
             }
@@ -405,9 +405,7 @@ object Studio : Transport.Listener, MidiInput.Sink {
     fun renameClip(c: Clip, name: String) { c.name = name.ifBlank { c.name }; save(); changed() }
 
     fun sendToValley(c: Clip) {
-        if (!c.inValley && valleyClips.count { it.engine == c.engine } >= MAX_CLIPS) return message("${engine(c.engine).title} already has $MAX_CLIPS clips in the Valley")
-        c.inValley = true
-        message("${c.name} is in the Valley"); save(); changed()
+        c.inValley = true; save(); changed()
     }
 
     // ------------------------------------------------------------------ flowers
@@ -436,9 +434,9 @@ object Studio : Transport.Listener, MidiInput.Sink {
     }
 
     fun plantFlower(f: Flower) {
-        if (!f.inValley && project.flowers.count { it.inValley } >= MAX_PLANTED) return message("The Valley has room for $MAX_PLANTED flowers. Remove one first.")
+        if (!f.inValley && project.flowers.count { it.inValley } >= MAX_PLANTED) return message("The garden has room for $MAX_PLANTED flowers. Remove one first.")
         f.inValley = true
-        message("${f.name} is planted in the Valley: drag a line from it through clips to make a daisy chain"); save(); changed()
+        message("${f.name} is planted in the garden: on the stones, drag a line from it through clips to make a daisy chain"); save(); changed()
     }
 
     /** Hear the flower being edited on everything, at full bloom. */
@@ -452,7 +450,7 @@ object Studio : Transport.Listener, MidiInput.Sink {
 
     // ------------------------------------------------------------------ Valley
 
-    val valleyClips get() = project.clips.filter { it.inValley && it.engine in project.blocks }
+    val valleyClips get() = project.clips.filter { it.engine in project.blocks }
     val valleyFlowers get() = project.flowers.filter { it.inValley }
     val valleyTakes get() = project.audioClips.filter { project.planes[it.channel] }
 
@@ -492,7 +490,7 @@ object Studio : Transport.Listener, MidiInput.Sink {
     fun makeChain(flowerId: String, clipIds: List<String>, path: List<FloatArray>) {
         project.chains.removeAll { it.flowerId == flowerId }
         if (clipIds.isEmpty()) { syncRack(); save(); changed(); return }
-        if (project.chains.size >= MAX_CHAINS) return message("The Valley holds $MAX_CHAINS daisy chains. Double-tap a flower to undo its chain.")
+        if (project.chains.size >= MAX_CHAINS) return message("The garden holds $MAX_CHAINS daisy chains. Double-tap a flower to undo its chain.")
         project.chains += DaisyChain(flowerId, clipIds.distinct().toMutableList(), path.toMutableList())
         val f = project.flowers.first { it.id == flowerId }
         message("${f.name} now colours " + clipIds.distinct().mapNotNull { clipById(it)?.name ?: takeById(it)?.name }.joinToString())
@@ -531,8 +529,8 @@ object Studio : Transport.Listener, MidiInput.Sink {
         val clips = valleyClips.filter { it.id in project.queued }
         val takes = valleyTakes.filter { it.id in project.queued }
         if (clips.isEmpty() && takes.isEmpty()) {
-            if (!t.playing) { play(); message("Playing. Tap sprites to queue them, then tap the roof again.") }
-            else message("Tap sprites or chemtrails to queue them first")
+            if (!t.playing) { play(); message("Playing. Tap stones to queue them, then tap PLAY again.") }
+            else message("Tap stones to queue them first")
             return
         }
         val pairs = clips.map { it to engine(it.engine) }

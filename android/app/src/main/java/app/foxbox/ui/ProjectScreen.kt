@@ -38,10 +38,9 @@ class ProjectScreen(c: Context, private val onOpen: (Project) -> Unit, private v
         // a field of dim pixel stars
         val rnd = kotlin.random.Random(5)
         repeat(70) { c.dot(rnd.nextFloat() * w, rnd.nextFloat() * h * 0.55f, Pal.alpha(Pal.CREAM, 0.25f + rnd.nextFloat() * 0.4f)) }
-        val cx = w / 2 + Px.dp(70f)
+        val cx = w / 2
         snesTitle(c, "FOXBOX", cx, Px.dp(62f))
         c.textCentered("write it in the studio · perform it in the valley", cx, Px.dp(98f), tagP.apply { color = Pal.AQUA_L })
-        cornucopia(c, cx - Px.dp(250f), Px.dp(70f), Px.u * 0.85f)
     }
 
     /** Super Nintendo-style title: banded metallic fill, thick ink outline and a drop shadow. */
@@ -60,36 +59,6 @@ class ProjectScreen(c: Context, private val onOpen: (Project) -> Unit, private v
         p.shader = android.graphics.LinearGradient(0f, top, 0f, bottom, cols, stops, android.graphics.Shader.TileMode.CLAMP)
         c.drawText(text, cx, base, p)
         p.shader = null
-    }
-
-    /** A little 16-bit cornucopia spilling a bouquet of flowers. */
-    private fun cornucopia(c: Canvas, cx: Float, cy: Float, g: Float) {
-        with(Iso) {
-            val n = 26
-            // woven horn: rings from the curled tip to the wide mouth
-            for (pass in 0..1) for (i in 0..n) {
-                val s = i / n.toFloat()
-                val x = cx + (-34f + 44f * s) * g
-                val y = cy + (-10f * kotlin.math.sin(Math.PI.toFloat() * (0.15f + s * 0.85f)) + 6f * (1 - s) * (1 - s) - 2f) * g
-                val r = 1.4f + 8.5f * s * s
-                if (pass == 0) c.disc(x, y, r + 1, g, INK)
-                else c.disc(x, y, r, g, if (i % 2 == 0) 0xFFC98A4B.toInt() else 0xFFA8693A.toInt())
-            }
-            // curled tip
-            c.disc(cx - 36 * g, cy + 4 * g, 2f, g, INK); c.disc(cx - 36 * g, cy + 4 * g, 1.2f, g, 0xFFA8693A.toInt())
-            val mx = cx + 10 * g; val my = cy - 2 * g
-            c.disc(mx, my, 9.5f, g, INK, 1.1f)
-            c.disc(mx + g, my, 8f, g, 0xFF3A2416.toInt(), 1.1f)
-            // fruit and flowers spilling out
-            c.disc(mx + 8 * g, my + 8 * g, 3f, g, INK); c.disc(mx + 8 * g, my + 8 * g, 2.3f, g, 0xFFD8473A.toInt())
-            for ((dx, dy) in listOf(4f to 9f, 6f to 11f, 3f to 12f, 5f to 13f)) { c.disc(mx + dx * g, my + dy * g, 1.6f, g, INK); c.disc(mx + dx * g, my + dy * g, 1.1f, g, 0xFF7A4A8C.toInt()) }
-            c.disc(mx + 12 * g, my + 5 * g, 2.6f, g, INK); c.disc(mx + 12 * g, my + 5 * g, 1.9f, g, 0xFFF0C23B.toInt())
-        }
-        val t = (System.nanoTime() / 1e9f)
-        val bloomX = cx + 14 * g; val bloomY = cy - 8 * g
-        listOf(Triple(-2f, -6f, 0), Triple(6f, -9f, 3), Triple(12f, -2f, 1), Triple(3f, 2f, 6), Triple(16f, -10f, 2), Triple(9f, 5f, 4)).forEach { (dx, dy, v) ->
-            c.flower(bloomX + dx * g, bloomY + dy * g, 0.55f, 1f, v, t, false)
-        }
     }
 
     @SuppressLint("ViewConstructor")

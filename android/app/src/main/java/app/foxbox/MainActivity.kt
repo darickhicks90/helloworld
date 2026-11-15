@@ -187,18 +187,17 @@ class MainActivity : Activity(), Host {
 
     override fun clipMenu(clip: Clip) {
         val playing = Studio.isPlaying(clip)
-        val items = listOf(if (playing) "Stop" else "Play", if (clip.inValley) "Hide from Valley" else "Show in Valley", "Clip length…", "Rename", "Save MIDI file again", "Delete")
+        val items = listOf(if (playing) "Stop" else "Play", "Clip length…", "Rename", "Save MIDI file again", "Delete")
         choose(clip.name, items) { which ->
             when (which) {
                 0 -> Studio.toggleClip(clip)
-                1 -> if (clip.inValley) { clip.inValley = false; Studio.save(); Studio.changed() } else Studio.sendToValley(clip)
-                2 -> {
+                1 -> {
                     val opts = listOf(1, 2, 3, 4, 6, 8, 12, 16)
                     choose("Length (now ${clip.lengthTicks / Ticks.BAR} bars)", opts.map { "$it bar" + if (it > 1) "s" else "" }) { i -> Studio.setClipBars(clip, opts[i]) }
                 }
-                3 -> textDialog("Rename clip", clip.name) { Studio.renameClip(clip, it) }
-                4 -> { ProjectStore.saveClipMidi(Studio.project, clip); Studio.message("Saved ${clip.name}.mid to ${ProjectStore.location.label}") }
-                5 -> Studio.deleteClip(clip)
+                2 -> textDialog("Rename clip", clip.name) { Studio.renameClip(clip, it) }
+                3 -> { ProjectStore.saveClipMidi(Studio.project, clip); Studio.message("Saved ${clip.name}.mid to ${ProjectStore.location.label}") }
+                4 -> Studio.deleteClip(clip)
             }
         }
     }
@@ -209,7 +208,7 @@ class MainActivity : Activity(), Host {
     }
 
     override fun flowerMenu(f: Flower) {
-        choose(f.name, listOf(if (f.inValley) "Take out of the Valley" else "Plant in Valley", "Rename", "Duplicate", "Delete")) { which ->
+        choose(f.name, listOf(if (f.inValley) "Take out of the garden" else "Plant in the garden", "Rename", "Duplicate", "Delete")) { which ->
             when (which) {
                 0 -> if (f.inValley) Studio.bury(f.id) else Studio.plantFlower(f)
                 1 -> textDialog("Rename flower", f.name) { Studio.renameFlower(f, it) }
@@ -410,7 +409,7 @@ class MainActivity : Activity(), Host {
             "Output: $outName", "Input: $inName",
             "Sample rate: ${AudioPrefs.sampleRate / 1000f} kHz" + if (AudioPrefs.sampleRate != SR) " (restart needed)" else "",
             "Bit depth: ${AudioPrefs.bitDepth}-bit", "Buffer: " + (if (buf == 0) "Automatic" else "$buf frames (${"%.1f".format(buf * 1000f / SR)} ms)"),
-            "Biplane inputs…", "Recording offset: ${AudioPrefs.offsetMs} ms",
+            "Channel inputs…", "Recording offset: ${AudioPrefs.offsetMs} ms",
             "Run the audio test (suggests settings)…", "Troubleshooting wizard…", "Restore defaults (48 kHz, 24-bit, 128)", "Now: $status",
         )
         choose("Audio settings", items) { i ->
@@ -441,8 +440,8 @@ class MainActivity : Activity(), Host {
 
     private fun planeInputs() {
         val opts = listOf("Input 1 (left)", "Input 2 (right)", "Inputs 1+2 mixed")
-        choose("Which input does each biplane record?", Studio.CHANNEL_NAMES.mapIndexed { ch, n -> "$n biplane: ${opts[AudioPrefs.planeInput(ch)]}" }) { ch ->
-            choose("${Studio.CHANNEL_NAMES[ch]} biplane records…", opts, AudioPrefs.planeInput(ch)) { k -> AudioPrefs.setPlaneInput(ch, k); planeInputs() }
+        choose("Which input does each audio channel record?", Studio.CHANNEL_NAMES.mapIndexed { ch, n -> "$n channel: ${opts[AudioPrefs.planeInput(ch)]}" }) { ch ->
+            choose("${Studio.CHANNEL_NAMES[ch]} channel records…", opts, AudioPrefs.planeInput(ch)) { k -> AudioPrefs.setPlaneInput(ch, k); planeInputs() }
         }
     }
 

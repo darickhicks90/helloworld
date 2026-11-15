@@ -16,7 +16,7 @@ stones.
    - To remove a block, hold its icon until it clicks, then drag it onto the
      **R.I.P.** tombstone. Its clips are kept and come back if you add the
      block again.
-   - **Flowers** (effects) and the **stones** are always on the rail.
+   - **Flowers** (effects) and the **clip launcher** are always on the rail.
 3. **Melodic blocks** (Gusts, Reflections, Leaves, Bumble) have:
    - an **XY pad**. Tap **X ▾ / Y ▾** to choose what each axis controls. Tap
      **STAY / HOME** to switch modes. **Stay** keeps the values where you
@@ -59,31 +59,28 @@ stones.
    - a **Mod Matrix:** 6 slots
 
    **Audition** hears the flower on everything. **Plant in garden** puts it
-   to work on the stones.
-7. **The stones** are where you perform (the button under Flowers on the
-   rail):
-   - Everything is an irregular etched stone lying in a faded late-summer
-     meadow, in warm sepia 16-bit pixel art with film grain.
-   - Each block's clips and each audio channel's takes lie in a loose
-     cluster under a carved name stone. Stones only appear for clips that
-     exist.
-   - **Tap** a stone to queue it and select it. A **fader** appears: drag it
-     for volume (the stone fades with it). **Double-tap** to mute.
-   - The top row is the transport: **▶ PLAY** starts the queued stones (when
-     the current loop comes round), **■ STOP** stops, and **● REC** counts in
-     two bars and records the armed audio channels.
-   - **+ AUDIO** adds a channel (red, yellow, blue). Tap a channel's name
-     stone to arm or disarm it; its inlaid gem glows when armed.
-   - Takes are rounded to whole bars so they loop in time. Each channel
-     holds up to **6 minutes**. Latency is compensated automatically;
-     fine-tune it with **Recording offset**.
-   - **Daisy chains:** flowers planted from the Flowers page grow in the
-     garden along the bottom. Drag a line from one through any stones: they
-     all go through that flower's effects. Up to 3 chains, traced in red,
-     yellow and blue. Double-tap a flower to undo its chain; select it to
-     get a **bloom** fader.
-   - Hold a stone until it clicks and drag it to **R.I.P.** to lay it to
-     rest.
+   to work in the clip launcher.
+7. **The clip launcher** is where you perform (the button under Flowers on
+   the rail):
+   - Plain black boxes with white text over close-up, retro-game-style
+     grass.
+   - MIDI clips are scattered irregularly around the screen, and each keeps
+     its place. A small coloured square shows which block it belongs to.
+   - Audio takes sit in tidy rows, one row per channel.
+   - **Tap** a box to queue it and select it. A **fader** appears: drag it
+     for volume (the box fades with it). **Double-tap** to mute.
+   - The top row: **▶ Play** starts the queued clips (when the current loop
+     comes round), **■ Stop** stops, **● Rec** counts in two bars and
+     records the armed audio channels, and **+ Audio** adds a channel (red,
+     yellow, blue). Tap a channel's name box to arm it.
+   - Takes are rounded to whole bars and each channel holds up to
+     **6 minutes**. Latency is compensated automatically; fine-tune it with
+     **Recording offset**.
+   - **Daisy chains:** planted flowers grow along the bottom. Drag a line
+     from one through any boxes: they all go through that flower's effects.
+     Up to 3 chains, traced in red, yellow and blue. Double-tap a flower to
+     undo its chain; select it for a **bloom** fader.
+   - Hold a box until it clicks and drag it to **R.I.P.** to lay it to rest.
 
 ## The blocks
 
@@ -182,7 +179,7 @@ To build it yourself, open `android/` in Android Studio, or run
 
 ```
 MainActivity.kt   screens, dialogs (File, Audio settings/test/wizard, MIDI mapping, presets), files, permissions
-Studio.kt         the controller: project, blocks, routing, chords, recording, audio takes, the stones, undo, MIDI map
+Studio.kt         the controller: project, blocks, routing, chords, recording, audio takes, the clip launcher, undo, MIDI map
 audio/            DSP blocks, parameters, XY pad state, shared envelopes/filter, the audio engine
                   (AAudio via cpp/foxbox_audio.c, AudioTrack fallback)
 blocks/           the block registry (a block HAS an engine; max 6 per session)
@@ -191,7 +188,7 @@ fx/               Flowers: effects + modulation matrix, the rack and the daisy c
 seq/              Transport, clips + MIDI files, audio takes, the shared step sequencer, music theory
 data/             projects, presets, add-ons/packs, WAV files, decoding, audio input, recording
 midi/             USB and Bluetooth MIDI input, CC mapping and MIDI learn
-ui/               pixel art, etched stones (GBC style), XY pad, chords & strum, block pages, studio, projects
+ui/               pixel art, close-up grass, clip launcher, XY pad, chords & strum, block pages, studio, projects
 ```
 
 The pixel fonts (Press Start 2P and Pixelify Sans, SIL Open Font License)

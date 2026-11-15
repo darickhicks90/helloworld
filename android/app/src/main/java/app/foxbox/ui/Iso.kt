@@ -194,7 +194,7 @@ object Iso {
     val iconTree by lazy { Sprite(listOf("..GGGG..", ".GgGGGG.", "GgGGGGGG", "GGGGGGqG", ".GGGGqG.", "...BB...", "...BB..."), mapOf('q' to 0xFF3F7A3A.toInt())) }
     val iconMushroom by lazy { Sprite(listOf("..rrrr....", ".rOOOOr...", "rOOOOOOr..", "..WW..rr..", "..WW.rOOr.", "..WW..WW..", ".WWWW.WW.."), mapOf('r' to 0xFFB8521B.toInt())) }
     val iconFlower by lazy { Sprite(listOf("..o.o..", ".oOoOo.", "oOOWOOo", ".oOoOo.", "..oGo..", "...G...", "..GG...")) }
-    /** The rail button for the stones: a flat stone with a carved mark. */
-    val iconStones by lazy { Sprite(listOf("..wwwwww..", ".wWWWWWWw.", "wWWDWWDWWb", "wWWDDDDWWb", "wWWDWWDWWb", ".bbbbbbbb.", "..GG..gG.."), mapOf('w' to 0xFFC9CDD2.toInt(), 'W' to 0xFF9AA0A8.toInt(), 'b' to 0xFF5E6170.toInt(), 'D' to 0xFF3A3A44.toInt())) }
+    /** The rail button for the clip launcher: a few black boxes in the grass. */
+    val iconStones by lazy { Sprite(listOf("kkkk......", "kWWk..kkkk", "kkkk..kWWk", "......kkkk", ".kkkk.....", ".kWWk.kkkk", ".kkkk.kWWk", "G.G.G.kkkk"), mapOf('k' to 0xFF0B0B0B.toInt(), 'W' to 0xFFFFFFFF.toInt(), 'G' to 0xFF6FA84A.toInt()), outline = null) }
     val iconValley by lazy { Sprite(listOf("......aa.....", "....aaaaaa...", "..GGG....GG..", ".GGGGG..GGGG.", "GGgGGGGGGGgGG", "GGGGGGgGGGGGG"), outline = null) }
 }

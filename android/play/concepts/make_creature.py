@@ -46,12 +46,22 @@ ell(24, 9.5, 5.5, 3.1, 'k'); ell(24, 9.5, 4.6, 2.3, 'W'); ell(24, 9.5, 2.5, 2.5,
 for (x, y) in ((23, 8), (24, 8), (25, 9), (25, 10), (24, 11), (23, 10)): put(x, y, 'O')
 put(24, 9, 'k'); put(24, 10, 'k')
 for x in (19, 21, 27, 29): put(x, 6, 'd')
-# --- four sunken eyes: deep dark sockets, small round whites, pinprick pupils
-for (ex, ey) in ((20.5, 15.5), (27.5, 15.5), (16.5, 20.5), (31.5, 20.5)):
-    ell(ex, ey, 3.0, 2.6, 'd'); ell(ex, ey, 1.8, 1.5, 'W'); put(int(ex), int(ey), 'k')
-    put(int(ex) - 2, int(ey) + 2, 's'); put(int(ex) + 1, int(ey) + 2, 's')
-# heavy brows
-line(17, 12, 22, 13, 'd'); line(26, 13, 31, 12, 'd'); line(13, 17, 18, 18, 'd'); line(30, 18, 35, 17, 'd')
+# --- five eyes, three emotions
+# (1) the third eye is calm and knowing: the swirl stays centred, lids relaxed (drawn above)
+# (2) the upper pair is ALARMED: wide-open whites, pinprick pupils, brows hiked up and pinched together
+for (ex, ey) in ((20.5, 15.5), (27.5, 15.5)):
+    ell(ex, ey, 3.1, 2.8, 'd'); ell(ex, ey, 2.3, 2.0, 'W'); put(int(ex), int(ey), 'k')
+line(17, 12, 22, 11, 'd'); line(26, 11, 31, 12, 'd')          # brows raised toward the middle
+put(22, 12, 'd'); put(26, 12, 'd')
+# (3) the lower pair is SORROWFUL: heavy upper lids half shut, pupils sunk low, corners drooping, bags beneath
+for (ex, ey, side) in ((16.5, 20.5, -1), (31.5, 20.5, 1)):
+    ell(ex, ey, 3.0, 2.4, 'd'); ell(ex, ey + 0.5, 2.0, 1.2, 'W')
+    for x in range(int(ex) - 2, int(ex) + 3): put(x, int(ey) - 1, 'd'); put(x, int(ey), 's')   # heavy lid
+    put(int(ex), int(ey) + 1, 'k')                                                          # pupil looking down
+    put(int(ex) + side * 2, int(ey) + 2, 'd'); put(int(ex) + side * 3, int(ey) + 3, 'd')   # drooping outer corner
+    put(int(ex) - side, int(ey) + 3, 's'); put(int(ex), int(ey) + 3, 's'); put(int(ex) + side, int(ey) + 4, 's')  # bag
+    put(int(ex) - side * 1, int(ey) + 4, 'A')                                                # a single tear
+line(13, 16, 18, 18, 'd'); line(30, 18, 35, 16, 'd')          # brows sloping down at the outer ends
 # --- the long nose: a shaded ridge and a heavy bulb
 line(24, 13, 24, 24, 's'); line(25, 14, 25, 23, 'S'); ell(24, 25, 2.6, 1.6, 's'); put(23, 26, 'k'); put(25, 26, 'k')
 # --- the grimace: thin lips, clenched teeth

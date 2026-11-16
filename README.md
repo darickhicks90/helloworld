@@ -35,8 +35,8 @@ clip launcher.
    - **audio rec**, which records audio takes (see below)
    - the bar.beat counter, **BPM** and **Click** (the metronome)
    - **File:** undo/redo, duplicate project, audio save location (Music,
-     Downloads, Documents or any folder you pick), bounce FoxBox's output to
-     WAV, sample packs, blocks & add-ons, and preset import
+     Downloads, Documents or any folder you pick), sample packs, blocks &
+     add-ons, and preset import (songs are exported from the Master strip)
    - **Audio:** output and input device (USB interfaces, headsets, built-in
      mic), sample rate, bit depth and buffer size (defaults 48 kHz, 24-bit,
      128 frames), which input each audio channel records, recording offset, an

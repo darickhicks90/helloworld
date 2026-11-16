@@ -43,38 +43,40 @@ def fuzzy(cx, cy, rx, ry, c, seed, amp=0.08):
 # --- stubby legs with pink claws
 fuzzy(19, 53, 7, 5.5, 'F', 11); fuzzy(41, 53, 7, 5.5, 'F', 12)
 for x in (14, 18, 22, 37, 41, 45): poly([(x - 1.6, 57), (x + 1.6, 57), (x, 61)], 'P')
-# --- pointed ears, pink inside
-poly([(13, 18), (9, 2), (22, 12)], 'F'); poly([(14, 15), (11, 5), (19, 12)], 'P')
-poly([(47, 18), (51, 2), (38, 12)], 'F'); poly([(46, 15), (49, 5), (41, 12)], 'P')
-# --- the round fluffy body
-fuzzy(30, 31, 23, 22, 'F', 3, 0.07)
+# --- rounded furry ears (same fur, a darker inner hollow)
+fuzzy(10, 12, 6.5, 6, 'F', 31, 0.05); ell(10.5, 12.5, 3.6, 3.2, 'd')
+fuzzy(50, 12, 6.5, 6, 'F', 32, 0.05); ell(49.5, 12.5, 3.6, 3.2, 'd')
+# --- the round fluffy body, a little taller so the big eye sits near the peak
+fuzzy(30, 30, 23, 24, 'F', 3, 0.07)
 # a soft lighter belly
 ell(30, 41, 11, 9, 'f', keep='F')
 # --- the face patch: pale, a little long, like the drawing
-ell(30, 21, 10.5, 12.5, 'S')
-ell(26, 22, 4, 10, 's', keep='S'); ell(27.5, 21, 4, 10, 'S')
-# fur fringe over the forehead
-poly([(20, 7), (40, 7), (42, 11), (36, 9), (30, 8), (24, 9), (18, 11)], 'F')
+ell(30, 27, 10.5, 9.5, 'S')
+ell(26, 28, 4, 8, 's', keep='S'); ell(27.5, 27, 4, 8, 'S')
 
-# --- (1) calm third eye: round, steady, warm brown iris, soft lid
-ell(30, 13, 4.2, 3.4, 'k'); ell(30, 13, 3.3, 2.6, 'W'); ell(30, 13.3, 1.9, 1.9, '1'); put(30, 13, 'k'); put(30, 14, 'k'); put(29, 12, 'W')
-row(27, 33, 10, 'k')
+# --- (1) the big calm cyclops eye near the peak of the head: a round white, a large warm brown iris
+ell(30, 12, 7.6, 7.0, 'k'); ell(30, 12, 6.6, 6.0, 'W')
+ell(30, 12.5, 3.4, 3.4, '1'); ell(30, 12.5, 2.3, 2.3, 'i'); ell(30, 12.5, 1.4, 1.4, 'k')
+put(28, 10, 'W'); put(29, 10, 'W'); put(28, 11, 'W'); put(32, 14, 'W')       # glints
+ell(30, 15.8, 6.2, 1.2, 'e', keep='W')                                        # soft shadow under the lid
+# fur tufts curling over the eye like lashes
+for (x, y) in ((23, 6), (26, 4), (30, 4), (34, 4), (37, 6)): put(x, y, 'd'); put(x, y + 1, 'F')
 # --- (2) curious upper pair: big round whites, blue-grey irises glancing up, brows raised in interest
 for ex in (25, 35):
-    ell(ex, 19.5, 3.2, 3.0, 'k'); ell(ex, 19.5, 2.4, 2.2, 'W'); ell(ex, 19, 1.4, 1.4, '3'); put(ex, 19, 'k'); put(ex - 1, 18, 'W')
-row(22, 26, 15, 'd'); row(34, 38, 15, 'd')
+    ell(ex, 23.5, 3.2, 3.0, 'k'); ell(ex, 23.5, 2.4, 2.2, 'W'); ell(ex, 23, 1.4, 1.4, '3'); put(ex, 23, 'k'); put(ex - 1, 22, 'W')
+row(22, 26, 19, 'd'); row(34, 38, 19, 'd')
 # --- (3) content, sleepy lower pair: happy half-closed lids curving up, green-hazel irises peeking
 for ex in (20.5, 39.5):
-    ell(ex, 26, 3.4, 2.8, 'k'); ell(ex, 26.6, 2.5, 1.6, 'W'); ell(ex, 27, 1.3, 1.1, '2'); put(int(ex), 27, 'k')
-    row(ex - 3, ex + 3, 24, 'k'); row(ex - 2, ex + 2, 25, 's')          # relaxed, heavy upper lid
-    put(ex - 3, 27, 'k'); put(ex + 3, 27, 'k')                            # lashes
+    ell(ex, 29, 3.4, 2.8, 'k'); ell(ex, 29.6, 2.5, 1.6, 'W'); ell(ex, 30, 1.3, 1.1, '2'); put(int(ex), 30, 'k')
+    row(ex - 3, ex + 3, 27, 'k'); row(ex - 2, ex + 2, 28, 's')          # relaxed, heavy upper lid
+    put(ex - 3, 30, 'k'); put(ex + 3, 30, 'k')                            # lashes
 # rosy cheeks
-for (x, y) in ((22, 30), (23, 30), (37, 30), (38, 30)): put(x, y, 'P')
+for (x, y) in ((22, 33), (23, 33), (37, 33), (38, 33)): put(x, y, 'P')
 # --- the long nose, a soft round tip
-for y in range(19, 27): put(30, y, 's'); put(31, y, 'S')
-ell(30.5, 27.5, 2.2, 1.5, 'p'); put(29, 28, 'k'); put(32, 28, 'k'); put(30, 27, 'P')
+for y in range(22, 30): put(30, y, 's'); put(31, y, 'S')
+ell(30.5, 30, 2.2, 1.4, 'p'); put(29, 30, 'k'); put(32, 30, 'k'); put(30, 29, 'P')
 # --- a small friendly smile with one little tooth
-row(27, 34, 31, 'k'); row(28, 33, 32, 'M'); row(26, 26, 30, 'k'); row(35, 35, 30, 'k'); put(30, 32, 'W'); row(28, 33, 33, 'k')
+row(27, 34, 33, 'k'); row(28, 33, 34, 'M'); row(26, 26, 32, 'k'); row(35, 35, 32, 'k'); put(30, 34, 'W'); row(28, 33, 35, 'k')
 
 # --- arms: big furry forearms, each outlined with a dark crease so it reads in front of the body
 def arm(draw):
@@ -117,7 +119,7 @@ for _ in range(120):
 
 COL = {'F': (0xA0, 0x58, 0x44), 'f': (0xC4, 0x7E, 0x62), 'd': (0x5A, 0x2C, 0x22), 'P': (0xEC, 0x86, 0xB2), 'p': (0xB8, 0x5C, 0x6C),
        'S': (0xF2, 0xDE, 0xC6), 's': (0xD6, 0xB2, 0x98), 'W': (0xFF, 0xFF, 0xFF), 'k': (0x2A, 0x14, 0x14),
-       '1': (0x7A, 0x4A, 0x26), '2': (0x6A, 0x7A, 0x3A), '3': (0x5A, 0x7A, 0x96), 'M': (0xC8, 0x5C, 0x7A)}
+       '1': (0x7A, 0x4A, 0x26), '2': (0x6A, 0x7A, 0x3A), '3': (0x5A, 0x7A, 0x96), 'M': (0xC8, 0x5C, 0x7A), 'i': (0x5A, 0x34, 0x1A), 'e': (0xE2, 0xDE, 0xE0)}
 img = Image.new('RGBA', (W + 2, H + 2), (0, 0, 0, 0))
 def filled(x, y): return 0 <= x < W and 0 <= y < H and g[y][x] != '.'
 for y in range(H + 2):

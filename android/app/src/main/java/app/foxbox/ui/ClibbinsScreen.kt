@@ -391,6 +391,7 @@ class ClibbinsScreen(c: Context, private val host: Host) : PixelView(c) {
         val w = width.toFloat(); val h = height.toFloat()
         val time = (System.nanoTime() - t0) / 1e9f
         ClipField.draw(c, w, h, model(), time, selected, hits)
+        drawEye(c, w, h)
         drawControls(c, w, h)
         if (burying != null) {
             val sh = minOf(h / 3.2f, Px.dp(190f))
@@ -398,6 +399,63 @@ class ClibbinsScreen(c: Context, private val host: Host) : PixelView(c) {
             with(Iso) { c.tombstone(w / 2, h - Px.dp(8f), sh, overStone(), ripP) }
             c.dot(curX - Px.u, curY - Px.u, 0xFFFFFFFF.toInt(), 3)
         }
+    }
+
+    // ------------------------------------------------------------------ the eye in the grass
+
+    /**
+     * Every 15–45 s a realistic eye opens somewhere clear of everything else,
+     * stares at you (with little darting glances), blinks now and then, and
+     * after 5–15 s closes again.
+     */
+    private val rnd = kotlin.random.Random(System.nanoTime())
+    private var eyeNext = System.currentTimeMillis() + 15_000L + rnd.nextLong(30_000L)
+    private var eyeFrom = 0L; private var eyeUntil = 0L
+    private var eyeX = 0f; private var eyeY = 0f; private var eyeW = 0f; private var eyeVariant = 0
+    private var blinkAt = 0L
+    private var lookX = 0f; private var lookY = 0f; private var lookNext = 0L
+
+    private fun drawEye(c: Canvas, w: Float, h: Float) {
+        val now = System.currentTimeMillis()
+        if (eyeUntil == 0L && now >= eyeNext) {
+            if (placeEye(w, h)) {
+                eyeFrom = now; eyeUntil = now + 5_000L + rnd.nextLong(10_000L)
+                blinkAt = now + 1_500L + rnd.nextLong(2_500L); eyeVariant = rnd.nextInt(4)
+            } else eyeNext = now + 5_000L
+        }
+        if (eyeUntil == 0L) return
+        if (now >= eyeUntil + 400) { eyeUntil = 0L; eyeNext = now + 15_000L + rnd.nextLong(30_000L); return }
+        // opening, closing, and blinks
+        var open = when {
+            now < eyeFrom + 400 -> (now - eyeFrom) / 400f
+            now > eyeUntil -> 1f - (now - eyeUntil) / 400f
+            else -> 1f
+        }
+        if (now >= blinkAt) {
+            val k = (now - blinkAt) / 180f
+            if (k < 1f) open *= kotlin.math.abs(1f - 2f * k) else blinkAt = now + 1_800L + rnd.nextLong(3_500L)
+        }
+        // mostly staring straight out at you, with small darting glances
+        if (now >= lookNext) {
+            val stare = rnd.nextInt(3) != 0
+            lookX = if (stare) 0f else rnd.nextFloat() * 1.2f - 0.6f; lookY = if (stare) 0f else rnd.nextFloat() * 0.8f - 0.4f
+            lookNext = now + 700L + rnd.nextLong(1_800L)
+        }
+        Eyeball.draw(c, eyeX, eyeY, eyeW, open, lookX, lookY, eyeVariant)
+    }
+
+    /** Find a spot clear of every clip, box, button and the poetry banner. */
+    private fun placeEye(w: Float, h: Float): Boolean {
+        eyeW = Px.dp(64f)
+        val ew = eyeW * 1.4f; val eh = eyeW * 0.9f
+        val pad = Px.dp(14f)
+        val bannerBottom = Px.dp(8f) + Px.dp(40f) + Px.dp(54f)
+        repeat(60) {
+            val x = ew / 2 + rnd.nextFloat() * (w - ew); val y = bannerBottom + eh / 2 + rnd.nextFloat() * (h - bannerBottom - eh)
+            val l = x - ew / 2 - pad; val r = x + ew / 2 + pad; val t = y - eh / 2 - pad; val b = y + eh / 2 + pad
+            if (hits.none { it.l < r && l < it.r && it.t < b && t < it.b }) { eyeX = x; eyeY = y; return true }
+        }
+        return false
     }
 
     // ------------------------------------------------------------------ selection: volume, pan, rename

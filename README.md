@@ -100,6 +100,8 @@ Clibbins.
      themselves when you shuffle). Double-tap a flower to undo its chain;
      select it for a **bloom** fader.
    - Hold a box until it clicks and drag it to **R.I.P.** to lay it to rest.
+   - Moving between the studio and Clibbins stops whatever was playing.
+   - Every so often, something in the grass looks back at you.
 
 ## The blocks
 

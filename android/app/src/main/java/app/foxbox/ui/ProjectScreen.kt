@@ -40,7 +40,11 @@ class ProjectScreen(c: Context, private val onOpen: (Project) -> Unit, private v
         val rnd = kotlin.random.Random(5)
         repeat(70) { c.dot(rnd.nextFloat() * w, rnd.nextFloat() * h * 0.55f, Pal.alpha(Pal.CREAM, 0.25f + rnd.nextFloat() * 0.4f)) }
         val cx = w / 2
-        snesTitle(c, "FOXBOX", cx, Px.dp(62f))
+        // the logo mark beside the title
+        val tw = headP.measureText("FOXBOX")
+        val ls = Px.dp(112f)
+        LogoMark.draw(c, cx - tw / 2 - ls - Px.dp(4f), Px.dp(2f), ls)
+        snesTitle(c, "FOXBOX", cx + ls / 2, Px.dp(70f))
     }
 
     /** Super Nintendo-style title: banded metallic fill, thick ink outline and a drop shadow. */

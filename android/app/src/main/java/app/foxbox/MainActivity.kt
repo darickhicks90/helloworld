@@ -134,12 +134,17 @@ class MainActivity : Activity(), Host {
         showStudio()
     }
 
+    /** Switching between the studio and Clibbins stops whatever was playing there. */
+    private fun stopPlayback() = Audio.post { Audio.transport.stop(); Audio.engines.forEach { it.allOff() } }
+
     private fun showStudio() {
+        if (screen == 2) stopPlayback()
         screen = 1
         setContentView(studio ?: StudioScreen(this, this).also { studio = it })
     }
 
     override fun showClibbins() {
+        stopPlayback()
         screen = 2
         (studio?.parent as? android.view.ViewGroup)?.removeView(studio)
         setContentView(ClibbinsScreen(this, this).apply { backToStudio = { showStudio() } })

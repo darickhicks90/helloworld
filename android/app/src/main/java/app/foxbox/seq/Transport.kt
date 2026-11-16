@@ -205,6 +205,10 @@ class Transport {
         while (s * Ticks.STEP < t1) { step(s); s++ }
 
         for (i in players.indices) players[i].process(t0, t1)
+        // Each block takes the pan of the clips playing on it.
+        for (i in engines.indices) { engines[i].panSum = 0f; engines[i].panCount = 0 }
+        for (i in players.indices) { val p = players[i]; if (!p.clip.muted) { p.engine.panSum += p.clip.pan; p.engine.panCount++ } }
+        for (i in engines.indices) { val e = engines[i]; e.livePan = if (e.panCount > 0) e.panSum / e.panCount else 0f }
 
         if (rec == Rec.RECORDING) {
             // Sample XY movement every 1/32 note.
@@ -278,10 +282,10 @@ class Transport {
     }
 
     /** Render playing audio clips into the three channel buses. */
-    fun renderAudio(buses: Array<FloatArray>, n: Int, t0: Double) {
+    fun renderAudio(busL: Array<FloatArray>, busR: Array<FloatArray>, n: Int, t0: Double) {
         if (!playing) return
         val tpf = bpm * Ticks.PPQ / 60.0 / app.foxbox.audio.SR
-        for (i in audioPlayers.indices) { val p = audioPlayers[i]; p.render(buses[p.clip.channel.coerceIn(0, buses.size - 1)], n, t0, tpf) }
+        for (i in audioPlayers.indices) { val p = audioPlayers[i]; val ch = p.clip.channel.coerceIn(0, busL.size - 1); p.render(busL[ch], busR[ch], n, t0, tpf) }
     }
     @Volatile var blockStartTick = 0.0; private set
     private fun changed() = listener?.onChanged()

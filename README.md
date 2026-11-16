@@ -52,8 +52,10 @@ clip launcher.
    - **Pitch** shift
    - **Resonators:** three tuned combs playing a chord
    - **Modulation:** chorus/flanger, phaser, ring mod, decimator, tremolo,
-     auto-pan
+
    - **Delay & Reverb** (with shimmer)
+   - **Pan:** position, stereo width, Haas spread, and auto-pan with
+     depth, rate and shape (sine, triangle, square, random)
    - **Stutter:** slice repeats with rate, length, chance and fade
    - **Gate:** a 16-step pattern with depth, rate, length, swing and smoothing
    - a **Mod Matrix:** 6 slots
@@ -70,18 +72,20 @@ clip launcher.
      coloured square shows which block a clip belongs to.
    - Tap the **poetry stone** for a line of Romantic poetry across the top
      of the screen.
-   - **Audio tracks** (bottom left, kept clear of everything else) work
-     like tracks in a DAW: **Red, Yellow and Blue**. Each one is broken up
-     into its takes, shown as regions with their waveforms and sized by
-     length. Each take is its own loop you can queue, fade, mute or chain.
-     Tap a track's name to arm it; **● Rec** counts in two bars and records
-     the armed tracks. Takes are rounded to whole bars, and each track holds
-     up to **6 minutes**.
-   - **Master:** all three audio tracks feed the master audio track. Drag
-     its slider for the level of all recorded audio together; the green bar
-     is its meter.
-   - **Tap** a clip box or take to queue it and select it. A **fader**
-     appears: drag it for volume (it fades with it). **Double-tap** to mute.
+   - **Audio takes** become clip boxes too, drawn as their waveform in
+     their track's colour, and lie on the grass with the other clips.
+   - **The mixer** (bottom left, kept clear) has a vertical strip for each
+     audio track (**Red, Yellow, Blue**): a dB meter, **● Arm**, and the
+     input it records (In 1, In 2 or In 1+2). **● Rec** counts in two bars
+     and records the armed tracks. Takes are rounded to whole bars, and each
+     track holds up to **6 minutes**.
+   - **Master** strip: a dB meter, the **master fader** (the level of
+     everything FoxBox plays) and **● Tape**. Exporting a song works like
+     mixing down to tape: arm the master, press play, and FoxBox records the
+     mix; stopping saves the song to your audio save location.
+   - **Tap** a clip or take to queue it and select it. A **volume** fader, a
+     horizontal **pan** slider and **✎ Rename** appear. **Double-tap** to
+     mute.
    - The top row: **▶ Play** starts the queued clips (when the current loop
      comes round), **■ Stop** stops, **● Rec** records audio, and
      **⤨ Shuffle** moves everything to new spots.

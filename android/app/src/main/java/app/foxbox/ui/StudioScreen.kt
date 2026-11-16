@@ -35,6 +35,10 @@ interface Host {
     fun audioSettings()
     fun presetMenu(engineId: String)
     fun addBlockMenu()
+    /** Rename a clip or take (from the clip launcher). */
+    fun renameItem(id: String)
+    /** Choose which input an audio track records. */
+    fun channelInput(ch: Int)
 }
 
 /**

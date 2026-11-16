@@ -266,7 +266,50 @@ object Studio : Transport.Listener, MidiInput.Sink {
     fun setBpm(bpm: Float) { project.bpm = bpm.coerceIn(40f, 220f); t.bpm = project.bpm; save(); changed() }
     fun setMetronome(on: Boolean) { project.metronome = on; t.metronome = on; save(); changed() }
 
-    override fun onChanged() = changed()
+    override fun onChanged() { main.post { tapeFollowsTransport() }; changed() }
+
+    // ------------------------------------------------------------------ the master track: mixdown to tape
+
+    /** While the master track is armed, playing records the whole mix; stopping exports it as the song. */
+    var masterArmed = false
+        private set
+
+    fun toggleMasterArm() {
+        masterArmed = !masterArmed
+        message(if (masterArmed) "Master armed: press play and FoxBox records the mix to tape. Stop to export the song." else "Master disarmed")
+        tapeFollowsTransport(); changed()
+    }
+
+    private fun tapeFollowsTransport() {
+        if (!isOpen) return
+        val rolling = masterArmed && t.playing
+        if (rolling && tape == null) {
+            tape = AudioFiles.Tape(ProjectStore.newTapeFile(project)); message("Mixing down to tape…"); changed()
+        } else if (!rolling && tape != null) {
+            val tp = tape!!; tape = null
+            Thread {
+                val f = tp.stop()
+                ProjectStore.exportTape(project, f)
+                message("Song exported: ${f.name} in ${ProjectStore.location.label}/${project.name}/Audio")
+            }.start()
+            changed()
+        }
+    }
+
+    /** Rename a clip or take. */
+    fun renameItem(id: String, name: String) {
+        if (name.isBlank()) return
+        clipById(id)?.let { it.name = name.trim() }
+        takeById(id)?.let { it.name = name.trim() }
+        save(); changed()
+    }
+    fun nameOf(id: String) = clipById(id)?.name ?: takeById(id)?.name ?: ""
+
+    fun panOf(id: String) = clipById(id)?.pan ?: takeById(id)?.pan ?: 0f
+    fun setPan(id: String, v: Float) {
+        val p = v.coerceIn(-1f, 1f).let { if (kotlin.math.abs(it) < 0.06f) 0f else it }
+        clipById(id)?.pan = p; takeById(id)?.pan = p
+    }
 
     override fun onRecorded(clips: List<Clip>) {
         main.post {
@@ -310,7 +353,8 @@ object Studio : Transport.Listener, MidiInput.Sink {
         syncRack(); save(); changed()
     }
 
-    fun setAudioMaster(v: Float) { project.audioMaster = v.coerceIn(0f, 1f); Audio.audioMaster = project.audioMaster }
+    /** The master fader: the level of everything FoxBox plays. */
+    fun setAudioMaster(v: Float) { project.audioMaster = v.coerceIn(0f, 1f); Audio.masterVolume = project.audioMaster }
 
     fun toggleArm(ch: Int) { if (project.planes[ch]) { armed[ch] = !armed[ch]; changed() } }
 
@@ -553,22 +597,6 @@ object Studio : Transport.Listener, MidiInput.Sink {
 
     private var tape: AudioFiles.Tape? = null
     val taping get() = tape != null
-
-    /** Bounce: record FoxBox's output to a WAV file. */
-    fun toggleTape() {
-        val tp = tape
-        if (tp == null) {
-            tape = AudioFiles.Tape(ProjectStore.newTapeFile(project)); message("Recording FoxBox's output…")
-        } else {
-            tape = null
-            Thread {
-                val f = tp.stop()
-                ProjectStore.exportTape(project, f)
-                message("Saved ${f.name} to ${ProjectStore.location.label}/${project.name}/Audio")
-            }.start()
-        }
-        changed()
-    }
 
     fun setSample(e: SampleEngine, data: FloatArray, name: String) {
         e.setSample(data, name)

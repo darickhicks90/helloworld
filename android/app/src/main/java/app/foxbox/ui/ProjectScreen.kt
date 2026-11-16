@@ -22,11 +22,12 @@ class ProjectScreen(c: Context, private val onOpen: (Project) -> Unit, private v
 
     init {
         setWillNotDraw(false)
+        // Neat, evenly spaced cards a quarter smaller than before, in one scrolling row.
         val cards = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; setPadding(Px.dp(24), 0, Px.dp(24), 0) }
-        cards.addView(Card(c, null), lp(Px.dp(200), Px.dp(170)).apply { rightMargin = Px.dp(14) })
-        ProjectStore.list().forEach { cards.addView(Card(c, it), lp(Px.dp(200), Px.dp(170)).apply { rightMargin = Px.dp(14) }) }
+        cards.addView(Card(c, null), lp(CARD_W, CARD_H).apply { rightMargin = Px.dp(10) })
+        ProjectStore.list().forEach { cards.addView(Card(c, it), lp(CARD_W, CARD_H).apply { rightMargin = Px.dp(10) }) }
         val scroll = HorizontalScrollView(c).apply { isHorizontalScrollBarEnabled = false; addView(cards) }
-        addView(scroll, LayoutParams(MATCH, Px.dp(190), android.view.Gravity.BOTTOM).apply { bottomMargin = Px.dp(28) })
+        addView(scroll, LayoutParams(MATCH, CARD_H + Px.dp(8), android.view.Gravity.BOTTOM).apply { bottomMargin = Px.dp(36) })
     }
 
     private val headP = Px.text(34f, Pal.ORANGE, headFont = true)
@@ -40,7 +41,6 @@ class ProjectScreen(c: Context, private val onOpen: (Project) -> Unit, private v
         repeat(70) { c.dot(rnd.nextFloat() * w, rnd.nextFloat() * h * 0.55f, Pal.alpha(Pal.CREAM, 0.25f + rnd.nextFloat() * 0.4f)) }
         val cx = w / 2
         snesTitle(c, "FOXBOX", cx, Px.dp(62f))
-        c.textCentered("write it in the studio · perform it in the valley", cx, Px.dp(98f), tagP.apply { color = Pal.AQUA_L })
     }
 
     /** Super Nintendo-style title: banded metallic fill, thick ink outline and a drop shadow. */
@@ -63,25 +63,31 @@ class ProjectScreen(c: Context, private val onOpen: (Project) -> Unit, private v
 
     @SuppressLint("ViewConstructor")
     private inner class Card(c: Context, val project: Project?) : PixelView(c) {
-        private val nameP = Px.text(15f, Pal.BROWN_D, align = Paint.Align.LEFT)
-        private val infoP = Px.text(12f, Pal.BROWN, align = Paint.Align.LEFT)
+        private val nameP = Px.text(13f, Pal.BROWN_D, align = Paint.Align.LEFT)
+        private val infoP = Px.text(10f, Pal.BROWN, align = Paint.Align.LEFT)
         private var pressed = false
         private val long = Runnable { project?.let(onManage); pressed = false; invalidate() }
         override fun paint(c: Canvas) {
             val w = width.toFloat(); val h = height.toFloat()
             c.pixelBox(u, u, w - u, h - u, if (pressed) Pal.PAPER else if (project == null) Pal.ORANGE else Pal.CREAM)
             if (project == null) {
-                val p = Px.text(15f, Pal.CREAM)
-                c.textCentered("+", w / 2, h / 2 - Px.dp(18f), Px.text(36f, Pal.CREAM, headFont = true))
-                c.textCentered("New project", w / 2, h / 2 + Px.dp(30f), p)
+                c.textCentered("+", w / 2, h / 2 - Px.dp(12f), Px.text(26f, Pal.CREAM, headFont = true))
+                c.textCentered("New project", w / 2, h / 2 + Px.dp(24f), Px.text(12f, Pal.CREAM))
                 return
             }
             val clips = project.clips
-                        project.blocks.forEachIndexed { i, id -> c.sprite(Sprites.icon(id), Px.dp(12f) + i * Px.dp(30f), Px.dp(14f), Px.u * 0.8f) }
-            c.drawText(project.name.take(18), Px.dp(14f), h - Px.dp(66f), nameP)
-            c.drawText("${project.bpm.toInt()} BPM · ${Theory.NOTE_NAMES[project.root]} ${Theory.SCALES[project.scale].name}", Px.dp(14f), h - Px.dp(46f), infoP)
-            c.drawText("${project.blocks.size} blocks · ${clips.size} clips · ${project.audioClips.size} takes", Px.dp(14f), h - Px.dp(30f), infoP)
-            c.drawText(DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(project.modified)), Px.dp(14f), h - Px.dp(14f), infoP)
+                        val m = Px.dp(10f)
+            // block icons in a tidy row, evenly spaced across the top
+            val n = project.blocks.size.coerceAtLeast(1)
+            val slot = (w - m * 2) / maxOf(n, 6)
+            project.blocks.forEachIndexed { i, id -> val ic = Sprites.icon(id); val sc = minOf(slot * 0.8f / ic.w, Px.u * 0.6f); c.sprite(ic, m + i * slot + (slot - ic.w * sc) / 2, m, sc) }
+            c.fill(m, Px.dp(36f), w - m, Px.dp(37f), Pal.alpha(Pal.BROWN, 0.35f))
+            var name = project.name
+            while (nameP.measureText(name) > w - m * 2 && name.length > 3) name = name.dropLast(2) + "…"
+            c.drawText(name, m, Px.dp(54f), nameP)
+            c.drawText("${project.bpm.toInt()} BPM · ${Theory.NOTE_NAMES[project.root]} ${Theory.SCALES[project.scale].name}", m, Px.dp(70f), infoP)
+            c.drawText("${clips.size} clips · ${project.audioClips.size} takes", m, Px.dp(84f), infoP)
+            c.drawText(DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(project.modified)), m, h - m, infoP)
         }
         @SuppressLint("ClickableViewAccessibility")
         override fun onTouchEvent(e: MotionEvent): Boolean {
@@ -99,3 +105,6 @@ class ProjectScreen(c: Context, private val onOpen: (Project) -> Unit, private v
         }
     }
 }
+
+private val CARD_W = Px.dp(150)
+private val CARD_H = Px.dp(128)

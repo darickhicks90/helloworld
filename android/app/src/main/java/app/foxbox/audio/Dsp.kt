@@ -133,9 +133,12 @@ class DelayLine(maxSamples: Int) {
     fun write(x: Float) { buf[w] = x; w++; if (w >= buf.size) w = 0 }
     /** Read `d` samples behind the most recent write. */
     fun read(d: Float): Float {
-        var p = w - 1 - d.coerceIn(0f, (buf.size - 3).toFloat())
+        val dd = if (d.isNaN()) 0f else d.coerceIn(0f, (buf.size - 3).toFloat())
+        var p = w - 1 - dd
         while (p < 0) p += buf.size
-        val i = p.toInt(); val f = p - i
+        // float rounding can land exactly on the end of the buffer: wrap it
+        var i = p.toInt(); if (i >= buf.size) { i -= buf.size; p -= buf.size }
+        val f = (p - i).coerceIn(0f, 1f)
         val a = buf[i]; val b = buf[if (i + 1 >= buf.size) 0 else i + 1]
         return a + (b - a) * f
     }

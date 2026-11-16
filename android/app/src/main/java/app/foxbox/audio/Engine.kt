@@ -18,6 +18,9 @@ abstract class Engine(val id: String, val title: String) {
     @Volatile var noteCount = 0
     @Volatile var lastNote = 60
     @Volatile var activeVoices = 0
+    /** Pan from the clips playing on this block (-1..1), set by the transport each block. */
+    @Volatile var livePan = 0f
+    var panSum = 0f; var panCount = 0
 
     lateinit var volume: Param
     lateinit var reverb: Param

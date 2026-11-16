@@ -218,6 +218,13 @@ class MainActivity : Activity(), Host {
         }
     }
 
+    override fun renameItem(id: String) = textDialog("Rename", Studio.nameOf(id)) { Studio.renameItem(id, it) }
+
+    override fun channelInput(ch: Int) {
+        val opts = listOf("Input 1 (left)", "Input 2 (right)", "Inputs 1+2 mixed")
+        choose("${Studio.CHANNEL_NAMES[ch]} track records…", opts, AudioPrefs.planeInput(ch)) { k -> AudioPrefs.setPlaneInput(ch, k); Studio.changed() }
+    }
+
     override fun addBlockMenu() {
         val blocks = Studio.addableBlocks()
         val coming = Store.catalog.filter { it.kind == Store.Kind.BLOCK }
@@ -237,7 +244,7 @@ class MainActivity : Activity(), Host {
             "Duplicate project…",
             "Rename project…",
             "Audio save location: ${ProjectStore.location.label}…",
-            if (Studio.taping) "■ Stop bounce (save the WAV)" else "● Bounce: record FoxBox's output to WAV",
+            "Export a song: arm Master on the clip launcher, then play…",
             "Sample packs…",
             "Blocks & add-ons…",
             "Import a preset file…",
@@ -254,7 +261,7 @@ class MainActivity : Activity(), Host {
                 }
                 3 -> textDialog("Rename project", Studio.project.name) { ProjectStore.rename(Studio.project, it); Studio.changed() }
                 4 -> chooseLocation()
-                5 -> Studio.toggleTape()
+                5 -> Studio.message("On the clip launcher, arm the Master strip, then press play. Stopping exports the song.")
                 6 -> packsMenu()
                 7 -> storeMenu()
                 8 -> openDocument(REQ_PRESET, "*/*")

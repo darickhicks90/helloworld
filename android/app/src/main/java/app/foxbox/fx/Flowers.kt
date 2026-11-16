@@ -88,6 +88,18 @@ class Flower(val id: String = UUID.randomUUID().toString().take(8), var name: St
     init { p.section("Output") }
     val level = p.num("level", "Effect Level", 0f, 1f, 0.9f, Fmt.PCT)
 
+    // Pan: placement and movement in the stereo field (added after the others so saved matrices keep their targets).
+    init { p.section("Pan") }
+    val panPos = p.num("panPos", "Pan Position", -1f, 1f, 0f)
+    val width = p.num("width", "Stereo Width", 0f, 2f, 1f, Fmt.X)
+    val haas = p.num("haas", "Haas Spread", 0f, 30f, 0f, Fmt.NUM)
+    val panShape = p.choice("panShape", "Auto-Pan Shape", listOf("Sine", "Triangle", "Square", "Random"), 0)
+    init {
+        // The auto-pan controls live with the rest of the pan section.
+        p.sections["Modulation"]?.removeAll { it.id == "pan" || it.id == "panRate" }
+        p.sections["Pan"]?.addAll(listOf(panDepth, panRate))
+    }
+
     /** Params the matrix (and XY pad) can move. */
     val destinations: List<Param> = p.all.values.filter { !it.isChoice }
 
@@ -199,7 +211,8 @@ class FlowerDsp(private val f: Flower) {
         val rg = m(f.ring); val rInc = m(f.ringFreq) / SRF
         val dec = m(f.decim); val decStep = 1f + dec * dec * 30f; val decLevels = if (dec > 0.01f) Math.pow(2.0, (16f - dec * 12f).toDouble()).toFloat() / 2f else 0f
         val trem = m(f.tremDepth); val tremSteps = f.divSteps(f.tremRate)
-        val panD = m(f.panDepth); val panSteps = f.divSteps(f.panRate)
+        val panD = m(f.panDepth); val panSteps = f.divSteps(f.panRate); val shape = f.panShape.index
+        val pos = m(f.panPos); val wid = m(f.width); val haasF = (m(f.haas) * SRF / 1000f)
         val dTime = minOf(SRF * 2.5f, f.divSteps(f.delayTime) * stepFrames)
         val dfb = m(f.delayFb); val dm = m(f.delayMix)
         toneL.set(m(f.delayTone)); toneR.set(m(f.delayTone))
@@ -261,7 +274,11 @@ class FlowerDsp(private val f: Flower) {
             if (t.playing) {
                 val tk = tick0 + i * tpf
                 if (trem > 0f) { val ph = ((tk / (Ticks.STEP * tremSteps)) % 1.0).toFloat(); val g = 1f - trem * (0.5f + 0.5f * sin(TAU * ph)); xl *= g; xr *= g }
-                if (panD > 0f) { val ph = ((tk / (Ticks.STEP * panSteps)) % 1.0).toFloat(); val pn = sin(TAU * ph) * panD; xl *= 1f - maxOf(0f, pn); xr *= 1f + minOf(0f, pn) }
+                if (panD > 0f) {
+                    val ph = ((tk / (Ticks.STEP * panSteps)) % 1.0).toFloat()
+                    val wave = when (shape) { 1 -> 1f - 4f * abs(ph - 0.5f); 2 -> if (ph < 0.5f) 1f else -1f; 3 -> panRnd(tk, panSteps); else -> sin(TAU * ph) }
+                    val pn = wave * panD; xl *= 1f - maxOf(0f, pn); xr *= 1f + minOf(0f, pn)
+                }
             }
             val dl = dlL.read(dTime); val dr = dlR.read(dTime)
             dlL.write(xl + toneL.process(dl) * dfb); dlR.write(xr + toneR.process(dr) * dfb)
@@ -300,6 +317,10 @@ class FlowerDsp(private val f: Flower) {
                 if (!f.gate[idx] || frac < 0f || frac > gl) 1f else 0f
             }
             gateG += ((1f - gd * closed) - gateG) * gSmooth
+            // Pan section: width (mid/side), Haas spread, then the flower's own position.
+            if (wid != 1f) { val mid = (pl + pr) * 0.5f; val side = (pl - pr) * 0.5f * wid; pl = mid + side; pr = mid - side }
+            if (haasF > 1f) pr = haasStep(pr, haasF.toInt())
+            if (pos != 0f) { pl *= minOf(1f, 1f - pos); pr *= minOf(1f, 1f + pos) }
             val g = 1f - amount * (1f - gateG)
             l[i] = (l[i] * (1f - amount) + pl * amount) * g
             r[i] = (r[i] * (1f - amount) + pr * amount) * g
@@ -308,6 +329,19 @@ class FlowerDsp(private val f: Flower) {
 
     private object FloatArrayPool { val a = FloatArray(1024); val b = FloatArray(1024) }
     private val resPeriods = FloatArray(3)
+    private val haasBuf = FloatArray(2048); private var haasW = 0
+    private fun haasStep(x: Float, d: Int): Float {
+        haasBuf[haasW] = x
+        var r = haasW - d; if (r < 0) r += haasBuf.size
+        haasW++; if (haasW >= haasBuf.size) haasW = 0
+        return haasBuf[r]
+    }
+    private var rndSeg = -1L; private var rndVal = 0f
+    private fun panRnd(tk: Double, steps: Float): Float {
+        val seg = (tk / (Ticks.STEP * steps)).toLong()
+        if (seg != rndSeg) { rndSeg = seg; rndVal = rng.bi() }
+        return rndVal
+    }
     private object K {
         val BARS = floatArrayOf(0.25f, 0.5f, 1f, 2f, 4f)
         val CHORDS = arrayOf(floatArrayOf(0f, 0.08f, -0.08f), floatArrayOf(0f, 7f, 12f), floatArrayOf(0f, 12f, 24f), floatArrayOf(0f, 3f, 7f), floatArrayOf(0f, 4f, 7f))

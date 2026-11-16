@@ -21,7 +21,7 @@ import app.foxbox.seq.Transport
 /** What the screens need from the activity. */
 interface Host {
     fun showProjects()
-    fun showValley()
+    fun showClibbins()
     /** Load audio into "reflections", "leaves" or "pad<i>" (a Pickup pad). */
     fun pickAudio(target: String)
     fun toggleMic(target: String)
@@ -35,7 +35,7 @@ interface Host {
     fun audioSettings()
     fun presetMenu(engineId: String)
     fun addBlockMenu()
-    /** Rename a clip or take (from the clip launcher). */
+    /** Rename a clip or take (from Clibbins). */
     fun renameItem(id: String)
     /** Choose which input an audio track records. */
     fun channelInput(ch: Int)
@@ -100,7 +100,7 @@ class StudioScreen(c: Context, private val host: Host) : FrameLayout(c) {
         val fl = Btn(context, "", Pal.accent(Studio.FLOWERS)).apply { icon = Sprites.icon(Studio.FLOWERS); onClick = { select(Studio.FLOWERS) } }
         tabBtns[Studio.FLOWERS] = fl
         rail.addView(fl, lp(Px.dp(56), 0, 1f))
-        rail.addView(Btn(context, "", Pal.GREEN).apply { icon = Iso.iconStones; onClick = { host.showValley() } }, lp(Px.dp(56), 0, 1.2f))
+        rail.addView(Btn(context, "", Pal.GREEN).apply { icon = Iso.iconClibbins; onClick = { host.showClibbins() } }, lp(Px.dp(56), 0, 1.2f))
         // Pages of removed blocks are dropped.
         pages.keys.filter { it != Studio.FLOWERS && it !in Studio.project.blocks }.forEach { content.removeView(pages.remove(it)) }
         if (Studio.page !in Studio.pages) select(Studio.pages.first())
@@ -203,7 +203,7 @@ class StudioScreen(c: Context, private val host: Host) : FrameLayout(c) {
             auditionBtn = Btn(c, "Audition", Pal.AQUA).apply { onClick = { Studio.setAudition(!Studio.auditioning) } }.also { bar(it) }
             bar(Btn(c, "✿ Plant in garden", Pal.GREEN).apply { onClick = { Studio.flower?.let { Studio.plantFlower(it) } } })
             bar(Btn(c, "+ New flower", Pal.ORANGE).apply { onClick = { Studio.newFlower() } })
-            bar(Btn(c, "Tip: on the stones, drag a line from a flower through clips", Pal.BROWN))
+            bar(Btn(c, "Tip: in Clibbins, drag a line from a flower through clips", Pal.BROWN))
             return
         }
         val e = Studio.current
@@ -223,7 +223,7 @@ class StudioScreen(c: Context, private val host: Host) : FrameLayout(c) {
     private fun refreshChips() {
         val e = Studio.current
         val clips = Studio.clipsFor(e)
-        val sig = e.id + clips.joinToString { it.id + it.name + it.bars + Studio.isPlaying(it) + it.inValley + it.muted }
+        val sig = e.id + clips.joinToString { it.id + it.name + it.bars + Studio.isPlaying(it) + it.inClibbins + it.muted }
         if (sig == chipSig) return
         chipSig = sig
         chips.removeAllViews()

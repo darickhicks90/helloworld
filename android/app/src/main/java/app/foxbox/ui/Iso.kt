@@ -7,7 +7,7 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * Isometric pixel art for the Valley and the block icons. Everything is
+ * Isometric pixel art for Clibbins and the block icons. Everything is
  * drawn from flat shapes on the art-pixel grid (2:1 slopes), with no faces:
  * clouds, rowboats, trees, mushrooms, beehive boxes, pickup trucks, the
  * cabin, the village transport, biplanes, the tombstone and the little fox.
@@ -197,7 +197,6 @@ object Iso {
     val iconTree by lazy { Sprite(listOf("..GGGG..", ".GgGGGG.", "GgGGGGGG", "GGGGGGqG", ".GGGGqG.", "...BB...", "...BB..."), mapOf('q' to 0xFF3F7A3A.toInt())) }
     val iconMushroom by lazy { Sprite(listOf("..rrrr....", ".rOOOOr...", "rOOOOOOr..", "..WW..rr..", "..WW.rOOr.", "..WW..WW..", ".WWWW.WW.."), mapOf('r' to 0xFFB8521B.toInt())) }
     val iconFlower by lazy { Sprite(listOf("..o.o..", ".oOoOo.", "oOOWOOo", ".oOoOo.", "..oGo..", "...G...", "..GG...")) }
-    /** The rail button for the clip launcher: a few black boxes in the grass. */
-    val iconStones by lazy { Sprite(listOf("kkkk......", "kWWk..kkkk", "kkkk..kWWk", "......kkkk", ".kkkk.....", ".kWWk.kkkk", ".kkkk.kWWk", "G.G.G.kkkk"), mapOf('k' to 0xFF0B0B0B.toInt(), 'W' to 0xFFFFFFFF.toInt(), 'G' to 0xFF6FA84A.toInt()), outline = null) }
-    val iconValley by lazy { Sprite(listOf("......aa.....", "....aaaaaa...", "..GGG....GG..", ".GGGGG..GGGG.", "GGgGGGGGGGgGG", "GGGGGGgGGGGGG"), outline = null) }
+    /** The rail button for Clibbins: a few black boxes in the grass. */
+    val iconClibbins by lazy { Sprite(listOf("kkkk......", "kWWk..kkkk", "kkkk..kWWk", "......kkkk", ".kkkk.....", ".kWWk.kkkk", ".kkkk.kWWk", "G.G.G.kkkk"), mapOf('k' to 0xFF0B0B0B.toInt(), 'W' to 0xFFFFFFFF.toInt(), 'G' to 0xFF6FA84A.toInt()), outline = null) }
 }

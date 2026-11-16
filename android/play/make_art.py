@@ -93,6 +93,6 @@ if __name__ == '__main__':
         d.text((520 * k, 150 * k), "FoxBox", font=head, fill=INK)
         d.text((514 * k, 144 * k), "FoxBox", font=head, fill=CREAM)
         d.text((516 * k, 250 * k), "write it in the studio", font=body, fill=CREAM)
-        d.text((516 * k, 292 * k), "perform it in the valley", font=body, fill=CREAM)
+        d.text((516 * k, 292 * k), "perform it in Clibbins", font=body, fill=CREAM)
     supersampled(1024, 500, feature).save(os.path.join(here, 'feature-graphic-1024x500.png'))
     print('ok')

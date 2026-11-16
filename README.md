@@ -3,7 +3,7 @@
 FoxBox is a music app for Android, built to be played sideways (landscape).
 You **write** loops with up to six **Fox Box Blocks** (instruments), record
 audio takes from a class-compliant interface, then **perform** it all in the
-clip launcher.
+Clibbins.
 
 ## How it works
 
@@ -16,7 +16,7 @@ clip launcher.
    - To remove a block, hold its icon until it clicks, then drag it onto the
      **R.I.P.** tombstone. Its clips are kept and come back if you add the
      block again.
-   - **Flowers** (effects) and the **clip launcher** are always on the rail.
+   - **Flowers** (effects) and the **Clibbins** are always on the rail.
 3. **Melodic blocks** (Gusts, Reflections, Leaves, Bumble) have:
    - an **XY pad**. Tap **X ▾ / Y ▾** to choose what each axis controls. Tap
      **STAY / HOME** to switch modes. **Stay** keeps the values where you
@@ -61,8 +61,8 @@ clip launcher.
    - a **Mod Matrix:** 6 slots
 
    **Audition** hears the flower on everything. **Plant in garden** puts it
-   to work in the clip launcher.
-7. **The clip launcher** is where you perform (the button under Flowers on
+   to work in Clibbins.
+7. **Clibbins** is where you perform (the button under Flowers on
    the rail):
    - Plain black boxes with white text over detailed, retro-game-style
      grass.
@@ -82,7 +82,10 @@ clip launcher.
    - **Master** strip: a dB meter, the **master fader** (the level of
      everything FoxBox plays) and **● Tape**. Exporting a song works like
      mixing down to tape: arm the master, press play, and FoxBox records the
-     mix; stopping saves the song to your audio save location.
+     mix; stopping saves the song to your audio save location. Any Red,
+     Yellow or Blue track that is armed at the same time is mixed down too:
+     its live input goes onto the tape (and its meter), but not out of the
+     speakers, so a microphone can't feed back.
    - **Tap** a clip or take to queue it and select it. A **volume** fader, a
      horizontal **pan** slider and **✎ Rename** appear. **Double-tap** to
      mute.
@@ -195,7 +198,7 @@ To build it yourself, open `android/` in Android Studio, or run
 
 ```
 MainActivity.kt   screens, dialogs (File, Audio settings/test/wizard, MIDI mapping, presets), files, permissions
-Studio.kt         the controller: project, blocks, routing, chords, recording, audio takes, the clip launcher, undo, MIDI map
+Studio.kt         the controller: project, blocks, routing, chords, recording, audio takes, Clibbins, undo, MIDI map
 audio/            DSP blocks, parameters, XY pad state, shared envelopes/filter, the audio engine
                   (AAudio via cpp/foxbox_audio.c, AudioTrack fallback)
 blocks/           the block registry (a block HAS an engine; max 6 per session)
@@ -204,7 +207,7 @@ fx/               Flowers: effects + modulation matrix, the rack and the daisy c
 seq/              Transport, clips + MIDI files, audio takes, the shared step sequencer, music theory
 data/             projects, presets, add-ons/packs, WAV files, decoding, audio input, recording
 midi/             USB and Bluetooth MIDI input, CC mapping and MIDI learn
-ui/               pixel art, close-up grass, clip launcher, XY pad, chords & strum, block pages, studio, projects
+ui/               pixel art, close-up grass, Clibbins, XY pad, chords & strum, block pages, studio, projects
 ```
 
 The pixel fonts (Press Start 2P and Pixelify Sans, SIL Open Font License)

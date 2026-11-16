@@ -43,7 +43,7 @@ class Transport {
     /** Clips currently looping (snapshot, safe to read from the UI). */
     @Volatile var playing_ids: Set<String> = emptySet(); private set
 
-    /** Current Valley scene: when it started and how long its loop is (0 = no scene). */
+    /** Current Clibbins scene: when it started and how long its loop is (0 = no scene). */
     @Volatile var sceneStart = 0.0; private set
     @Volatile var sceneLen = 0; private set
     /** When the queued scene will start (-1 = nothing queued). */
@@ -121,7 +121,7 @@ class Transport {
         syncIds(); changed()
     }
 
-    // ---------------------------------------------------------------- Valley scenes
+    // ---------------------------------------------------------------- Clibbins scenes
 
     /** When the current scene's loop next comes round (or the next bar if there is no scene). */
     fun sceneBoundary(): Double = when {

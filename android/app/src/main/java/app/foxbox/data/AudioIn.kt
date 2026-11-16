@@ -15,7 +15,26 @@ import java.util.concurrent.atomic.AtomicInteger
  * or the built-in mic) in stereo, so each biplane can take input 1, input 2
  * or both. The audio thread marks where the take starts and ends.
  */
-class AudioIn(context: Context, deviceId: Int) {
+class AudioIn(context: Context, deviceId: Int, private val keep: Boolean = true) {
+    // ---- live monitor: a lock-free ring the audio thread reads (for mixing down to tape)
+    private val ringL = FloatArray(16384); private val ringR = FloatArray(16384)
+    @Volatile private var ringW = 0
+    private var ringRd = 0
+    private fun monitorPush(l: Float, r: Float) { val w = ringW; ringL[w] = l; ringR[w] = r; ringW = (w + 1) and 16383 }
+
+    /** Audio thread: copy up to n live frames into l/r (zeros if the input is behind). Never allocates. */
+    fun readMonitor(l: FloatArray, r: FloatArray, n: Int) {
+        val w = ringW
+        var avail = (w - ringRd) and 16383
+        if (avail > 4096) { ringRd = (w - 512) and 16383; avail = 512 } // fell far behind: catch up
+        for (i in 0 until n) {
+            if (avail > 0) { l[i] = ringL[ringRd]; r[i] = ringR[ringRd]; ringRd = (ringRd + 1) and 16383; avail-- } else { l[i] = 0f; r[i] = 0f }
+        }
+    }
+
+    /** Stop without keeping anything (a monitor-only input). */
+    fun close() { running = false; runCatching { thread.join(1000) } }
+
     private val left = FloatArrayBuilder(); private val right = FloatArrayBuilder()
     private val captured = AtomicInteger(0)
     @Volatile private var running = true
@@ -46,9 +65,13 @@ class AudioIn(context: Context, deviceId: Int) {
                     val n = rec.read(buf, 0, buf.size, AudioRecord.READ_BLOCKING)
                     if (n <= 0) { if (n < 0) break else continue }
                     var i = 0
-                    while (i + 1 < n) { left.add(buf[i]); right.add(buf[i + 1]); i += 2 }
+                    while (i + 1 < n) {
+                        if (keep) { left.add(buf[i]); right.add(buf[i + 1]) }
+                        monitorPush(buf[i], buf[i + 1])
+                        i += 2
+                    }
                     captured.addAndGet(n / 2)
-                    if (left.size > (app.foxbox.seq.AudioClip.MAX_SECONDS + 30) * SR) break
+                    if (keep && left.size > (app.foxbox.seq.AudioClip.MAX_SECONDS + 30) * SR) break
                 }
             } catch (_: Exception) {
             } finally { runCatching { rec.stop() }; rec.release() }

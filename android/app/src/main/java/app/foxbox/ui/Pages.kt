@@ -304,13 +304,13 @@ class FlowersPage(c: Context, private val host: Host) : LinearLayout(c) {
     }
 
     private fun refresh() {
-        val sig = Studio.project.flowers.joinToString { it.id + it.name + it.inValley } + Studio.flower?.id
+        val sig = Studio.project.flowers.joinToString { it.id + it.name + it.inClibbins } + Studio.flower?.id
         if (sig != listSig) {
             listSig = sig
             list.removeAllViews()
             list.addView(Btn(context, "+ New flower", Pal.ORANGE).apply { onClick = { Studio.newFlower() } }, lp(MATCH, Px.dp(42)))
             Studio.project.flowers.forEach { f ->
-                list.addView(Btn(context, f.name + if (f.inValley) " ✿" else "", Pal.accent("flowers")).apply {
+                list.addView(Btn(context, f.name + if (f.inClibbins) " ✿" else "", Pal.accent("flowers")).apply {
                     on = f === Studio.flower; icon = Iso.iconFlower
                     onClick = { Studio.selectFlower(f) }
                     onLong = { host.flowerMenu(f) }

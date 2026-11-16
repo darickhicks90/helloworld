@@ -4,7 +4,7 @@ import app.foxbox.audio.SR
 import org.json.JSONObject
 import java.util.UUID
 
-/** A recorded audio take on one of the three mono Valley channels (the biplanes). */
+/** A recorded audio take on one of the three audio tracks in Clibbins. */
 class AudioClip(
     val id: String = UUID.randomUUID().toString().take(8),
     val channel: Int,

@@ -43,12 +43,12 @@ import app.foxbox.ui.Host
 import app.foxbox.ui.ProjectScreen
 import app.foxbox.ui.Px
 import app.foxbox.ui.StudioScreen
-import app.foxbox.ui.ValleyScreen
+import app.foxbox.ui.ClibbinsScreen
 
-/** One activity, three screens: projects → studio ⇄ valley. */
+/** One activity, three screens: projects → studio ⇄ Clibbins. */
 class MainActivity : Activity(), Host {
     private lateinit var midi: MidiInput
-    private var screen = 0 // 0 projects, 1 studio, 2 valley
+    private var screen = 0 // 0 projects, 1 studio, 2 Clibbins
     private var studio: StudioScreen? = null
     private var pickFor: String? = null
     private var mic: AudioFiles.Mic? = null
@@ -139,10 +139,10 @@ class MainActivity : Activity(), Host {
         setContentView(studio ?: StudioScreen(this, this).also { studio = it })
     }
 
-    override fun showValley() {
+    override fun showClibbins() {
         screen = 2
         (studio?.parent as? android.view.ViewGroup)?.removeView(studio)
-        setContentView(ValleyScreen(this, this).apply { backToStudio = { showStudio() } })
+        setContentView(ClibbinsScreen(this, this).apply { backToStudio = { showStudio() } })
     }
 
     @Deprecated("Back handling for Android 12 and older")
@@ -208,9 +208,9 @@ class MainActivity : Activity(), Host {
     }
 
     override fun flowerMenu(f: Flower) {
-        choose(f.name, listOf(if (f.inValley) "Take out of the garden" else "Plant in the garden", "Rename", "Duplicate", "Delete")) { which ->
+        choose(f.name, listOf(if (f.inClibbins) "Take out of the garden" else "Plant in the garden", "Rename", "Duplicate", "Delete")) { which ->
             when (which) {
-                0 -> if (f.inValley) Studio.bury(f.id) else Studio.plantFlower(f)
+                0 -> if (f.inClibbins) Studio.bury(f.id) else Studio.plantFlower(f)
                 1 -> textDialog("Rename flower", f.name) { Studio.renameFlower(f, it) }
                 2 -> Studio.duplicateFlower(f)
                 3 -> Studio.deleteFlower(f)
@@ -222,7 +222,7 @@ class MainActivity : Activity(), Host {
 
     override fun channelInput(ch: Int) {
         val opts = listOf("Input 1 (left)", "Input 2 (right)", "Inputs 1+2 mixed")
-        choose("${Studio.CHANNEL_NAMES[ch]} track records…", opts, AudioPrefs.planeInput(ch)) { k -> AudioPrefs.setPlaneInput(ch, k); Studio.changed() }
+        choose("${Studio.CHANNEL_NAMES[ch]} track records…", opts, AudioPrefs.planeInput(ch)) { k -> AudioPrefs.setPlaneInput(ch, k); Studio.refreshLive(); Studio.changed() }
     }
 
     override fun addBlockMenu() {
@@ -244,7 +244,7 @@ class MainActivity : Activity(), Host {
             "Duplicate project…",
             "Rename project…",
             "Audio save location: ${ProjectStore.location.label}…",
-            "Export a song: arm Master on the clip launcher, then play…",
+            "Export a song: arm Master in Clibbins, then play…",
             "Sample packs…",
             "Blocks & add-ons…",
             "Import a preset file…",
@@ -261,7 +261,7 @@ class MainActivity : Activity(), Host {
                 }
                 3 -> textDialog("Rename project", Studio.project.name) { ProjectStore.rename(Studio.project, it); Studio.changed() }
                 4 -> chooseLocation()
-                5 -> Studio.message("On the clip launcher, arm the Master strip, then press play. Stopping exports the song.")
+                5 -> Studio.message("In Clibbins, arm the Master strip, then press play. Stopping exports the song.")
                 6 -> packsMenu()
                 7 -> storeMenu()
                 8 -> openDocument(REQ_PRESET, "*/*")

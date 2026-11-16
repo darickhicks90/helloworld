@@ -5,11 +5,12 @@
 **Contains ads:** No · **In-app purchases:** No
 
 ## Short description (80 max)
-Make loops with cozy pixel synths, then perform them in a magical fox valley.
+Make loops with cozy pixel synths, then perform and mix them down in Clibbins.
 
 ## Full description
 FoxBox is a pocket music studio with a 16-bit cottagecore heart. Write loops
-in five hand-built sound engines, then perform them like a game in the Valley.
+with up to six swappable Fox Box Blocks, record audio, then perform it all in
+Clibbins and mix it down to tape.
 
 WRITE IN THE STUDIO
 • Gusts: a warm analog-style synth
@@ -24,10 +25,11 @@ PLAY WITHOUT WRONG NOTES
 Pick a key and scale. Tap chords or hold one and strum. Bend the sound with an
 XY pad you can map to any parameter.
 
-PERFORM IN THE VALLEY
-Your clips become tiny critters. Draw lines between them to build the next
-scene, then tap the nine-tailed kitsune. The music changes on the beat.
-Plant your flowers and drag them into bloom.
+PERFORM IN CLIBBINS
+Your clips and audio takes lie scattered in the grass. Tap them to queue the
+next scene and it changes on the beat. Draw daisy chains from your flowers
+through clips to run them through effects, set volume and pan, then arm the
+master and mix the whole song down to tape.
 
 FOR MUSICIANS
 • USB and Bluetooth MIDI, MPE (ROLI Seaboard), pad controllers (Synido TempoPad)

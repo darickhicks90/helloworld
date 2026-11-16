@@ -85,6 +85,14 @@ object Audio {
     private val audioBus = Array(3) { FloatArray(BLOCK) }
     /** Level of each audio channel (the biplanes). */
     val channelLevel = floatArrayOf(0.9f, 0.9f, 0.9f)
+    /** Live input for armed tracks while mixing down (set by the Studio). */
+    @Volatile var liveIn: app.foxbox.data.AudioIn? = null
+    /** Which tracks are armed, and which input each takes (0 in 1, 1 in 2, 2 both). */
+    val liveArm = BooleanArray(3)
+    val liveInput = IntArray(3)
+    private val inL = FloatArray(BLOCK); private val inR = FloatArray(BLOCK)
+    private val liveL = FloatArray(BLOCK); private val liveR = FloatArray(BLOCK)
+    private fun softClip(x: Float) = if (x > 1f) 1f else if (x < -1f) -1f else x
     /** Meter for each audio track (peak, linear). */
     val channelPeak = FloatArray(3)
     private val audioBusR = Array(3) { FloatArray(BLOCK) }
@@ -142,7 +150,30 @@ object Audio {
         var pk = peak * 0.97f
         for (i in 0 until n) pk = max(pk, abs(mixL[i]))
         peak = pk
-        tap?.invoke(mixL, mixR, n)
+        // Live input on armed tracks: shown on their meters, and mixed into the tape
+        // (not the speakers, so a mic can't feed back).
+        val li = liveIn
+        val tp = tap
+        if (li != null) {
+            li.readMonitor(inL, inR, n)
+            var any = false
+            for (i in 0 until n) { liveL[i] = 0f; liveR[i] = 0f }
+            for (ch in 0 until 3) if (liveArm[ch]) {
+                any = true
+                val src = liveInput[ch]; val g = channelLevel[ch]
+                var pk = channelPeak[ch] * 0.95f
+                for (i in 0 until n) {
+                    val v = (when (src) { 0 -> inL[i]; 1 -> inR[i]; else -> (inL[i] + inR[i]) * 0.5f }) * g
+                    liveL[i] += v; liveR[i] += v; pk = max(pk, abs(v))
+                }
+                channelPeak[ch] = pk
+            }
+            if (any && tp != null) {
+                val mv = masterVolume
+                for (i in 0 until n) { liveL[i] = softClip(mixL[i] + liveL[i] * mv); liveR[i] = softClip(mixR[i] + liveR[i] * mv) }
+                tp(liveL, liveR, n)
+            } else tp?.invoke(mixL, mixR, n)
+        } else tp?.invoke(mixL, mixR, n)
     }
 
     // ---------------------------------------------------------------- device output

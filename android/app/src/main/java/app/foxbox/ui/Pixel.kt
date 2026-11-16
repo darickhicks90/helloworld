@@ -21,7 +21,7 @@ object Pal {
     const val BROWN_L = 0xFFA8774C.toInt()
     const val BROWN = 0xFF7A4A2A.toInt()
     const val BROWN_D = 0xFF3D2414.toInt()
-    // Valley extras: meadow greens and sunset tones.
+    // Extras: meadow greens and sunset tones.
     const val GREEN_L = 0xFFA9CF6A.toInt()
     const val GREEN = 0xFF6FA84A.toInt()
     const val GREEN_D = 0xFF3F7A3A.toInt()
@@ -167,7 +167,7 @@ object Sprites {
             ".bBboooBbBbDDDBbB...", ".BbBbBbBbBbDoDbBb...", ".bBbBbBbBbBDDDBbB...", ".BBBBBBBBBBBBBBBB...",
         ))
     }
-    /** The small kitsune for the Valley (tails are drawn separately). */
+    /** The small kitsune for Clibbins (tails are drawn separately). */
     val kitsune by lazy {
         Sprite(listOf(
             ".D..........D.", ".DD........DD.", ".DoD......DoD.", ".DOoDDDDDDoOD.", ".DOOOOOOOOOOD.",

@@ -14,7 +14,7 @@ import app.foxbox.seq.Transport
 import kotlin.math.hypot
 import kotlin.math.log10
 
-/** What the clip launcher shows (built from the Studio every frame). */
+/** What Clibbins shows (built from the Studio every frame). */
 class LaunchModel(
     /** MIDI clips and audio takes, all scattered over the grass. */
     val clips: List<Box>,
@@ -45,7 +45,7 @@ class LaunchModel(
 }
 
 /**
- * Draws the clip launcher: black boxes with white text over grass. MIDI
+ * Draws Clibbins: black boxes with white text over grass. MIDI
  * clips and audio takes (drawn as their waveforms in their track's colour)
  * are scattered irregularly; the small mixer in the corner has a vertical
  * strip per audio track plus the master. Records hit areas for touch.
@@ -324,7 +324,7 @@ object ClipField {
 }
 
 /**
- * The clip launcher (opened from the rail):
+ * Clibbins (opened from the rail):
  *  - Tap a clip or take to queue it and select it: a volume fader, a pan
  *    slider and a rename button appear. Double-tap to mute.
  *  - ▶ Play starts the queued clips (when the current loop comes round),
@@ -336,7 +336,7 @@ object ClipField {
  *  - Hold a clip until it clicks, then drag it to R.I.P. to lay it to rest.
  */
 @SuppressLint("ViewConstructor")
-class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
+class ClibbinsScreen(c: Context, private val host: Host) : PixelView(c) {
     var backToStudio: (() -> Unit)? = null
     private val t0 = System.nanoTime()
     private val hits = ArrayList<ClipField.Hit>()
@@ -364,7 +364,7 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
         val t = Audio.transport
         val p = Studio.project
         val boxes = ArrayList<LaunchModel.Box>()
-        Studio.valleyClips.forEach { cl ->
+        Studio.clibbinsClips.forEach { cl ->
             boxes += LaunchModel.Box(cl.id, cl.name, Studio.engine(cl.engine).title, Pal.accent(cl.engine), Studio.isQueued(cl.id), Studio.isPlaying(cl.id), cl.muted, cl.volume)
         }
         p.audioClips.forEach { a ->
@@ -372,7 +372,7 @@ class ValleyScreen(c: Context, private val host: Host) : PixelView(c) {
         }
         val inputs = listOf("In 1", "In 2", "In 1+2")
         val strips = (0 until AudioClip.CHANNELS).map { ch -> LaunchModel.Strip(ch, Studio.CHANNEL_NAMES[ch], Iso.PLANES[ch], Studio.armed[ch], Audio.channelPeak[ch], inputs[AudioPrefs.planeInput(ch).coerceIn(0, 2)]) }
-        val flowers = Studio.valleyFlowers.map { f -> LaunchModel.FlowerSlot(f.id, f.name, f.variant, f.bloom, Studio.chainIndex(f.id)) }
+        val flowers = Studio.clibbinsFlowers.map { f -> LaunchModel.FlowerSlot(f.id, f.name, f.variant, f.bloom, Studio.chainIndex(f.id)) }
         val chains = p.chains.map { it.flowerId to it.clipIds.toList() }
         val status = when {
             t.audioRec == Transport.Rec.ARMED -> "Count-in… ${t.beat + 1}"

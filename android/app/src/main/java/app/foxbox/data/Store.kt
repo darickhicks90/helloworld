@@ -20,7 +20,7 @@ object Store {
     /** Planned add-ons (shown as "coming soon" until billing is connected). */
     val catalog = listOf(
         Product("block_lantern", "Lantern (FM synth block)", Kind.BLOCK, "Glassy FM bells and basses"),
-        Product("look_winter", "Winter Valley look", Kind.LOOK, "Snow, frost and long blue evenings"),
+        Product("look_winter", "Winter Clibbins look", Kind.LOOK, "Snow, frost and long blue evenings"),
         Product("pack_field", "Field Recordings pack", Kind.SAMPLE_PACK, "Creeks, birds, wind in the reeds"),
     )
 

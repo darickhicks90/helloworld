@@ -27,7 +27,7 @@ import kotlin.math.tanh
  * A Flower is a performance effect you design: pitch, resonators,
  * modulation (chorus/flanger, phaser, ring mod, tremolo, auto-pan,
  * decimator), delay, reverb with shimmer, and rhythmic stutter and gate,
- * all blended, with a 6-slot modulation matrix. In the Valley its bloom
+ * all blended, with a 6-slot modulation matrix. In Clibbins its bloom
  * (0..1) sets how much of the effect you hear.
  */
 class Flower(val id: String = UUID.randomUUID().toString().take(8), var name: String = "Flower") {
@@ -118,16 +118,16 @@ class Flower(val id: String = UUID.randomUUID().toString().take(8), var name: St
     val xy = XyState(p, "revMix", "delayMix")
     val gate = BooleanArray(16) { it % 4 != 3 }
 
-    /** 0 = closed bud, 1 = full bloom. Set from the Valley. */
+    /** 0 = closed bud, 1 = full bloom. Set from Clibbins. */
     @Volatile var bloom = 0.6f
-    var inValley = false
+    var inClibbins = false
     var variant = 0
 
     fun divSteps(choice: Param) = divSteps[choice.index.coerceIn(0, divSteps.size - 1)]
 
     fun toJson() = JSONObject().apply {
         put("id", id); put("name", name); put("params", p.save()); put("gate", JSONArray(gate.toList()))
-        put("valley", inValley); put("bloom", bloom.toDouble()); put("variant", variant)
+        put("valley", inClibbins); put("bloom", bloom.toDouble()); put("variant", variant)
     }
 
     companion object {
@@ -135,7 +135,7 @@ class Flower(val id: String = UUID.randomUUID().toString().take(8), var name: St
         fun fromJson(o: JSONObject) = Flower(o.getString("id"), o.optString("name", "Flower")).apply {
             p.load(o.optJSONObject("params"))
             o.optJSONArray("gate")?.let { a -> for (i in 0 until minOf(16, a.length())) gate[i] = a.getBoolean(i) }
-            inValley = o.optBoolean("valley"); bloom = o.optDouble("bloom", 0.6).toFloat(); variant = o.optInt("variant")
+            inClibbins = o.optBoolean("valley"); bloom = o.optDouble("bloom", 0.6).toFloat(); variant = o.optInt("variant")
         }
     }
 }

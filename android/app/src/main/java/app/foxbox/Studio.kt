@@ -36,15 +36,15 @@ import kotlin.math.ceil
 /**
  * The app's controller: the open project, the session of blocks, which page
  * is in front, note and chord routing, recording (MIDI clips and audio
- * takes), the Valley (queue, mixer, daisy chains), undo and saving. UI code
+ * takes), Clibbins (queue, mixer, daisy chains), undo and saving. UI code
  * calls it on the main thread; anything that touches sound is forwarded to
  * the audio thread with Audio.post.
  */
 object Studio : Transport.Listener, MidiInput.Sink {
     const val FLOWERS = "flowers"
-    /** Most clips a block can hold (keeps room for every sprite in the Valley). */
+    /** Most clips a block can hold (keeps room for every sprite in Clibbins). */
     const val MAX_CLIPS = 3
-    /** Most flowers planted in the Valley at once. */
+    /** Most flowers planted in Clibbins at once. */
     const val MAX_PLANTED = 5
     const val MAX_CHAINS = 3
     val CHANNEL_NAMES = listOf("Red", "Yellow", "Blue")
@@ -96,8 +96,8 @@ object Studio : Transport.Listener, MidiInput.Sink {
         p.applyEngines()
         Audio.flowers.audition = null; auditioning = false
         if (p.flowers.isEmpty()) p.flowers += Flower(name = "Dewdrop")
-        Blocks.types.forEach { b -> p.clips.filter { it.engine == b.id && it.inValley }.drop(MAX_CLIPS).forEach { it.inValley = false } }
-        p.flowers.filter { it.inValley }.drop(MAX_PLANTED).forEach { it.inValley = false }
+        Blocks.types.forEach { b -> p.clips.filter { it.engine == b.id && it.inClibbins }.drop(MAX_CLIPS).forEach { it.inClibbins = false } }
+        p.flowers.filter { it.inClibbins }.drop(MAX_PLANTED).forEach { it.inClibbins = false }
         flower = p.flowers.first()
         armed.fill(false)
         // The three audio tracks always exist (like tracks in a DAW).
@@ -280,6 +280,28 @@ object Studio : Transport.Listener, MidiInput.Sink {
         tapeFollowsTransport(); changed()
     }
 
+    private var monitorIn: AudioIn? = null
+
+    /**
+     * Live input for armed tracks: while the tape is rolling (or a take is
+     * recording), what comes in on each armed Red/Yellow/Blue track goes on
+     * its meter and into the mixdown.
+     */
+    fun refreshLive() {
+        if (!isOpen) return
+        for (ch in 0 until 3) { Audio.liveArm[ch] = armed[ch]; Audio.liveInput[ch] = AudioPrefs.planeInput(ch) }
+        val take = t.audioIn
+        if (take != null) { monitorIn?.close(); monitorIn = null; Audio.liveIn = take; return }
+        val need = tape != null && armed.any { it }
+        if (need && monitorIn == null) {
+            if (app.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                message("Allow the microphone (tap ● Rec once) so armed tracks can be mixed down"); return
+            }
+            monitorIn = try { AudioIn(app, AudioPrefs.inputDevice, keep = false) } catch (e: Exception) { message(e.message ?: "Couldn't open the audio input"); null }
+        } else if (!need) { monitorIn?.close(); monitorIn = null }
+        Audio.liveIn = monitorIn
+    }
+
     private fun tapeFollowsTransport() {
         if (!isOpen) return
         val rolling = masterArmed && t.playing
@@ -294,6 +316,7 @@ object Studio : Transport.Listener, MidiInput.Sink {
             }.start()
             changed()
         }
+        refreshLive()
     }
 
     /** Rename a clip or take. */
@@ -322,7 +345,7 @@ object Studio : Transport.Listener, MidiInput.Sink {
             kept.forEach { c ->
                 val e = engine(c.engine)
                 val n = project.clips.count { it.engine == c.engine } + 1
-                c.name = "${e.title} $n"; c.variant = n - 1; c.inValley = true
+                c.name = "${e.title} $n"; c.variant = n - 1; c.inClibbins = true
                 project.clips += c
                 ProjectStore.saveClipMidi(project, c)
             }
@@ -356,7 +379,7 @@ object Studio : Transport.Listener, MidiInput.Sink {
     /** The master fader: the level of everything FoxBox plays. */
     fun setAudioMaster(v: Float) { project.audioMaster = v.coerceIn(0f, 1f); Audio.masterVolume = project.audioMaster }
 
-    fun toggleArm(ch: Int) { if (project.planes[ch]) { armed[ch] = !armed[ch]; changed() } }
+    fun toggleArm(ch: Int) { if (project.planes[ch]) { armed[ch] = !armed[ch]; refreshLive(); changed() } }
 
     /** Water tower / audio rec: 2 bars of count-in, then record the armed biplanes. Again to stop. */
     fun recordAudio() {
@@ -373,6 +396,7 @@ object Studio : Transport.Listener, MidiInput.Sink {
     }
 
     private fun startTake() {
+        monitorIn?.close(); monitorIn = null; Audio.liveIn = null
         val input = try { AudioIn(app, AudioPrefs.inputDevice) } catch (e: Exception) {
             return message(e.message ?: "Couldn't open the audio input")
         }
@@ -382,6 +406,7 @@ object Studio : Transport.Listener, MidiInput.Sink {
             t.latencyFrames = (latency * SR / 1000f).toInt().coerceAtLeast(0)
             t.recordAudio()
         }
+        Audio.liveIn = input
         message("Two bars of count-in, then recording " + armed.indices.filter { armed[it] }.joinToString { CHANNEL_NAMES[it] })
         changed()
     }
@@ -389,6 +414,7 @@ object Studio : Transport.Listener, MidiInput.Sink {
     override fun onAudioTakeEnded() {
         val input = t.audioIn ?: return
         t.audioIn = null
+        Audio.liveIn = null
         val chans = armed.indices.filter { armed[it] && project.planes[it] }
         val bpm = project.bpm
         Thread {
@@ -412,8 +438,9 @@ object Studio : Transport.Listener, MidiInput.Sink {
             main.post {
                 project.audioClips += made
                 made.forEach { project.queued += it.id }
-                if (made.isNotEmpty()) message("Recorded " + made.joinToString { it.name } + " (queued on the stones)")
+                if (made.isNotEmpty()) message("Recorded " + made.joinToString { it.name } + " (queued in Clibbins)")
                 else message("No audio came in. Check the input in Audio settings.")
+                refreshLive()
                 save(); changed()
             }
         }.start()
@@ -439,21 +466,21 @@ object Studio : Transport.Listener, MidiInput.Sink {
 
     fun deleteClip(c: Clip) {
         Audio.post { t.stopClip(c.id) }
-        project.clips.remove(c); dropFromValley(c.id)
+        project.clips.remove(c); dropFromClibbins(c.id)
         save(); changed()
     }
 
     fun deleteTake(c: AudioClip) {
         Audio.post { t.stopClip(c.id) }
-        project.audioClips.remove(c); dropFromValley(c.id)
+        project.audioClips.remove(c); dropFromClibbins(c.id)
         ProjectStore.deleteTake(project, c)
         save(); changed()
     }
 
     fun renameClip(c: Clip, name: String) { c.name = name.ifBlank { c.name }; save(); changed() }
 
-    fun sendToValley(c: Clip) {
-        c.inValley = true; save(); changed()
+    fun sendToClibbins(c: Clip) {
+        c.inClibbins = true; save(); changed()
     }
 
     // ------------------------------------------------------------------ flowers
@@ -476,15 +503,15 @@ object Studio : Transport.Listener, MidiInput.Sink {
 
     fun deleteFlower(f: Flower) {
         if (project.flowers.size <= 1) return message("Keep at least one flower")
-        project.flowers.remove(f); dropFromValley(f.id)
+        project.flowers.remove(f); dropFromClibbins(f.id)
         if (flower === f) flower = project.flowers.first()
         save(); changed()
     }
 
     fun plantFlower(f: Flower) {
-        if (!f.inValley && project.flowers.count { it.inValley } >= MAX_PLANTED) return message("The garden has room for $MAX_PLANTED flowers. Remove one first.")
-        f.inValley = true
-        message("${f.name} is planted in the garden: on the stones, drag a line from it through clips to make a daisy chain"); save(); changed()
+        if (!f.inClibbins && project.flowers.count { it.inClibbins } >= MAX_PLANTED) return message("The garden has room for $MAX_PLANTED flowers. Remove one first.")
+        f.inClibbins = true
+        message("${f.name} is planted in the garden: in Clibbins, drag a line from it through clips to make a daisy chain"); save(); changed()
     }
 
     /** Hear the flower being edited on everything, at full bloom. */
@@ -496,11 +523,11 @@ object Studio : Transport.Listener, MidiInput.Sink {
 
     fun setBloom(f: Flower, b: Float) { f.bloom = b.coerceIn(0f, 1f) }
 
-    // ------------------------------------------------------------------ Valley
+    // ------------------------------------------------------------------ Clibbins
 
-    val valleyClips get() = project.clips.filter { it.engine in project.blocks }
-    val valleyFlowers get() = project.flowers.filter { it.inValley }
-    val valleyTakes get() = project.audioClips.filter { project.planes[it.channel] }
+    val clibbinsClips get() = project.clips.filter { it.engine in project.blocks }
+    val clibbinsFlowers get() = project.flowers.filter { it.inClibbins }
+    val clibbinsTakes get() = project.audioClips.filter { project.planes[it.channel] }
 
     fun isQueued(id: String) = id in project.queued
     fun toggleQueued(id: String) { if (!project.queued.remove(id)) project.queued += id; save(); changed() }
@@ -520,14 +547,14 @@ object Studio : Transport.Listener, MidiInput.Sink {
         save(); changed()
     }
 
-    /** Lay a Valley sprite to rest: clips and takes are deleted, flowers go back to the Flowers page. */
+    /** Lay a Clibbins item to rest: clips and takes are deleted, flowers go back to the Flowers page. */
     fun bury(id: String) {
         clipById(id)?.let { c -> deleteClip(c); message("${c.name} was laid to rest"); return }
         takeById(id)?.let { c -> deleteTake(c); message("${c.name} was laid to rest"); return }
-        project.flowers.firstOrNull { it.id == id }?.let { f -> f.inValley = false; dropFromValley(f.id); message("${f.name} went back to the Flowers page"); save(); changed() }
+        project.flowers.firstOrNull { it.id == id }?.let { f -> f.inClibbins = false; dropFromClibbins(f.id); message("${f.name} went back to the Flowers page"); save(); changed() }
     }
 
-    private fun dropFromValley(id: String) {
+    private fun dropFromClibbins(id: String) {
         project.queued.remove(id)
         project.chains.removeAll { it.flowerId == id }
         project.chains.forEach { it.clipIds.remove(id) }
@@ -559,7 +586,7 @@ object Studio : Transport.Listener, MidiInput.Sink {
         val routes = HashMap<String, Int>()
         val channel = IntArray(3) { -1 }
         project.chains.take(3).forEachIndexed { k, ch ->
-            val f = project.flowers.firstOrNull { it.id == ch.flowerId && it.inValley } ?: return@forEachIndexed
+            val f = project.flowers.firstOrNull { it.id == ch.flowerId && it.inClibbins } ?: return@forEachIndexed
             chains[k] = old.firstOrNull { it?.flower === f } ?: FlowerRack.Chain(f)
             ch.clipIds.forEach { id ->
                 clipById(id)?.let { if (it.engine in project.blocks) routes.putIfAbsent(it.engine, k) }
@@ -569,7 +596,7 @@ object Studio : Transport.Listener, MidiInput.Sink {
         Audio.post { rack.chains = chains; rack.blockRoute = routes; rack.channelRoute = channel }
     }
 
-    /** Shuffle: everything on the clip launcher moves to new spots. */
+    /** Shuffle: everything in Clibbins moves to new spots. */
     fun shuffleLayout() { project.layoutSeed = kotlin.random.Random.nextInt(1, 1_000_000); save(); changed() }
 
     val sceneQueued get() = t.queuedAt >= 0
@@ -577,11 +604,11 @@ object Studio : Transport.Listener, MidiInput.Sink {
     /** The roof: play what's queued. Starts now if stopped, or when the current loop comes round. */
     fun playScene() {
         if (sceneQueued) { Audio.post { t.cancelScene() }; message("Next scene cancelled"); return }
-        val clips = valleyClips.filter { it.id in project.queued }
-        val takes = valleyTakes.filter { it.id in project.queued }
+        val clips = clibbinsClips.filter { it.id in project.queued }
+        val takes = clibbinsTakes.filter { it.id in project.queued }
         if (clips.isEmpty() && takes.isEmpty()) {
-            if (!t.playing) { play(); message("Playing. Tap stones to queue them, then tap PLAY again.") }
-            else message("Tap stones to queue them first")
+            if (!t.playing) { play(); message("Playing. Tap clips to queue them, then tap ▶ Play again.") }
+            else message("Tap clips to queue them first")
             return
         }
         val pairs = clips.map { it to engine(it.engine) }

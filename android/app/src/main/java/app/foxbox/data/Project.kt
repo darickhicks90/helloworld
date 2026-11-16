@@ -17,7 +17,7 @@ import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-/** A daisy chain in the Valley: a flower tied to the clips its line passed through. */
+/** A daisy chain in Clibbins: a flower tied to the clips its line passed through. */
 class DaisyChain(val flowerId: String, val clipIds: MutableList<String> = mutableListOf(), val path: MutableList<FloatArray> = mutableListOf()) {
     fun toJson() = JSONObject().apply {
         put("flower", flowerId); put("clips", JSONArray(clipIds))
@@ -33,7 +33,7 @@ class DaisyChain(val flowerId: String, val clipIds: MutableList<String> = mutabl
 
 /**
  * A FoxBox project: tempo, key, the blocks in the session, clips, audio
- * takes, flowers, Valley state and every block's settings. Lives in its own
+ * takes, flowers, Clibbins state and every block's settings. Lives in its own
  * folder with project.json, samples/, midi/, audio/ and takes/.
  */
 class Project(val dir: File) {
@@ -59,7 +59,7 @@ class Project(val dir: File) {
     val chains = mutableListOf<DaisyChain>()
     val flowers = mutableListOf<Flower>()
     var engineState = JSONObject()
-    /** Seed for where things lie on the clip launcher (Shuffle picks a new one). */
+    /** Seed for where things lie in Clibbins (Shuffle picks a new one). */
     var layoutSeed = 0
     /** Level of the master audio track. */
     var audioMaster = 0.75f

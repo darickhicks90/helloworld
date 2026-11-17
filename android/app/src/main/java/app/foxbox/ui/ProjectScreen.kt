@@ -35,25 +35,28 @@ class ProjectScreen(c: Context, private val onOpen: (Project) -> Unit, private v
     private val headP = Px.text(34f, Pal.ORANGE, headFont = true)
     private val shine = intArrayOf(0xFFFFF4D6.toInt(), 0xFFFFD27A.toInt(), 0xFFF4A259.toInt(), 0xFFE8742C.toInt(), 0xFFB8521B.toInt())
 
-    // ---- the title scene: a starlit clearing where the yeti reaches up to catch fireflies (pixel art, played back as frames)
+    // ---- the title scene: a starlit clearing where the yeti kneels, turned away, digging through the grass
+    //      (pixel art, played back as frames; he pays the viewer no mind)
     private fun img(name: String) = context.assets.open("images/$name").use { android.graphics.BitmapFactory.decodeStream(it) }
     private val bg = img("title_bg.png")
+    private val fg = img("title_fg.png")
     private val sheet = img("yeti_frames.png")
-    private val blink = img("yeti_blink.png")
     private val anim = org.json.JSONObject(context.assets.open("images/yeti_anim.json").use { String(it.readBytes()) })
     private val frames = anim.getInt("frames"); private val fw = anim.getInt("w"); private val fh = anim.getInt("h")
     private val fx = anim.getInt("x"); private val fy = anim.getInt("y")
-    private val hands = anim.getJSONArray("hands").let { a -> Array(a.length()) { i -> a.getJSONArray(i).let { floatArrayOf(it.getDouble(0).toFloat(), it.getDouble(1).toFloat()) } } }
+    private val dig = anim.getJSONArray("dig").let { floatArrayOf(it.getDouble(0).toFloat(), it.getDouble(1).toFloat()) }
     private val pixel = Paint().apply { isFilterBitmap = false; isAntiAlias = false }
-    private val glow = Paint()
+    private val dot = Paint()
     private val src = android.graphics.Rect(); private val dst = android.graphics.RectF()
     private val t0 = System.nanoTime()
-    /** Fireflies: centre, orbit radii, speed and phase, in scene pixels. The first one is the one he reaches for. */
+    /** Fireflies: centre, orbit radii, speed and phase, in scene pixels. */
     private val bugs = arrayOf(
-        floatArrayOf(388f, 34f, 22f, 10f, 0.9f, 0f), floatArrayOf(300f, 120f, 30f, 14f, 0.6f, 1.3f), floatArrayOf(440f, 110f, 18f, 22f, 0.7f, 2.1f),
-        floatArrayOf(210f, 150f, 40f, 12f, 0.5f, 0.4f), floatArrayOf(120f, 130f, 30f, 18f, 0.8f, 3.0f), floatArrayOf(470f, 60f, 14f, 20f, 0.65f, 4.2f),
-        floatArrayOf(60f, 165f, 26f, 10f, 0.75f, 5.1f),
+        floatArrayOf(330f, 120f, 34f, 14f, 0.5f, 0f), floatArrayOf(420f, 90f, 26f, 18f, 0.6f, 1.3f), floatArrayOf(250f, 150f, 30f, 12f, 0.45f, 2.1f),
+        floatArrayOf(180f, 110f, 40f, 14f, 0.5f, 0.4f), floatArrayOf(90f, 140f, 30f, 18f, 0.7f, 3.0f), floatArrayOf(460f, 150f, 14f, 20f, 0.55f, 4.2f),
+        floatArrayOf(40f, 175f, 26f, 10f, 0.6f, 5.1f), floatArrayOf(300f, 60f, 22f, 12f, 0.4f, 2.7f),
     )
+    private val DIRT = intArrayOf(0xFF3E2816.toInt(), 0xFF5A3A20.toInt(), 0xFF7A5230.toInt(), 0xFF4F8436.toInt(), 0xFF3C6E30.toInt())
+    private fun hash(n: Int): Float { var x = n * 374761393 + 668265263; x = (x xor (x ushr 13)) * 1274126177; return ((x xor (x ushr 16)) and 0xFFFF) / 65535f }
 
     override fun onDraw(c: Canvas) {
         val w = width.toFloat(); val h = height.toFloat()
@@ -64,23 +67,41 @@ class ProjectScreen(c: Context, private val onOpen: (Project) -> Unit, private v
         val left = bg.width - sw; val top = (bg.height - sh) / 2
         src.set(left, top, left + sw, top + sh); dst.set(0f, 0f, w, h)
         c.drawBitmap(bg, src, dst, pixel)
-        fun at(sx: Float, sy: Float, bmp: android.graphics.Bitmap, sr: android.graphics.Rect) {
-            dst.set((sx - left) * k, (sy - top) * k, (sx - left + sr.width()) * k, (sy - top + sr.height()) * k); c.drawBitmap(bmp, sr, dst, pixel)
-        }
-        // reach up, hold a moment with the firefly, come back down (about 4 s a cycle)
-        val cyc = (t / 4.2f) % 1f
-        val reach = (1.35f * (0.5f - 0.5f * kotlin.math.cos(2 * Math.PI.toFloat() * cyc))).coerceAtMost(1f)
+        fun sx(x: Float) = (x - left) * k
+        fun sy(y: Float) = (y - top) * k
+        // Dig, dig, dig, then a short rest looking at the hole: scoops of about 1.3 s.
+        val period = 1.3f
+        val cycle = (t / period).toInt(); val p = (t / period) % 1f
+        val resting = cycle % 5 == 4
+        val reach = if (resting) 0f else 0.5f - 0.5f * kotlin.math.cos(2 * Math.PI.toFloat() * p)
         val f = (reach * (frames - 1) + 0.5f).toInt().coerceIn(0, frames - 1)
-        src.set(f * fw, 0, (f + 1) * fw, fh); at(fx.toFloat(), fy.toFloat(), sheet, src)
-        if ((t % 3.7f) < 0.14f) { src.set(0, 0, fw, fh); at(fx.toFloat(), fy.toFloat(), blink, src) }
-        // fireflies: soft pulsing lights; the first drifts down into his raised hand
-        for ((i, b) in bugs.withIndex()) {
-            var x = b[0] + b[2] * kotlin.math.sin(t * b[4] + b[5]); var y = b[1] + b[3] * kotlin.math.sin(t * b[4] * 1.7f + b[5] * 2f)
-            if (i == 0) { val hp = hands[f]; val g = reach * reach * reach; x += (hp[0] - x) * g; y += (hp[1] - 3f - y) * g }
+        src.set(f * fw, 0, (f + 1) * fw, fh)
+        dst.set(sx(fx.toFloat()), sy(fy.toFloat()), sx((fx + fw).toFloat()), sy((fy + fh).toFloat())); c.drawBitmap(sheet, src, dst, pixel)
+        // Clods of earth and bits of grass fly back over his shoulder at the bottom of each scoop.
+        for (back in 0..1) {
+            val cc = cycle - back
+            if (cc < 0 || cc % 5 == 4) continue
+            val age = t - (cc + 0.55f) * period
+            if (age < 0f || age > 1.1f) continue
+            for (j in 0 until 7) {
+                val r1 = hash(cc * 31 + j); val r2 = hash(cc * 57 + j * 7); val r3 = hash(cc * 13 + j * 3)
+                val vx = 38f + 60f * r1; val vy = -70f - 55f * r2
+                val x = dig[0] + (r3 - 0.5f) * 10f + vx * age; val y = dig[1] + vy * age + 160f * age * age
+                if (y > dig[1] + 4f) continue
+                dot.color = DIRT[(r1 * 4.99f).toInt()]
+                val sz = if (j % 3 == 0) 2 else 1
+                c.drawRect(sx(x.toInt().toFloat()), sy(y.toInt().toFloat()), sx(x.toInt().toFloat() + sz), sy(y.toInt().toFloat() + sz), dot)
+            }
+        }
+        // tall grass in front of his knees
+        src.set(left, top, left + sw, top + sh); dst.set(0f, 0f, w, h); c.drawBitmap(fg, src, dst, pixel)
+        // fireflies drifting and pulsing around the clearing
+        for (b in bugs) {
+            val x = b[0] + b[2] * kotlin.math.sin(t * b[4] + b[5]); val y = b[1] + b[3] * kotlin.math.sin(t * b[4] * 1.7f + b[5] * 2f)
             val pulse = 0.55f + 0.45f * kotlin.math.sin(t * 3.1f + b[5] * 5f)
-            val px = ((x.toInt() - left) * k); val py = ((y.toInt() - top) * k)
-            glow.color = Pal.alpha(0xFFE8FF8A.toInt(), 0.35f * pulse); c.drawRect(px - k, py - k, px + 2 * k, py + 2 * k, glow)
-            glow.color = Pal.alpha(0xFFF6FF9A.toInt(), 0.6f + 0.4f * pulse); c.drawRect(px, py, px + k, py + k, glow)
+            val px = sx(x.toInt().toFloat()); val py = sy(y.toInt().toFloat())
+            dot.color = Pal.alpha(0xFFE8FF8A.toInt(), 0.35f * pulse); c.drawRect(px - k, py - k, px + 2 * k, py + 2 * k, dot)
+            dot.color = Pal.alpha(0xFFF6FF9A.toInt(), 0.6f + 0.4f * pulse); c.drawRect(px, py, px + k, py + k, dot)
         }
         headP.textAlign = Paint.Align.LEFT
         snesTitle(c, "5 EYE YETI", Px.dp(28f), Px.dp(64f))

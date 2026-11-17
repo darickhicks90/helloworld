@@ -61,6 +61,10 @@ object Audio {
     private val revL = FloatArray(BLOCK); private val revR = FloatArray(BLOCK)
     private val reverbFx = Reverb()
     private val limiter = Limiter()
+    /** Set from the output route: protects the phone's speaker (see [Limiter]). */
+    var onSpeaker: Boolean
+        get() = limiter.speaker
+        set(v) { limiter.speaker = v }
     private val burst get() = DeviceAudio.burst
 
     init {
@@ -188,7 +192,7 @@ object Audio {
     val isNative get() = native
 
     /** Restart the output (after changing device or buffer settings). */
-    fun restart() { stop(); start() }
+    fun restart() { stop(); start(); DeviceAudio.am?.let { DeviceAudio.updateRoute(it) } }
 
     /** Which output is running, for display. */
     @Volatile var outputName = "—"
@@ -300,11 +304,34 @@ object Audio {
 /** The device's native output rate and burst size (read before the engines are created). */
 object DeviceAudio {
     @Volatile var burst = 192; private set
+    var am: android.media.AudioManager? = null; private set
 
     fun configure(c: android.content.Context) {
-        val am = c.getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
+        val am = c.applicationContext.getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
+        val first = this.am == null
+        this.am = am
         AudioPrefs.init(c)
         setSampleRate(AudioPrefs.sampleRate)
         am.getProperty(android.media.AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER)?.toIntOrNull()?.let { if (it in 16..2048) burst = it }
+        // Follow the output route so the speaker guard is on only for the built-in speaker.
+        updateRoute(am)
+        if (first) am.registerAudioDeviceCallback(object : android.media.AudioDeviceCallback() {
+            override fun onAudioDevicesAdded(added: Array<out android.media.AudioDeviceInfo>?) = updateRoute(am)
+            override fun onAudioDevicesRemoved(removed: Array<out android.media.AudioDeviceInfo>?) = updateRoute(am)
+        }, android.os.Handler(android.os.Looper.getMainLooper()))
+    }
+
+    /** True when sound goes to the phone's own speaker: a chosen output of that type, or no headphones/USB/Bluetooth attached. */
+    fun updateRoute(am: android.media.AudioManager) {
+        val outs = am.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS)
+        val chosen = outs.firstOrNull { it.id == AudioPrefs.outputDevice }
+        val external = setOf(
+            android.media.AudioDeviceInfo.TYPE_WIRED_HEADPHONES, android.media.AudioDeviceInfo.TYPE_WIRED_HEADSET,
+            android.media.AudioDeviceInfo.TYPE_USB_DEVICE, android.media.AudioDeviceInfo.TYPE_USB_HEADSET, android.media.AudioDeviceInfo.TYPE_USB_ACCESSORY,
+            android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO, android.media.AudioDeviceInfo.TYPE_LINE_ANALOG,
+            android.media.AudioDeviceInfo.TYPE_LINE_DIGITAL, android.media.AudioDeviceInfo.TYPE_HDMI,
+        ) + (if (android.os.Build.VERSION.SDK_INT >= 31) setOf(android.media.AudioDeviceInfo.TYPE_BLE_HEADSET, android.media.AudioDeviceInfo.TYPE_BLE_SPEAKER) else emptySet())
+        Audio.onSpeaker = if (chosen != null) chosen.type == android.media.AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
+                          else outs.none { it.type in external }
     }
 }

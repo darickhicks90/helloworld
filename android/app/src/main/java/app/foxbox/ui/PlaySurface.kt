@@ -17,18 +17,29 @@ import kotlin.math.sin
 @SuppressLint("ViewConstructor")
 class ChordPanel(c: Context) : LinearLayout(c) {
     val chords = ChordButtons(c)
+    private val sev = Btn(c, "7th", Pal.AQUA).apply { onClick = { Studio.setKey(seventh = !Studio.project.seventh) } }
+    private val foot = LinearLayout(c).apply { orientation = HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
 
     init {
         orientation = VERTICAL
-        val key = Stepper(c, "Key", 70, { Theory.NOTE_NAMES[Studio.project.root] }) { Studio.setKey(root = Studio.project.root + it) }
-        val oct = Stepper(c, "Octave", 70, { (Studio.project.octave + 3).toString() }) { Studio.setKey(octave = Studio.project.octave + it) }
+        // Key, octave and scale share one slim row and the 7th sits in the footer,
+        // so the chord buttons get most of the column.
+        val key = Stepper(c, "Key", 60, { Theory.NOTE_NAMES[Studio.project.root] }) { Studio.setKey(root = Studio.project.root + it) }
+        val oct = Stepper(c, "Oct", 60, { (Studio.project.octave + 3).toString() }) { Studio.setKey(octave = Studio.project.octave + it) }
         val scale = Stepper(c, "Scale", 100, { Studio.scale.name }) { Studio.setKey(scale = Studio.project.scale + it) }
-        val sev = Btn(c, "7th", Pal.AQUA).apply { onClick = { Studio.setKey(seventh = !Studio.project.seventh) } }
-        addView(row(c, key, oct).apply { key.layoutParams = lp(0, Px.dp(38), 1f); oct.layoutParams = lp(0, Px.dp(38), 1f) }, lp(MATCH, WRAP))
-        addView(row(c, scale, sev).apply { scale.layoutParams = lp(0, Px.dp(38), 1f) }, lp(MATCH, WRAP))
-        addView(chords, lp(MATCH, 0, 1f).apply { topMargin = Px.dp(4) })
+        addView(row(c, key, oct, scale).apply {
+            key.layoutParams = lp(0, Px.dp(ROW), 1f); oct.layoutParams = lp(0, Px.dp(ROW), 1f); scale.layoutParams = lp(0, Px.dp(ROW), 2.1f)
+        }, lp(MATCH, WRAP))
+        addView(chords, lp(MATCH, 0, 1f).apply { topMargin = Px.dp(2); bottomMargin = Px.dp(2) })
+        foot.addView(sev, lp(Px.dp(56), Px.dp(ROW)))
+        addView(foot, lp(MATCH, WRAP))
         onStudio { sev.on = Studio.project.seventh; key.invalidate(); oct.invalidate(); scale.invalidate(); chords.invalidate() }
     }
+
+    /** Extra buttons for the footer row, beside the 7th (e.g. the step-sequencer switches). */
+    fun footer(vararg views: android.view.View) = views.forEach { foot.addView(it, lp(0, Px.dp(ROW), 1f)) }
+
+    companion object { const val ROW = 36 }
 }
 
 @SuppressLint("ViewConstructor")
@@ -47,7 +58,7 @@ class ChordButtons(c: Context) : PixelView(c) {
 
     override fun paint(c: Canvas) {
         val rh = height.toFloat() / count
-        val gap = Px.dp(3f)
+        val gap = Px.dp(2f)
         for (d in 0 until count) {
             val ch = Studio.chord(d)
             val on = d in pressed.values

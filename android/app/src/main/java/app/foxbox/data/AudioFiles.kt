@@ -160,6 +160,8 @@ object AudioFiles {
     }
 
     fun normalize(d: FloatArray): FloatArray {
+        // Remove any DC offset first (mic recordings often have one) so held or looping notes don't push a constant offset to the speaker.
+        if (d.isNotEmpty()) { var m = 0.0; for (v in d) m += v; val mean = (m / d.size).toFloat(); if (kotlin.math.abs(mean) > 1e-5f) for (i in d.indices) d[i] -= mean }
         val peak = d.maxOfOrNull { kotlin.math.abs(it) } ?: 0f
         if (peak > 0.0001f) { val g = 0.9f / peak; for (i in d.indices) d[i] *= g }
         return d

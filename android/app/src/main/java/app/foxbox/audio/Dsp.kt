@@ -177,18 +177,69 @@ class Reverb {
     }
 }
 
-/** Gentle peak limiter with a soft-clip safety stage. */
+/**
+ * Master output guard: DC blocker, an optional speaker high-pass, and a peak
+ * limiter with a soft-clip safety stage.
+ *
+ * Phone speakers can't reproduce much below ~150 Hz, and their smart amps
+ * protect the driver by turning the whole output down when it is pushed hard
+ * for a long time (seen on a Galaxy S10+ as the volume sinking while playing).
+ * So on the built-in speaker, sub-bass and DC are removed before the limiter
+ * and the ceiling is a little lower; on headphones and interfaces only DC is
+ * removed and the full range passes.
+ */
 class Limiter {
     private var env = 0f
+    // DC blocker state (one-pole high-pass at ~8 Hz)
+    private var dxL = 0f; private var dyL = 0f; private var dxR = 0f; private var dyR = 0f
+    // speaker high-pass: two cascaded biquads (Butterworth, 4th order)
+    private val hpL1 = Biquad(); private val hpL2 = Biquad(); private val hpR1 = Biquad(); private val hpR2 = Biquad()
+    private var hpHz = 0f
+    private var dcR = 0f; private var dcRate = 0
+    private var rel = 0f
+
+    /** True while the sound comes out of the phone's own speaker. */
+    @Volatile var speaker = false
+
     fun process(l: FloatArray, r: FloatArray, n: Int, gain: Float) {
+        if (dcRate != SR) { dcRate = SR; dcR = exp(-TAU * 8f / SRF); rel = exp(-1f / (0.12f * SRF)) }
+        val spk = speaker
+        if (spk && hpHz != SPEAKER_HP) { hpHz = SPEAKER_HP; hpL1.highPass(SPEAKER_HP); hpL2.highPass(SPEAKER_HP); hpR1.highPass(SPEAKER_HP); hpR2.highPass(SPEAKER_HP) }
+        val ceiling = if (spk) 0.8f else 0.89f
         for (i in 0 until n) {
-            val a = max(abs(l[i]), abs(r[i])) * gain
-            env = if (a > env) a else env * 0.9995f
-            val g = if (env > 0.89f) 0.89f / env else 1f
-            l[i] = soft(l[i] * gain * g); r[i] = soft(r[i] * gain * g)
+            // DC blocker
+            var x = l[i]; var y = x - dxL + dcR * dyL; dxL = x; dyL = y; var a = y
+            x = r[i]; y = x - dxR + dcR * dyR; dxR = x; dyR = y; var b = y
+            if (spk) { a = hpL2.process(hpL1.process(a)); b = hpR2.process(hpR1.process(b)) }
+            val pk = max(abs(a), abs(b)) * gain
+            // instant attack, ~120 ms release so the limiter doesn't pump
+            env = if (pk > env) pk else env * rel + pk * (1f - rel)
+            val g = if (env > ceiling) ceiling / env else 1f
+            l[i] = soft(a * gain * g); r[i] = soft(b * gain * g)
         }
+        if (!spk && hpHz != 0f) { hpHz = 0f; hpL1.reset(); hpL2.reset(); hpR1.reset(); hpR2.reset() }
     }
     private fun soft(x: Float) = if (x > 1f) 1f else if (x < -1f) -1f else x * (1.5f - 0.5f * x * x)
+
+    companion object { const val SPEAKER_HP = 110f }
+}
+
+/** Direct-form-I biquad; only the high-pass design is needed so far. */
+class Biquad {
+    private var b0 = 1f; private var b1 = 0f; private var b2 = 0f; private var a1 = 0f; private var a2 = 0f
+    private var x1 = 0f; private var x2 = 0f; private var y1 = 0f; private var y2 = 0f
+    /** Butterworth high-pass (Q = 0.707). */
+    fun highPass(hz: Float) {
+        val w = TAU * hz / SRF; val cs = kotlin.math.cos(w); val al = sin(w) / (2f * 0.7071f)
+        val a0 = 1f + al
+        b0 = (1f + cs) / 2f / a0; b1 = -(1f + cs) / a0; b2 = b0; a1 = -2f * cs / a0; a2 = (1f - al) / a0
+    }
+    fun process(x: Float): Float {
+        val y = b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2
+        x2 = x1; x1 = x; y2 = y1; y1 = y
+        return y
+    }
+    fun reset() { x1 = 0f; x2 = 0f; y1 = 0f; y2 = 0f }
 }
 
 /** Real-time pitch shifter: two crossfaded read heads over a delay line. */

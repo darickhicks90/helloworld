@@ -51,9 +51,9 @@ class InstrumentPage(c: Context, id: String, host: Host) : LinearLayout(c) {
         if (seq != null) {
             seqBtn.onClick = { seq.enabled.set(if (seq.enabled.on) 0f else 1f); if (seq.enabled.on) showSteps(true); Studio.save(); refresh() }
             viewBtn.onClick = { showSteps(steps?.visibility != VISIBLE) }
-            col.addView(row(c, seqBtn, viewBtn).apply { seqBtn.layoutParams = lp(0, Px.dp(42), 1f); viewBtn.layoutParams = lp(0, Px.dp(42), 1f) }, lp(MATCH, WRAP))
+            chords.footer(seqBtn, viewBtn)
         }
-        addView(col, lp(Px.dp(244), MATCH).apply { leftMargin = Px.dp(6) })
+        addView(col, lp(Px.dp(264), MATCH).apply { leftMargin = Px.dp(6) })
         val right = FrameLayout(c)
         strum = StrumPad(c, chords.chords).apply { this.accent = accent }
         right.addView(strum, FrameLayout.LayoutParams(MATCH, MATCH))

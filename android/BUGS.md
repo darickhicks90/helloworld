@@ -4,7 +4,7 @@
 
 **Report:** On a Galaxy S10+, while using Reflections, the app's volume gets lower over time.
 
-**Status:** Open. These are possible fixes; none have been made yet.
+**Status:** Speaker-protection fixes made (see the ticked items below). Needs a retest on the S10+.
 
 ### What was ruled out
 
@@ -23,10 +23,12 @@
 
 ### Possible fixes
 
-- [ ] Add a DC blocker (one-pole high-pass, about 10–20 Hz) on each sample engine's output (`SampleEngine.render` in `engines/Sampler.kt`).
-- [ ] Add a DC blocker on the master bus, before the limiter (`Audio.block` in `audio/Audio.kt`).
-- [ ] Remove DC from samples when they are recorded or imported: subtract the mean before peak-normalising in `AudioFiles.normalize()`.
-- [ ] Lower the default master volume a little and lower the limiter ceiling (for example to 0.8), so the speaker isn't driven at full scale continuously.
+- [ ] Add a DC blocker (one-pole high-pass, about 10–20 Hz) on each sample engine's output (`SampleEngine.render` in `engines/Sampler.kt`). Probably not needed now that the master and the sample loaders remove DC.
+- [x] DC blocker (8 Hz) on the master output, inside the limiter (`Limiter` in `audio/Dsp.kt`).
+- [x] Speaker guard: while the sound comes out of the phone's own speaker, a 4th-order 110 Hz high-pass removes sub-bass the speaker can't reproduce, and the limiter ceiling drops from 0.89 to 0.80. The route is tracked with an `AudioDeviceCallback` (`DeviceAudio.updateRoute`), so headphones, USB and Bluetooth still get the full range.
+- [x] The limiter's release is now a smooth ~120 ms curve instead of a fast exponential decay, so it doesn't pump.
+- [x] Remove DC from samples when they are recorded or imported: `AudioFiles.normalize()` subtracts the mean before peak-normalising.
+- [x] Lower ceiling on the speaker (0.80). The master default stays at 0.7.
 - [ ] Add a debug readout (or crash-log entry) of output peak, limiter gain reduction, xruns and AAudio stream state. This shows whether the level drop happens inside FoxBox or after it on the device.
 
 ### Questions for the next test on the S10+

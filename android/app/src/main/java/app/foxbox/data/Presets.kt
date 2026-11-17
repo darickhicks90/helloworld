@@ -65,7 +65,7 @@ object Presets {
         val bos = ByteArrayOutputStream()
         ZipOutputStream(bos).use { z ->
             z.putNextEntry(ZipEntry("preset.json"))
-            z.write(JSONObject().apply { put("name", p.name); put("block", p.blockId); put("params", p.params); put("extra", p.extra); put("app", "FoxBox"); put("version", 1) }.toString().toByteArray())
+            z.write(JSONObject().apply { put("name", p.name); put("block", p.blockId); put("params", p.params); put("extra", p.extra); put("app", "5IY"); put("version", 1) }.toString().toByteArray())
             z.closeEntry()
             for ((k, data) in p.samples) {
                 val tmp = File.createTempFile("foxpreset", ".wav"); AudioFiles.writeWav(tmp, data, 16)
@@ -92,7 +92,7 @@ object Presets {
                 }
             }
         }
-        val m = meta ?: throw IllegalArgumentException("Not a FoxBox preset")
+        val m = meta ?: throw IllegalArgumentException("Not a 5IY preset")
         return Preset(m.getString("name"), m.getString("block"), m.getJSONObject("params"), m.optJSONObject("extra") ?: JSONObject(), samples, file = file)
     }
 
@@ -100,7 +100,7 @@ object Presets {
     fun import(c: Context, uri: Uri): Preset {
         val bytes = c.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: throw IllegalArgumentException("Couldn't read the file")
         val p = read(bytes)
-        if (Audio.engines.none { it.id == p.blockId }) throw IllegalArgumentException("This preset is for a block FoxBox doesn't have")
+        if (Audio.engines.none { it.id == p.blockId }) throw IllegalArgumentException("This preset is for a block 5 Eye Yeti doesn't have")
         val f = File(dir(p.blockId), ProjectStore.safe(p.name) + ".foxpreset")
         f.writeBytes(bytes)
         return Preset(p.name, p.blockId, p.params, p.extra, p.samples, file = f)

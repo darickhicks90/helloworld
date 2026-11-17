@@ -278,7 +278,7 @@ object Studio : Transport.Listener, MidiInput.Sink {
 
     fun toggleMasterArm() {
         masterArmed = !masterArmed
-        message(if (masterArmed) "Master armed: press play and FoxBox records the mix to tape. Stop to export the song." else "Master disarmed")
+        message(if (masterArmed) "Master armed: press play and 5 Eye Yeti records the mix to tape. Stop to export the song." else "Master disarmed")
         tapeFollowsTransport(); changed()
     }
 

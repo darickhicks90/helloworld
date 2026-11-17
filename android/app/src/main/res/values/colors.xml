@@ -5,5 +5,6 @@
     <color name="cream">#F7EFDC</color>
     <color name="brown">#7A4A2A</color>
     <color name="brown_dark">#3D2414</color>
-    <color name="ic_launcher_background">#3FB8AF</color>
+    <color name="ic_launcher_background">#1E2A5C</color>
+    <color name="night">#1A2252</color>
 </resources>

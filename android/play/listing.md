@@ -1,6 +1,6 @@
-# Google Play listing — FoxBox
+# Google Play listing — 5 Eye Yeti
 
-**App name (30 max):** FoxBox: Music Sketchbook
+**App name (30 max):** 5 Eye Yeti: Music Sketchbook
 **Category:** Music & Audio · **Tags:** Music creation, Synthesizer, Sequencer
 **Contains ads:** No · **In-app purchases:** No
 
@@ -8,8 +8,8 @@
 Make loops with cozy pixel synths, then perform and mix them down in Clibbins.
 
 ## Full description
-FoxBox is a pocket music studio with a 16-bit cottagecore heart. Write loops
-with up to six swappable Fox Box Blocks, record audio, then perform it all in
+5 Eye Yeti is a pocket music studio with a 16-bit cottagecore heart. Write loops
+with up to six swappable 5IY Blocks, record audio, then perform it all in
 Clibbins and mix it down to tape.
 
 WRITE IN THE STUDIO
@@ -35,7 +35,7 @@ FOR MUSICIANS
 • USB and Bluetooth MIDI, MPE (ROLI Seaboard), pad controllers (Synido TempoPad)
 • Record loops with count-in, metronome and quantize
 • Every clip is saved as a MIDI file, and your performances as audio, in
-  Music/FoxBox
+  Music/5IY
 • Low-latency audio (AAudio)
 
 No accounts, no ads, no tracking. Your music stays on your device.

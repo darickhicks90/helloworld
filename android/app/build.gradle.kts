@@ -65,5 +65,5 @@ android {
 }
 
 dependencies {
-    // No libraries needed: FoxBox uses only the Android framework.
+    // No libraries needed: 5IY uses only the Android framework.
 }

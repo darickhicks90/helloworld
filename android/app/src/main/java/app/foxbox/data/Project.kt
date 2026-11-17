@@ -140,7 +140,7 @@ object ProjectStore {
     private lateinit var app: Context
 
     /** Where exported audio, MIDI and presets go. */
-    enum class Location(val label: String) { MUSIC("Music/FoxBox"), DOWNLOADS("Downloads/FoxBox"), DOCUMENTS("Documents/FoxBox"), FOLDER("A folder you choose") }
+    enum class Location(val label: String) { MUSIC("Music/5IY"), DOWNLOADS("Downloads/5IY"), DOCUMENTS("Documents/5IY"), FOLDER("A folder you choose") }
     private val prefs get() = app.getSharedPreferences("files", Context.MODE_PRIVATE)
     var location: Location
         get() = runCatching { Location.valueOf(prefs.getString("loc", "MUSIC")!!) }.getOrDefault(Location.MUSIC)
@@ -218,7 +218,7 @@ object ProjectStore {
 
     /** Save a file to the chosen export location. Returns a content Uri for sharing when possible. */
     fun export(p: Project?, kind: String, name: String, mime: String, bytes: ByteArray): Uri? = runCatching {
-        val sub = if (p != null) "FoxBox/${safe(p.name)}/$kind" else "FoxBox/$kind"
+        val sub = if (p != null) "5IY/${safe(p.name)}/$kind" else "5IY/$kind"
         when (location) {
             Location.FOLDER -> {
                 val tree = folderUri ?: return@runCatching null
@@ -246,6 +246,6 @@ object ProjectStore {
         }
     }.getOrNull()
 
-    fun safe(s: String) = s.replace(Regex("[^A-Za-z0-9 ._-]"), "_").trim().ifEmpty { "FoxBox" }
+    fun safe(s: String) = s.replace(Regex("[^A-Za-z0-9 ._-]"), "_").trim().ifEmpty { "5IY" }
     fun stamp(): String = java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.US).format(java.util.Date())
 }

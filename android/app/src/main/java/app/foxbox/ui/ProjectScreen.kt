@@ -19,6 +19,7 @@ import java.util.Date
 class ProjectScreen(c: Context, private val onOpen: (Project) -> Unit, private val onNew: () -> Unit, private val onManage: (Project) -> Unit) : FrameLayout(c) {
     private val titleP = Px.text(26f, Pal.ORANGE, headFont = true)
     private val tagP = Px.text(14f, Pal.AQUA_D)
+    private val subP = Px.text(13f, Pal.SUN, headFont = true, align = Paint.Align.LEFT)
 
     init {
         setWillNotDraw(false)
@@ -27,24 +28,31 @@ class ProjectScreen(c: Context, private val onOpen: (Project) -> Unit, private v
         cards.addView(Card(c, null), lp(CARD_W, CARD_H).apply { rightMargin = Px.dp(10) })
         ProjectStore.list().forEach { cards.addView(Card(c, it), lp(CARD_W, CARD_H).apply { rightMargin = Px.dp(10) }) }
         val scroll = HorizontalScrollView(c).apply { isHorizontalScrollBarEnabled = false; addView(cards) }
-        addView(scroll, LayoutParams(MATCH, CARD_H + Px.dp(8), android.view.Gravity.BOTTOM).apply { bottomMargin = Px.dp(36) })
+        // The cards sit over the meadow on the left; the yeti stands on the right.
+        addView(scroll, LayoutParams(MATCH, CARD_H + Px.dp(8), android.view.Gravity.BOTTOM or android.view.Gravity.START).apply { bottomMargin = Px.dp(24) })
+        post { (scroll.layoutParams as LayoutParams).width = (width * 0.62f).toInt(); scroll.requestLayout() }
     }
 
     private val headP = Px.text(34f, Pal.ORANGE, headFont = true)
     private val shine = intArrayOf(0xFFFFF4D6.toInt(), 0xFFFFD27A.toInt(), 0xFFF4A259.toInt(), 0xFFE8742C.toInt(), 0xFFB8521B.toInt())
 
+    /** The title scene: the yeti waving in headphones in the moonlit clearing (pixel art, drawn with hard pixels). */
+    private val scene = context.assets.open("images/title_scene.png").use { android.graphics.BitmapFactory.decodeStream(it) }
+    private val scenePaint = Paint().apply { isFilterBitmap = false; isAntiAlias = false }
+    private val src = android.graphics.Rect(); private val dst = android.graphics.RectF()
+
     override fun onDraw(c: Canvas) {
         val w = width.toFloat(); val h = height.toFloat()
-        c.bands(0f, 0f, w, h, intArrayOf(0xFF22333B.toInt(), 0xFF27404A.toInt(), 0xFF2D4D57.toInt(), 0xFF335A63.toInt(), 0xFF3A6770.toInt()))
-        // a field of dim pixel stars
-        val rnd = kotlin.random.Random(5)
-        repeat(70) { c.dot(rnd.nextFloat() * w, rnd.nextFloat() * h * 0.55f, Pal.alpha(Pal.CREAM, 0.25f + rnd.nextFloat() * 0.4f)) }
-        val cx = w / 2
-        // the logo mark beside the title
-        val tw = headP.measureText("FOXBOX")
-        val ls = Px.dp(112f)
-        LogoMark.draw(c, cx - tw / 2 - ls - Px.dp(4f), Px.dp(2f), ls)
-        snesTitle(c, "FOXBOX", cx + ls / 2, Px.dp(70f))
+        // Fill the screen; keep the right edge (where the yeti is) and crop from the left or top.
+        val k = maxOf(w / scene.width, h / scene.height)
+        val sw = (w / k).toInt().coerceAtMost(scene.width); val sh = (h / k).toInt().coerceAtMost(scene.height)
+        src.set(scene.width - sw, (scene.height - sh) / 2, scene.width, (scene.height - sh) / 2 + sh)
+        dst.set(0f, 0f, w, h)
+        c.drawBitmap(scene, src, dst, scenePaint)
+        headP.textAlign = Paint.Align.LEFT
+        snesTitle(c, "5 EYE YETI", Px.dp(28f), Px.dp(64f))
+        tagP.textAlign = Paint.Align.LEFT
+        c.drawText("5IY", Px.dp(32f), Px.dp(92f), subP)
     }
 
     /** Super Nintendo-style title: banded metallic fill, thick ink outline and a drop shadow. */

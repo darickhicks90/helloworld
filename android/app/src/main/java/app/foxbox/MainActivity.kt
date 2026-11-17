@@ -83,12 +83,12 @@ class MainActivity : Activity(), Host {
     /** If FoxBox crashed last time, offer to share the details (nothing is sent automatically). */
     private fun offerCrashReport() {
         val report = CrashLog.pending() ?: return
-        AlertDialog.Builder(this).setTitle("FoxBox closed unexpectedly")
+        AlertDialog.Builder(this).setTitle("5 Eye Yeti closed unexpectedly")
             .setMessage("Sorry about that. You can share the crash details with the developer to help fix it.")
             .setPositiveButton("Share details") { _, _ ->
                 CrashLog.clear()
                 startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"; putExtra(Intent.EXTRA_SUBJECT, "FoxBox crash report"); putExtra(Intent.EXTRA_TEXT, report)
+                    type = "text/plain"; putExtra(Intent.EXTRA_SUBJECT, "5 Eye Yeti crash report"); putExtra(Intent.EXTRA_TEXT, report)
                 }, "Share crash details"))
             }
             .setNegativeButton("Not now") { _, _ -> CrashLog.clear() }
@@ -380,7 +380,7 @@ class MainActivity : Activity(), Host {
             runOnUiThread {
                 if (uri == null) return@runOnUiThread Studio.message("Couldn't save the bank file")
                 startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
-                    type = "application/zip"; putExtra(Intent.EXTRA_STREAM, uri); putExtra(Intent.EXTRA_SUBJECT, "${b.name} (FoxBox bank)")
+                    type = "application/zip"; putExtra(Intent.EXTRA_STREAM, uri); putExtra(Intent.EXTRA_SUBJECT, "${b.name} (5IY bank)")
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }, "Share ${b.name}"))
             }
@@ -408,7 +408,7 @@ class MainActivity : Activity(), Host {
             runOnUiThread {
                 if (uri == null) return@runOnUiThread Studio.message("Couldn't save the preset file")
                 startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
-                    type = "application/zip"; putExtra(Intent.EXTRA_STREAM, uri); putExtra(Intent.EXTRA_SUBJECT, "${p.name} (FoxBox preset)")
+                    type = "application/zip"; putExtra(Intent.EXTRA_STREAM, uri); putExtra(Intent.EXTRA_SUBJECT, "${p.name} (5IY preset)")
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }, "Share ${p.name}"))
             }
@@ -516,7 +516,7 @@ class MainActivity : Activity(), Host {
     }
 
     private fun askRestart() {
-        AlertDialog.Builder(this).setTitle("Restart FoxBox?").setMessage("The new sample rate takes effect when FoxBox restarts. Your project is saved first.")
+        AlertDialog.Builder(this).setTitle("Restart 5 Eye Yeti?").setMessage("The new sample rate takes effect when 5 Eye Yeti restarts. Your project is saved first.")
             .setPositiveButton("Restart now") { _, _ -> restartApp() }.setNegativeButton("Later", null).show()
     }
 
@@ -530,7 +530,7 @@ class MainActivity : Activity(), Host {
     }
 
     private fun runAudioTest() {
-        val d = AlertDialog.Builder(this).setTitle("Audio test").setMessage("You'll hear a quiet tone for about 12 seconds while FoxBox tries each buffer size…").setCancelable(false).show()
+        val d = AlertDialog.Builder(this).setTitle("Audio test").setMessage("You'll hear a quiet tone for about 12 seconds while 5 Eye Yeti tries each buffer size…").setCancelable(false).show()
         Thread {
             val report = AudioTest.run { msg -> runOnUiThread { d.setMessage(msg) } }
             runOnUiThread {
@@ -548,8 +548,8 @@ class MainActivity : Activity(), Host {
         fun ask(title: String, msg: String, yes: String, no: String, onYes: () -> Unit, onNo: () -> Unit) =
             AlertDialog.Builder(this).setTitle(title).setMessage(msg).setPositiveButton(yes) { _, _ -> onYes() }.setNegativeButton(no) { _, _ -> onNo() }.setNeutralButton("Stop", null).show()
         when (step) {
-            0 -> { Audio.testTone = true; ask("1 · Can you hear a tone?", "FoxBox is playing a quiet 440 Hz tone now.", "Yes", "No", { Audio.testTone = false; wizard(2) }, { Audio.testTone = false; wizard(1) }) }
-            1 -> ask("No sound", "• Turn the media volume up (use the volume keys while FoxBox is open).\n• If you use a USB interface, check its monitor / headphone level and that it is class-compliant (it should work without drivers).\n• Bluetooth headphones work but add a long delay; wired or USB is best.\n\nFoxBox will now switch output back to the system default.",
+            0 -> { Audio.testTone = true; ask("1 · Can you hear a tone?", "5 Eye Yeti is playing a quiet 440 Hz tone now.", "Yes", "No", { Audio.testTone = false; wizard(2) }, { Audio.testTone = false; wizard(1) }) }
+            1 -> ask("No sound", "• Turn the media volume up (use the volume keys while 5 Eye Yeti is open).\n• If you use a USB interface, check its monitor / headphone level and that it is class-compliant (it should work without drivers).\n• Bluetooth headphones work but add a long delay; wired or USB is best.\n\n5 Eye Yeti will now switch output back to the system default.",
                 "Try again", "Skip", { AudioPrefs.outputDevice = 0; Audio.restart(); wizard(0) }, { wizard(2) })
             2 -> ask("2 · Crackles or dropouts?", "Do you hear clicks, crackles or gaps while playing?", "Yes", "No", {
                 Studio.message("Running the audio test to find a safe buffer…"); runAudioTest()
@@ -562,7 +562,7 @@ class MainActivity : Activity(), Host {
                 textDialog("Recording offset in ms (try 20–60 if takes land late)", AudioPrefs.offsetMs.toString(), numeric = true) { s -> s.toIntOrNull()?.let { AudioPrefs.offsetMs = it.coerceIn(-500, 500) }; wizard(5) }
             }, { wizard(5) })
             5 -> ask("5 · Interface not showing up?", "Is your USB audio interface or MIDI controller missing from the lists?", "Yes", "No", {
-                AlertDialog.Builder(this).setTitle("Connecting USB gear").setMessage("• Use a USB-C OTG adapter or hub; bus-powered interfaces may need a powered hub.\n• Class-compliant devices need no drivers. Some have a \"class compliant\" or \"iOS\" mode switch.\n• Unplug and replug after FoxBox is open; it picks devices up live.\n• Choose it under Audio → Output / Input, and MIDI devices appear under MIDI.").setPositiveButton("Done", null).show()
+                AlertDialog.Builder(this).setTitle("Connecting USB gear").setMessage("• Use a USB-C OTG adapter or hub; bus-powered interfaces may need a powered hub.\n• Class-compliant devices need no drivers. Some have a \"class compliant\" or \"iOS\" mode switch.\n• Unplug and replug after 5 Eye Yeti is open; it picks devices up live.\n• Choose it under Audio → Output / Input, and MIDI devices appear under MIDI.").setPositiveButton("Done", null).show()
             }, { Studio.message("All good. Happy music making!") })
         }
     }
@@ -676,8 +676,8 @@ class MainActivity : Activity(), Host {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         val ok = grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }
         when (requestCode) {
-            REQ_MIC -> { val f = afterMic; afterMic = null; if (ok) f?.invoke() else Studio.message("FoxBox needs the microphone / audio input to record") }
-            REQ_BT -> if (ok) midi.pairBluetooth() else Studio.message("FoxBox needs Bluetooth permission to find controllers")
+            REQ_MIC -> { val f = afterMic; afterMic = null; if (ok) f?.invoke() else Studio.message("5 Eye Yeti needs the microphone / audio input to record") }
+            REQ_BT -> if (ok) midi.pairBluetooth() else Studio.message("5 Eye Yeti needs Bluetooth permission to find controllers")
         }
     }
 

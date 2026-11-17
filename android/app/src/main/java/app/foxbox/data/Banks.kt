@@ -70,7 +70,7 @@ object Banks {
         ZipOutputStream(bos).use { z ->
             z.putNextEntry(ZipEntry("bank.json"))
             z.write(JSONObject().apply {
-                put("app", "FoxBox"); put("version", 1); put("name", b.name)
+                put("app", "5IY"); put("version", 1); put("name", b.name)
                 put("names", JSONArray(b.names)); put("params", b.params)
             }.toString().toByteArray())
             z.closeEntry()
@@ -130,7 +130,7 @@ object Banks {
             val names = (0 until Pickup.PADS).map { n.optString(it, "Pad ${it + 1}") }
             return Bank(m.optString("name", fallbackName), names, (0 until Pickup.PADS).map { padWavs[it] }, m.optJSONObject("params") ?: JSONObject(), file = file)
         }
-        if (loose.isEmpty()) throw IllegalArgumentException("No WAV files or FoxBox bank found in that file")
+        if (loose.isEmpty()) throw IllegalArgumentException("No WAV files or 5IY bank found in that file")
         val sorted = loose.sortedBy { it.first.lowercase() }.take(Pickup.PADS)
         val names = (0 until Pickup.PADS).map { sorted.getOrNull(it)?.first?.take(16) ?: "Pad ${it + 1}" }
         return Bank(fallbackName, names, (0 until Pickup.PADS).map { sorted.getOrNull(it)?.second }, JSONObject(), file = file)

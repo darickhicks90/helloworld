@@ -1,4 +1,4 @@
-# Builds FoxBox: a signed App Bundle (.aab) for Google Play and an APK for
+# Builds 5 Eye Yeti (5IY): a signed App Bundle (.aab) for Google Play and an APK for
 # sideloading. Download both from the run's "Artifacts" section.
 # Release signing uses the FOXBOX_UPLOAD_* secrets when they are set
 # (see android/play/release-checklist.md); otherwise the test key is used.
@@ -50,17 +50,17 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon assembleRelease bundleRelease
-          cp app/build/outputs/apk/release/app-release.apk ../FoxBox.apk
-          cp app/build/outputs/bundle/release/app-release.aab ../FoxBox-release.aab
+          cp app/build/outputs/apk/release/app-release.apk ../5IY.apk
+          cp app/build/outputs/bundle/release/app-release.aab ../5IY-release.aab
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: FoxBox-android
-          path: FoxBox.apk
+          name: 5IY-android
+          path: 5IY.apk
 
       - name: Upload App Bundle
         uses: actions/upload-artifact@v4
         with:
-          name: FoxBox-play-bundle
-          path: FoxBox-release.aab
+          name: 5IY-play-bundle
+          path: 5IY-release.aab

@@ -1,13 +1,13 @@
-# 🦊 FoxBox
+# 5 Eye Yeti (5IY)
 
-FoxBox is a music app for Android, built to be played sideways (landscape).
-You **write** loops with up to six **Fox Box Blocks** (instruments), record
+5 Eye Yeti is a music app for Android, built to be played sideways (landscape).
+You **write** loops with up to six **5IY Blocks** (instruments), record
 audio takes from a class-compliant interface, then **perform** it all in the
 Clibbins.
 
 ## How it works
 
-1. **Projects:** FoxBox opens on your projects. Tap **＋ New project** or
+1. **Projects:** 5 Eye Yeti opens on your projects. Tap **＋ New project** or
    open one. Long-press a project to rename, duplicate or delete it.
 2. **Blocks:** a session holds up to **6 blocks**. New projects start with
    **Gusts** and **Minds**.
@@ -80,8 +80,8 @@ Clibbins.
      and records the armed tracks. Takes are rounded to whole bars, and each
      track holds up to **6 minutes**.
    - **Master** strip: a dB meter, the **master fader** (the level of
-     everything FoxBox plays) and **● Tape**. Exporting a song works like
-     mixing down to tape: arm the master, press play, and FoxBox records the
+     everything 5 Eye Yeti plays) and **● Tape**. Exporting a song works like
+     mixing down to tape: arm the master, press play, and 5 Eye Yeti records the
      mix; stopping saves the song to your audio save location. Any Red,
      Yellow or Blue track that is armed at the same time is mixed down too:
      its live input goes onto the tape (and its meter), but not out of the
@@ -114,7 +114,7 @@ Every block has an **amp envelope** and a **filter with its own envelope**.
 | 🍃 **Leaves** | Granular synth | Position, spray, scan, grain size, density, drone, step sequencer |
 | 🍄 **Minds** | Generative drums | Generative 0–100%, density, swing, mutation, chaos, glitch, crush |
 | 🐝 **Bumble** | Mono bass synth in the spirit of the classic analog bass synths | See below |
-| 🛻 **Pickup** | Vintage 16-pad sampler (MPC-style) | See below |
+| 🛻 **Pickup** | 16-pad sampler with chops and banks | See below |
 
 **Bumble** (an analog-style mono bass synth):
 - two oscillators (sine/triangle/saw/pulse, with PWM and sync)
@@ -124,28 +124,38 @@ Every block has an **amp envelope** and a **filter with its own envelope**.
 - a mod envelope to pitch and pulse width, and two LFOs
 - glide, accent, and the step sequencer
 
-**Pickup** (a vintage MPC-style 16-pad sampler):
+**Pickup** (a 16-pad sampler):
 - **Load to pad** and **● Rec** to pad
-- per-pad tune, level, decay, start, pan and reverse
-- a vintage sample rate and bit depth (SP-1200/MPC grit), saturation and
-  swing
-- a 16-step pattern per pad, plus a **Sequencer ON/OFF** switch for the
-  whole instrument (off by default)
+- per-pad tune, level, decay, start, end, pan, reverse and **Hold** (plays
+  only while the pad is held)
+- plays **Clean** by default; **Vintage** adds a lower sample rate, bit
+  depth and saturation for grit
+- the **Studio Kit** (realistic synthesized drums) by default; the original
+  lo-fi kit is the **Classic Box** bank
+- **Banks…**: save the pads as a bank, load, share (`.foxbank`) and import
+  banks or a zip of WAVs, or put several audio files onto pads at once
+- **Chop…**: cut the selected pad's sound across the pads (equal slices, at
+  each hit, or by beat / half beat / bar)
+- the **Chop** tab (rhythm chop): load a sample, drag **S** and **E** to trim
+  it, press **● Chop**, and after a 2-bar count-in tap pads in time to place
+  chops; it ends when the sample does, when you press **■ Done**, or once
+  all 16 pads hold a chop
+- a 16-step pattern per pad, plus a **Sequencer ON/OFF** switch and **Latch**
 - its XY pad is a 1990s truck dashboard with the ignition key as the
   cursor
 
-**Low latency:** FoxBox plays through AAudio (MMAP/exclusive where
+**Low latency:** 5 Eye Yeti plays through AAudio (MMAP/exclusive where
 supported) with the buffer you choose, or "Automatic". The audio thread
 allocates no memory, so garbage collection can't cause dropouts.
 
 ## Where your files go
 
 Everything is saved as you work. Exports go to the location chosen in
-**File** (default `Music/FoxBox/<project>/`):
+**File** (default `Music/5IY/<project>/`):
 * `MIDI/`: clips as `.mid`
 * `Audio/`: takes, bounces, samples, at your bit depth
 
-Presets are saved under `FoxBox/Presets`.
+Presets are saved under `5IY/Presets`.
 
 ## Controllers and audio interfaces
 
@@ -189,9 +199,9 @@ crash log it offers to share on the next launch.
 ## Getting the app
 
 GitHub builds the app whenever it changes. Open the **Actions** tab, click
-the latest **Android app** run, and download **FoxBox-android** (an APK to
-install) or **FoxBox-play-bundle** (the `.aab` for Google Play). Unzip
-it, copy `FoxBox.apk` to your phone and open it to install.
+the latest **Android app** run, and download **5IY-android** (an APK to
+install) or **5IY-play-bundle** (the `.aab` for Google Play). Unzip
+it, copy `5IY.apk` to your phone and open it to install.
 
 To build it yourself, open `android/` in Android Studio, or run
 `./gradlew assembleRelease` in `android/`.

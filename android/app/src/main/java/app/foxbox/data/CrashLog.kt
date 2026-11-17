@@ -21,7 +21,7 @@ object CrashLog {
             runCatching {
                 val sw = StringWriter()
                 e.printStackTrace(PrintWriter(sw))
-                file.writeText("FoxBox $version on ${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})\nThread: ${thread.name}\n\n$sw")
+                file.writeText("5 Eye Yeti $version on ${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})\nThread: ${thread.name}\n\n$sw")
             }
             previous?.uncaughtException(thread, e)
         }

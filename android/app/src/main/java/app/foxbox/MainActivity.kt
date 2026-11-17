@@ -582,6 +582,7 @@ class MainActivity : Activity(), Host {
 
     private fun deliver(target: String, data: FloatArray, name: String) {
         when {
+            target == "chopsrc" -> Studio.setChopSource(data, name)
             target.startsWith("pad") -> Studio.setPadSample(target.removePrefix("pad").toInt(), data, name)
             else -> (Audio.engine(target) as? SampleEngine)?.let { Studio.setSample(it, data, name) }
         }

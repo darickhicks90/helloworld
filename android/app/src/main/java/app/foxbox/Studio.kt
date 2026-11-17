@@ -808,6 +808,85 @@ object Studio : Transport.Listener, MidiInput.Sink {
         message("Chopped into ${minOf(slices.size, room)} pads from pad ${pad + 1}" + if (slices.size > room) " (${slices.size - room} didn't fit)" else "")
     }
 
+    // ---- rhythm chop: tap pads in time while the source plays to place chops
+
+    /** Taps in this pass: (frame in the source, pad). */
+    private val chopMarks = ArrayList<Pair<Int, Int>>()
+    /** Pad tapped during the count-in: it gets the slice from the very start. */
+    private var chopFirstPad = -1
+    /** Snap taps to the grid: 0 off, else steps of 1/16 notes (1, 2, 4). */
+    var chopSnap = 0
+        private set
+    fun setChopSnap(steps: Int) { chopSnap = steps; changed() }
+    val chopMarksView: List<Pair<Int, Int>> get() = synchronized(chopMarks) { chopMarks.toList() } +
+        (if (chopFirstPad >= 0) listOf(0 to chopFirstPad) else emptyList())
+
+    fun setChopSource(d: FloatArray, name: String) {
+        Audio.pickup.setChopSource(d, name)
+        synchronized(chopMarks) { chopMarks.clear() }; chopFirstPad = -1
+        message("Loaded $name to chop. Press Chop, then tap pads in time."); changed()
+    }
+
+    /** Start the pass (two bars of count-in, then the source plays), or stop it early. */
+    fun rhythmChop() {
+        val pu = Audio.pickup
+        if (t.chopRec == Transport.Rec.RECORDING) { val end = pu.chopPos; Audio.post { pu.stopChop(); t.chopDone() }; finishRhythmChop(end); return }
+        if (t.chopRec == Transport.Rec.ARMED) { Audio.post { t.chopCountIn() }; return }   // cancels
+        if (pu.chopSrc.size < SR / 10) return message("Load a sample to chop first")
+        synchronized(chopMarks) { chopMarks.clear() }; chopFirstPad = -1
+        pu.onChopEnded = { main.post { finishRhythmChop(pu.chopSrc.size) } }
+        t.onChopStart = { off -> pu.startChop(off) }
+        t.onChopStop = { val e = pu.chopPos; pu.stopChop(); if (e > 0) main.post { finishRhythmChop(e) } }
+        Audio.post { t.chopCountIn() }
+        message("Two bars of count-in… then tap a pad wherever a new chop should start")
+        changed()
+    }
+
+    /** A pad tapped during the pass. */
+    fun chopTap(pad: Int) {
+        val pu = Audio.pickup
+        when (t.chopRec) {
+            Transport.Rec.ARMED -> chopFirstPad = pad
+            Transport.Rec.RECORDING -> {
+                // what you hear lags the play position by the output latency, and the touch itself by ~10 ms
+                var f = pu.chopPos - ((Audio.latencyMs + 10f) * SR / 1000f).toInt()
+                if (chopSnap > 0) {
+                    val grid = SR * 60.0 / project.bpm / 4 * chopSnap
+                    f = (Math.round(f / grid) * grid).toInt()
+                }
+                f = f.coerceIn(0, maxOf(0, pu.chopSrc.size - 1))
+                synchronized(chopMarks) { chopMarks += f to pad }
+            }
+            else -> {}
+        }
+        changed()
+    }
+
+    private fun finishRhythmChop(endFrame: Int) {
+        val pu = Audio.pickup
+        val src = pu.chopSrc
+        val marks = (chopMarksView).sortedBy { it.first }.distinctBy { it.first }
+        if (marks.isEmpty()) { message("No pads tapped, so nothing was chopped"); changed(); return }
+        val end = endFrame.coerceIn(1, src.size)
+        val starts = marks.map { it.first }.toIntArray()
+        val bounds = starts + end
+        chopUndo = pu.samples.copyOf() to pu.names.copyOf()
+        val base = pu.chopSrcName.take(10).ifEmpty { "Chop" }
+        var made = 0
+        for (k in marks.indices) {
+            val a = bounds[k]; val b = bounds[k + 1].coerceAtMost(src.size)
+            if (b - a < SR / 100) continue
+            val s = Chop.slices(src.copyOfRange(a, b), intArrayOf(0)).firstOrNull() ?: continue
+            val pad = marks[k].second
+            pu.setPadSample(pad, s, "$base ${k + 1}")
+            pu.p.all["p${pad}start"]?.set(0f); pu.p.all["p${pad}rev"]?.set(0f); pu.padEnd[pad].set(1f)
+            Thread { storePad(pad, s) }.start()
+            made++
+        }
+        message("Chopped $made slice" + (if (made == 1) "" else "s") + " onto the pads you tapped (Chop… → Undo to go back)")
+        save(); changed()
+    }
+
     fun undoChop() {
         val (s, n) = chopUndo ?: return message("Nothing to undo")
         chopUndo = null

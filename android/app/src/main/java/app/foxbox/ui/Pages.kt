@@ -157,7 +157,13 @@ class PickupPage(c: Context, private val host: Host) : LinearLayout(c) {
     private val right = FrameLayout(c)
     private val editor = LinearLayout(c).apply { orientation = VERTICAL }
     private val pattern = PatternPanel(c)
-    private val modeBtn = Btn(c, "Pattern", Pal.ROSE)
+    private val soundTab = Btn(c, "Sound", Pal.ROSE)
+    private val patternTab = Btn(c, "Pattern", Pal.ROSE)
+    private val chopTab = Btn(c, "Chop", Pal.ROSE)
+    private val chopPanel = RhythmChopPanel(c)
+    /** 0 the selected pad's sound, 1 its pattern, 2 the rhythm chop screen. */
+    private var mode = 0
+    private lateinit var editorScroll: ScrollView
     private val qualityBtn = Btn(c, "Clean", Pal.AQUA)
     private val seqBtn = Btn(c, "Sequencer", Pal.ORANGE, 120)
     private val latchBtn = Btn(c, "Latch", Pal.SUN)
@@ -171,16 +177,20 @@ class PickupPage(c: Context, private val host: Host) : LinearLayout(c) {
         addView(SquareBox(c, XyPad(c, "pickup") { xy, isX -> host.chooseXyTarget(xy, isX) }), lp(WRAP, MATCH))
         addView(SquareBox(c, pads), lp(WRAP, MATCH).apply { leftMargin = Px.dp(6) })
         val col = LinearLayout(c).apply { orientation = VERTICAL }
-        modeBtn.onClick = { val showPattern = pattern.visibility != VISIBLE; pattern.visibility = if (showPattern) VISIBLE else GONE; editor.visibility = if (showPattern) GONE else VISIBLE; refresh() }
+        soundTab.onClick = { showMode(0) }; patternTab.onClick = { showMode(1) }; chopTab.onClick = { showMode(2) }
         // Like Minds: one switch that stops or starts the whole pad sequencer.
         seqBtn.onClick = { pu.seqOn.set(if (pu.seqOn.on) 0f else 1f); if (!pu.seqOn.on) Audio.post { pu.allOff() }; Studio.save(); Studio.changed() }
         latchBtn.onClick = { pu.latch.set(if (pu.latch.on) 0f else 1f); Studio.save(); Studio.changed() }
         col.addView(row(c, seqBtn, latchBtn).apply { seqBtn.layoutParams = lp(0, Px.dp(44), 1f); latchBtn.layoutParams = lp(Px.dp(80), Px.dp(44)) }, lp(MATCH, WRAP))
         qualityBtn.onClick = { pu.quality.set(if (pu.quality.index == 0) 1f else 0f); Studio.save(); Studio.changed() }
-        col.addView(row(c, modeBtn, qualityBtn).apply { modeBtn.layoutParams = lp(0, Px.dp(42), 1f); qualityBtn.layoutParams = lp(Px.dp(96), Px.dp(42)) }, lp(MATCH, WRAP))
-        right.addView(ScrollView(c).apply { addView(editor) }, FrameLayout.LayoutParams(MATCH, MATCH))
+        col.addView(row(c, soundTab, patternTab, chopTab, qualityBtn).apply {
+            soundTab.layoutParams = lp(0, Px.dp(42), 1f); patternTab.layoutParams = lp(0, Px.dp(42), 1.15f); chopTab.layoutParams = lp(0, Px.dp(42), 0.9f); qualityBtn.layoutParams = lp(0, Px.dp(42), 1.1f)
+        }, lp(MATCH, WRAP))
+        editorScroll = ScrollView(c).apply { addView(editor) }
+        right.addView(editorScroll, FrameLayout.LayoutParams(MATCH, MATCH))
         right.addView(pattern, FrameLayout.LayoutParams(MATCH, MATCH))
-        pattern.visibility = GONE
+        right.addView(chopPanel, FrameLayout.LayoutParams(MATCH, MATCH))
+        pattern.visibility = GONE; chopPanel.visibility = GONE
         col.addView(right, lp(MATCH, 0, 1f))
         addView(col, lp(0, MATCH, 1f).apply { leftMargin = Px.dp(6) })
         onStudio { refresh() }
@@ -189,14 +199,96 @@ class PickupPage(c: Context, private val host: Host) : LinearLayout(c) {
     private fun refresh() {
         val i = Studio.selectedPad
         if (i != builtFor) buildEditor(i)
-        modeBtn.text = if (pattern.visibility == VISIBLE) "Pad ${i + 1}: sound" else "Pad ${i + 1}: pattern"
-        modeBtn.requestLayout(); modeBtn.invalidate()
+        soundTab.on = mode == 0; patternTab.on = mode == 1; chopTab.on = mode == 2
+        listOf(soundTab, patternTab, chopTab).forEach { it.invalidate() }
+        chopPanel.refresh()
         seqBtn.on = pu.seqOn.on; seqBtn.text = if (pu.seqOn.on) "Sequencer ON" else "Sequencer OFF"; seqBtn.requestLayout(); seqBtn.invalidate()
         latchBtn.on = pu.latch.on; latchBtn.invalidate()
         val vintage = pu.quality.index == 1
         qualityBtn.on = vintage; qualityBtn.text = if (vintage) "Vintage" else "Clean"; qualityBtn.requestLayout(); qualityBtn.invalidate()
         recBtn?.let { b -> val on = host.micTarget() == "pad$i"; b.on = on; b.blink = on; b.text = if (on) "■ Stop" else "● Rec"; b.requestLayout() }
         pads.invalidate(); pattern.invalidate()
+    }
+
+    private fun showMode(m: Int) {
+        mode = m
+        editorScroll.visibility = if (m == 0) VISIBLE else GONE
+        pattern.visibility = if (m == 1) VISIBLE else GONE
+        chopPanel.visibility = if (m == 2) VISIBLE else GONE
+        refresh()
+    }
+
+    /** True while a rhythm chop pass is counting in or playing: pad taps place chops instead of playing. */
+    private val chopping get() = mode == 2 && Audio.transport.chopRec != app.foxbox.seq.Transport.Rec.OFF
+
+    /**
+     * The rhythm chop screen: load a sample, press Chop, and after two bars of
+     * count-in the sample plays in time. Tap a pad wherever a new chop should
+     * start; that slice (up to the next tap) lands on the pad you tapped.
+     */
+    private inner class RhythmChopPanel(c: Context) : LinearLayout(c) {
+        private val chopBtn = Btn(c, "● Chop", Pal.ORANGE_D)
+        private val useBtn = Btn(c, "Use pad", Pal.ROSE)
+        private val snap = Stepper(c, "Snap", 84, { when (Studio.chopSnap) { 1 -> "1/16"; 2 -> "1/8"; 4 -> "1/4"; else -> "Off" } }) { d ->
+            val opts = intArrayOf(0, 1, 2, 4); val k = (opts.indexOf(Studio.chopSnap) + d).coerceIn(0, opts.size - 1); Studio.setChopSnap(opts[k])
+        }
+        private val wave = object : PixelView(c) {
+            private var cacheFor: FloatArray? = null; private var cacheW = 0; private var peaks = FloatArray(0)
+            private val lbl = Px.text(11f, Pal.CREAM); private val big = Px.text(16f, Pal.CREAM); private val num = Px.text(9f, Pal.CREAM, headFont = true)
+            init { animated = true }
+            override fun paint(c: Canvas) {
+                val w = width.toFloat(); val h = height.toFloat()
+                c.fill(0f, 0f, w, h, 0xFF26222E.toInt()); c.fill(u, u, w - u, h - u, 0xFF3A3646.toInt())
+                val src = pu.chopSrc
+                if (src.isEmpty()) { c.textCentered("Load a sample, or use a pad's sound", w / 2, h / 2, lbl); return }
+                val cols = (w / u).toInt().coerceAtLeast(1)
+                if (src !== cacheFor || cols != cacheW) {
+                    cacheFor = src; cacheW = cols
+                    peaks = FloatArray(cols) { k -> val a = (src.size.toLong() * k / cols).toInt(); val b = (src.size.toLong() * (k + 1) / cols).toInt(); var m = 0f; for (j in a until maxOf(a + 1, b).coerceAtMost(src.size)) m = maxOf(m, kotlin.math.abs(src[j])); m }
+                }
+                val mid = h / 2
+                for (k in 0 until cols) { val ph = peaks[k] * (h / 2 - u * 3); c.fill(k * u, mid - ph, k * u + u, mid + ph + u, 0xFF9AA0C8.toInt()) }
+                // chop markers in the colour of the tapped pad's row
+                val rowCol = intArrayOf(0xFFE8746C.toInt(), 0xFFE8B83C.toInt(), 0xFF68B860.toInt(), 0xFF6A8CE0.toInt())
+                for ((f, pad) in Studio.chopMarksView) {
+                    val x = f.toFloat() / src.size * w
+                    c.fill(x, u, x + u, h - u, rowCol[pad / 4])
+                    c.fill(x, u, x + Px.dp(18f), u + Px.dp(14f), rowCol[pad / 4])
+                    c.drawText("${pad + 1}", x + u * 2, u + Px.dp(11f), num)
+                }
+                val t = Audio.transport
+                val pos = pu.chopPos
+                if (pos >= 0) { val x = pos.toFloat() / src.size * w; c.fill(x - u, 0f, x + u, h, Pal.CREAM) }
+                if (t.chopRec == app.foxbox.seq.Transport.Rec.ARMED) {
+                    val beatsLeft = kotlin.math.ceil((t.chopStart - t.tick) / app.foxbox.seq.Ticks.PPQ).toInt().coerceAtLeast(1)
+                    c.fill(0f, mid - Px.dp(16f), w, mid + Px.dp(16f), Pal.alpha(0xFF000000.toInt(), 0.55f))
+                    c.textCentered("count-in… $beatsLeft", w / 2, mid, big)
+                }
+            }
+        }
+        init {
+            orientation = VERTICAL
+            val title = object : PixelView(c) {
+                override fun paint(c: Canvas) { c.pixelBox(0f, 0f, width.toFloat(), height.toFloat(), Pal.CREAM, shade = false); c.textCentered(if (pu.chopSrc.isEmpty()) "Rhythm chop" else "Chopping: ${pu.chopSrcName}", width / 2f, height / 2f, nameP) }
+            }
+            addView(title, lp(MATCH, Px.dp(28)))
+            addView(wave, lp(MATCH, 0, 1f))
+            val load = Btn(c, "Load sample…", Pal.AQUA).apply { onClick = { host.pickAudio("chopsrc") } }
+            useBtn.onClick = { val i = Studio.selectedPad; Studio.setChopSource(pu.samples[i], pu.names[i]) }
+            addView(row(c, load, useBtn).apply { load.layoutParams = lp(0, Px.dp(40), 1f); useBtn.layoutParams = lp(0, Px.dp(40), 1f) }, lp(MATCH, WRAP))
+            chopBtn.onClick = { Studio.rhythmChop() }
+            val undo = Btn(c, "Undo").apply { onClick = { Studio.undoChop() } }
+            addView(row(c, chopBtn, snap, undo).apply { chopBtn.layoutParams = lp(0, Px.dp(44), 1.3f); snap.layoutParams = lp(0, Px.dp(44), 1f); undo.layoutParams = lp(Px.dp(64), Px.dp(44)) }, lp(MATCH, WRAP))
+        }
+        fun refresh() {
+            val t = Audio.transport
+            chopBtn.text = when (t.chopRec) { app.foxbox.seq.Transport.Rec.ARMED -> "count-in…"; app.foxbox.seq.Transport.Rec.RECORDING -> "■ Done"; else -> "● Chop" }
+            chopBtn.on = t.chopRec != app.foxbox.seq.Transport.Rec.OFF; chopBtn.blink = t.chopRec == app.foxbox.seq.Transport.Rec.ARMED
+            useBtn.text = "Use pad ${Studio.selectedPad + 1}"
+            listOf(chopBtn, useBtn).forEach { it.requestLayout(); it.invalidate() }
+            snap.invalidate()
+            for (i in 0 until childCount) getChildAt(i).invalidate()
+        }
     }
 
     private fun buildEditor(i: Int) {
@@ -277,6 +369,7 @@ class PickupPage(c: Context, private val host: Host) : LinearLayout(c) {
                     val p = padAt(x, y); down[e.getPointerId(i)] = p
                     val ch = height / 4f
                     val vel = 0.45f + 0.55f * (1f - (y % ch) / ch)
+                    if (chopping) { Studio.chopTap(p); flash[p] = System.currentTimeMillis(); return true }
                     Studio.hitPad(p, vel); flash[p] = System.currentTimeMillis()
                     if (p != Studio.selectedPad) Studio.selectPad(p)
                 }

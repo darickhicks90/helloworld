@@ -85,6 +85,7 @@ class Transport {
         players.forEach { it.releaseAll() }
         players.clear(); audioPlayers.clear(); syncIds()
         if (audioRec != Rec.OFF) endAudioTake()
+        if (chopRec != Rec.OFF) { chopRec = Rec.OFF; onChopStop?.invoke() }
         if (sampRec == Rec.RECORDING) { sampEnd = tick; sampIn?.markEnd(latencyFrames); endSamplerTake() }
         else if (sampRec == Rec.ARMED) { sampRec = Rec.OFF; listener?.onSamplerTakeEnded(-1.0, -1.0) }
         engines.forEach { it.allOff() }
@@ -202,6 +203,11 @@ class Transport {
         val t1 = t0 + n * bpm * Ticks.PPQ / 60.0 / SR
         if (rec == Rec.ARMED && t1 > recStart) { rec = Rec.RECORDING; takes.clear(); changed() }
         if (audioRec == Rec.ARMED && t1 > audioRecStart) { audioRec = Rec.RECORDING; audioIn?.markStart(latencyFrames); changed() }
+        if (chopRec == Rec.ARMED && t1 > chopStart) {
+            chopRec = Rec.RECORDING
+            val off = ((chopStart - t0) / (bpm * Ticks.PPQ / 60.0 / SR)).toInt().coerceIn(0, n - 1)
+            onChopStart?.invoke(off); changed()
+        }
         if (sampRec == Rec.ARMED && t1 > sampStart) {
             sampRec = Rec.RECORDING
             // the start tick falls inside this block: count back the frames after it
@@ -245,7 +251,7 @@ class Transport {
 
     private fun step(s: Long) {
         if (s >= 0) for (i in engines.indices) engines[i].onStep(s)
-        val counting = audioRec == Rec.ARMED || rec == Rec.ARMED || (sampRec == Rec.ARMED && s < 0)
+        val counting = audioRec == Rec.ARMED || rec == Rec.ARMED || (sampRec == Rec.ARMED && s < 0) || chopRec == Rec.ARMED
         if ((counting || (metronome && (rec != Rec.OFF || audioRec != Rec.OFF))) && Math.floorMod(s, 4L) == 0L) click(Math.floorMod(s, 16L) == 0L)
     }
 
@@ -270,6 +276,28 @@ class Transport {
 
     private fun syncIds() { playing_ids = (players.map { it.clip.id } + audioPlayers.map { it.clip.id }).toSet() }
     private var queuedAudio: List<AudioClip> = emptyList()
+
+    // ---------------------------------------------------------------- Pickup rhythm chop
+
+    /** Rhythm chop pass: OFF, counting in (ARMED) or playing the source (RECORDING). */
+    @Volatile var chopRec = Rec.OFF; private set
+    @Volatile var chopStart = 0.0; private set
+    /** Audio thread: the source starts playing `offset` frames into this block. */
+    var onChopStart: ((Int) -> Unit)? = null
+    /** Audio thread: the pass was stopped by the transport. */
+    var onChopStop: (() -> Unit)? = null
+
+    /** Two bars of count-in (from bar 1 if stopped, else from the next bar line), then the chop pass. Again to cancel. */
+    fun chopCountIn() {
+        if (chopRec != Rec.OFF) { chopRec = Rec.OFF; onChopStop?.invoke(); changed(); return }
+        if (!playing) { tick = -2.0 * Ticks.BAR; playing = true; chopStart = 0.0 }
+        else chopStart = nextBar(tick) + 2.0 * Ticks.BAR
+        chopRec = Rec.ARMED
+        changed()
+    }
+
+    /** The chop pass has finished (the source ran out or was stopped). */
+    fun chopDone() { if (chopRec != Rec.OFF) { chopRec = Rec.OFF; changed() } }
 
     // ---------------------------------------------------------------- sampler mic takes (Reflections, Leaves)
 

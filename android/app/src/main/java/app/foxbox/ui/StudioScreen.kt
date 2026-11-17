@@ -34,6 +34,10 @@ interface Host {
     fun fileMenu()
     fun audioSettings()
     fun presetMenu(engineId: String)
+    /** Pickup sample banks: load, save, import, share. */
+    fun bankMenu()
+    /** Chop a Pickup pad's sound across the pads. */
+    fun chopMenu(pad: Int)
     fun addBlockMenu()
     /** Rename a clip or take (from Clibbins). */
     fun renameItem(id: String)

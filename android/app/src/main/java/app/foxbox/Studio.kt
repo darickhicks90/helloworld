@@ -12,6 +12,8 @@ import app.foxbox.blocks.Block
 import app.foxbox.blocks.Blocks
 import app.foxbox.data.AudioFiles
 import app.foxbox.data.AudioIn
+import app.foxbox.data.Banks
+import app.foxbox.engines.Chop
 import app.foxbox.data.DaisyChain
 import app.foxbox.data.Project
 import app.foxbox.data.ProjectStore
@@ -730,10 +732,91 @@ object Studio : Transport.Listener, MidiInput.Sink {
 
     @Volatile var selectedPad = 0
     fun selectPad(i: Int) { selectedPad = i.coerceIn(0, Pickup.PADS - 1); changed() }
+    /** A pad pressed on screen; [releasePad] when the finger lifts (pads set to Hold stop then). */
     fun hitPad(i: Int, vel: Float) {
         val k = 0x32000000 or i
-        noteOn(Audio.pickup, k, 36 + i, vel); noteOff(Audio.pickup, k)
+        noteOn(Audio.pickup, k, 36 + i, vel)
     }
+    fun releasePad(i: Int) = noteOff(Audio.pickup, 0x32000000 or i)
+    /** Write a pad's sound into the project (no export copy). */
+    private fun storePad(i: Int, data: FloatArray?) {
+        val f = java.io.File(project.samplesDir, "pickup_pad$i.wav")
+        if (data == null) f.delete() else { project.samplesDir.mkdirs(); AudioFiles.writeWav(f, data) }
+    }
+
+    /** Load a bank onto the pads (call on the main thread). */
+    fun applyBank(bank: Banks.Bank) {
+        val pu = Audio.pickup
+        val padParams = pu.p.all.values.filter { Regex("^p\\d+[a-z]+$").matches(it.id) }
+        if (bank.builtIn) {
+            pu.kitId = bank.kit!!
+            pu.resetKit()
+            padParams.forEach { it.set(it.def) }
+            Thread { for (i in 0 until Pickup.PADS) storePad(i, null) }.start()
+            message("Loaded the ${bank.name} bank"); save(); changed(); return
+        }
+        message("Loading ${bank.name}…")
+        Thread {
+            val full = runCatching { Banks.load(bank) }.getOrNull() ?: return@Thread message("Couldn't read that bank")
+            main.post {
+                for (i in 0 until Pickup.PADS) full.samples.getOrNull(i)?.let { pu.setPadSample(i, it, full.names.getOrElse(i) { "Pad ${i + 1}" }) }
+                padParams.forEach { p -> p.set(if (full.params.has(p.id)) full.params.getDouble(p.id).toFloat() else p.def) }
+                Thread { for (i in 0 until Pickup.PADS) full.samples.getOrNull(i)?.let { storePad(i, it) } }.start()
+                message("Loaded the ${full.name} bank"); save(); changed()
+            }
+        }.start()
+    }
+
+    /** Put several sounds onto pads, starting at `first`. */
+    fun fillPads(first: Int, sounds: List<Pair<String, FloatArray>>) {
+        val pu = Audio.pickup
+        val n = minOf(sounds.size, Pickup.PADS - first)
+        for (k in 0 until n) {
+            val (name, d) = sounds[k]
+            pu.setPadSample(first + k, d, name)
+            listOf("start" to 0f, "rev" to 0f).forEach { (id, v) -> pu.p.all["p${first + k}$id"]?.set(v) }
+            pu.padEnd[first + k].set(1f)
+        }
+        val saved = (0 until n).map { first + it to sounds[it].second }
+        Thread { saved.forEach { (i, d) -> storePad(i, d) } }.start()
+        save(); changed()
+        if (n < sounds.size) message("${sounds.size} sounds, but only $n pads from pad ${first + 1}: the rest were left out")
+    }
+
+    private var chopUndo: Pair<Array<FloatArray>, Array<String>>? = null
+    val canUndoChop get() = chopUndo != null
+
+    /** Chop the selected pad's sound across the pads from there on. Modes: "equal4/8/16", "hits", "beat", "halfbeat", "bar". */
+    fun chopPad(pad: Int, mode: String) {
+        val pu = Audio.pickup
+        val d = pu.samples[pad]
+        val room = Pickup.PADS - pad
+        val starts = when (mode) {
+            "equal4" -> Chop.equal(d, 4)
+            "equal8" -> Chop.equal(d, 8)
+            "equal16" -> Chop.equal(d, 16)
+            "hits" -> Chop.transients(d, room)
+            "beat" -> Chop.beats(d, project.bpm, 1f, room)
+            "halfbeat" -> Chop.beats(d, project.bpm, 0.5f, room)
+            else -> Chop.beats(d, project.bpm, 4f, room)
+        }
+        val slices = Chop.slices(d, starts)
+        if (slices.size < 2) return message("Couldn't find places to cut that sound. Try equal slices.")
+        chopUndo = pu.samples.copyOf() to pu.names.copyOf()
+        val base = pu.names[pad].take(10)
+        fillPads(pad, slices.mapIndexed { k, s -> "$base ${k + 1}" to s })
+        message("Chopped into ${minOf(slices.size, room)} pads from pad ${pad + 1}" + if (slices.size > room) " (${slices.size - room} didn't fit)" else "")
+    }
+
+    fun undoChop() {
+        val (s, n) = chopUndo ?: return message("Nothing to undo")
+        chopUndo = null
+        val pu = Audio.pickup
+        for (i in 0 until Pickup.PADS) pu.setPadSample(i, s[i], n[i])
+        Thread { for (i in 0 until Pickup.PADS) storePad(i, s[i]) }.start()
+        message("Chop undone"); save(); changed()
+    }
+
     fun setPadSample(i: Int, data: FloatArray, name: String) {
         Audio.pickup.setPadSample(i, data, name)
         Thread { ProjectStore.saveSample(project, "pickup_pad$i", data) }.start()
@@ -773,7 +856,8 @@ object Studio : Transport.Listener, MidiInput.Sink {
         if (dev.role == MidiInput.Role.PADS) {
             val key = 0x30000000 or (dev.id shl 8) or note
             val i = padKeys.remove(key) ?: return
-            if (page != "minds" && page != "pickup") { if (i < 7) chordOff(padChordKey(dev, i)) else noteOff(target, key) }
+            if (page == "pickup") releasePad(i)
+            else if (page != "minds") { if (i < 7) chordOff(padChordKey(dev, i)) else noteOff(target, key) }
             return
         }
         val key = midiKey(dev, ch, note)

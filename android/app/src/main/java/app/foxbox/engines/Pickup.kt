@@ -21,20 +21,34 @@ import kotlin.math.sin
 import kotlin.math.tanh
 
 /**
- * Pickup — a vintage-style 16-pad sampler. Record or load a sound to each
- * pad; playback is resampled and run through sample-rate and bit-depth
- * reduction for that classic gritty drum-machine sound. Has a pad step
- * sequencer with swing.
+ * Pickup — a 16-pad sampler. Record or load a sound to each pad, or chop one
+ * long sample across the pads. Plays clean by default; Vintage mode adds
+ * sample-rate and bit-depth reduction with saturation for a gritty
+ * drum-machine sound. Has a pad step sequencer with swing.
  */
 class Pickup : Engine("pickup", "Pickup") {
     companion object {
         const val PADS = 16
         const val STEPS = 16
-        val DEFAULT_NAMES = listOf("Kick", "Snare", "Clap", "Closed Hat", "Open Hat", "Low Tom", "Mid Tom", "High Tom",
+        /** The default kit: realistic drums synthesized at start-up. */
+        val STUDIO_NAMES = listOf("Kick", "Snare", "Clap", "Closed Hat", "Open Hat", "Low Tom", "Mid Tom", "High Tom",
+            "Rim", "Cowbell", "Shaker", "Crash", "Ride", "Conga", "Sub Bass", "Snap")
+        /** The original lo-fi kit, kept as the "Classic Box" bank. */
+        val CLASSIC_NAMES = listOf("Kick", "Snare", "Clap", "Closed Hat", "Open Hat", "Low Tom", "Mid Tom", "High Tom",
             "Rim", "Cowbell", "Shaker", "Crash", "Blip", "Stab", "Bass", "Noise")
+        const val KIT_STUDIO = "studio"
+        const val KIT_CLASSIC = "classic"
+        private val cache = HashMap<String, Array<FloatArray>>()
+        /** The built-in kits' samples (made once, then shared). */
+        fun kit(id: String): Array<FloatArray> = synchronized(cache) {
+            cache.getOrPut(id) { Array(PADS) { if (id == KIT_CLASSIC) DrumKits.classic(it) else DrumKits.studio(it) } }
+        }
+        fun kitNames(id: String) = if (id == KIT_CLASSIC) CLASSIC_NAMES else STUDIO_NAMES
     }
 
     init { p.section("Vintage") }
+    /** Clean playback, or the gritty Vintage character (rate, bits, saturation). */
+    val quality = p.choice("quality", "Quality", listOf("Clean", "Vintage"), 0)
     private val rate = p.num("rate", "Sample Rate", 8000f, 48000f, 26040f, Fmt.HZ, exp = true)
     private val bits = p.num("bits", "Bit Depth", 6f, 16f, 12f, step = 1f)
     private val warmth = p.num("warmth", "Saturation", 0f, 1f, 0.25f, Fmt.PCT)
@@ -63,8 +77,15 @@ class Pickup : Engine("pickup", "Pickup") {
     }
     init { finishParams("cutoff", "rate", 0.85f, 0.08f) }
 
-    @Volatile var samples: Array<FloatArray> = Array(PADS) { kitSound(it) }; private set
-    val names = Array(PADS) { DEFAULT_NAMES[it] }
+    // Added after the XY pad's targets were fixed, so older projects keep their XY choices.
+    /** Where each pad's sound ends (0..1 of the sample) and whether it plays only while held. */
+    val padEnd: List<Param> = (0 until PADS).map { i -> p.section("Pad ${i + 1}"); p.num("p${i}end", "Pad ${i + 1} End", 0.05f, 1f, 1f, Fmt.PCT) }
+    val padHold: List<Param> = (0 until PADS).map { i -> p.section("Pad ${i + 1}"); p.toggle("p${i}hold", "Pad ${i + 1} Hold") }
+
+    /** Which built-in kit fills pads that have no sound of their own. */
+    @Volatile var kitId = KIT_STUDIO
+    @Volatile var samples: Array<FloatArray> = kit(KIT_STUDIO).copyOf(); private set
+    val names = Array(PADS) { STUDIO_NAMES[it] }
     /** pattern[pad][step] velocity (0 = off). */
     val pattern = Array(PADS) { FloatArray(STEPS) }
     @Volatile var currentStep = -1
@@ -73,11 +94,12 @@ class Pickup : Engine("pickup", "Pickup") {
     fun setPadSample(i: Int, data: FloatArray, name: String) {
         val copy = samples.copyOf(); copy[i] = data; samples = copy; names[i] = name
     }
-    fun resetKit() { samples = Array(PADS) { kitSound(it) }; for (i in 0 until PADS) names[i] = DEFAULT_NAMES[i] }
+    fun resetKit() { samples = kit(kitId).copyOf(); val n = kitNames(kitId); for (i in 0 until PADS) names[i] = n[i] }
 
     private inner class V {
         val tail = VoiceTail(); var data = FloatArray(1); var pos = 0.0; var inc = 1.0; var end = 0.0
         var gain = 1f; var pl = 1f; var pr = 1f; var hold = 0f; var holdLeft = 0f
+        var lo = 0.0; var hi = 0.0; var key = 0
     }
     private val voices = Array(PADS) { V() }
     private val pend = IntArray(32); private val pendVel = FloatArray(32); private val pendDelay = FloatArray(32); private var pending = 0
@@ -88,10 +110,13 @@ class Pickup : Engine("pickup", "Pickup") {
         val v = voices[pad]
         v.data = d
         val rev = pp.reverse.on
-        val startF = (pp.start.value * (d.size - 1)).toDouble()
+        // play the region between Start and End (reversed: from End back to Start)
+        val a = (pp.start.value * (d.size - 1)).toDouble()
+        val b = (maxOf(pp.start.value + 0.01f, padEnd[pad].value).coerceAtMost(1f) * (d.size - 2)).toDouble().coerceAtLeast(a + 1)
+        v.lo = a; v.hi = b
         v.inc = semis(pp.tune.value + v(pitch)).toDouble() * (if (rev) -1.0 else 1.0)
-        v.pos = if (rev) d.size - 2.0 - startF else startF
-        v.end = if (rev) 0.0 else d.size - 2.0
+        v.pos = if (rev) b else a
+        v.end = if (rev) a else b
         v.gain = vel * pp.level.value
         val pan = pp.pan.value
         v.pl = if (pan > 0f) 1f - pan else 1f; v.pr = if (pan < 0f) 1f + pan else 1f
@@ -102,8 +127,9 @@ class Pickup : Engine("pickup", "Pickup") {
         if (record) Audio.transport.recHit(this, 36 + pad, vel)
     }
 
-    override fun noteOn(key: Int, note: Int, vel: Float) = fire(Math.floorMod(note - 36, PADS), vel, record = false)
-    override fun noteOff(key: Int) {}
+    override fun noteOn(key: Int, note: Int, vel: Float) { val pad = Math.floorMod(note - 36, PADS); fire(pad, vel, record = false); voices[pad].key = key }
+    /** Pads set to Hold stop when released; the others play out. */
+    override fun noteOff(key: Int) { for (i in voices.indices) { val v = voices[i]; if (v.key == key && padHold[i].on && v.tail.active) { v.key = 0; v.tail.release(env, xy) } } }
     override fun allOff() { pending = 0; voices.forEach { it.tail.kill() } }
 
     override fun onStep(step: Long) {
@@ -139,30 +165,34 @@ class Pickup : Engine("pickup", "Pickup") {
                 if (k and 15 == 0) v.tail.update(env, xy, 60, 0f)
                 var x = 0f
                 val ip = v.pos.toInt()
-                if (ip in 0 until d.size - 1) { val f = (v.pos - ip).toFloat(); x = d[ip] + (d[ip + 1] - d[ip]) * f } else if (v.holdLeft > 0f) v.holdLeft = 0f
+                if (v.pos >= v.lo && v.pos <= v.hi && ip < d.size - 1) { val f = (v.pos - ip).toFloat(); x = d[ip] + (d[ip + 1] - d[ip]) * f } else if (v.holdLeft > 0f) v.holdLeft = 0f
                 v.pos += v.inc
                 if (v.holdLeft > 0f) { v.holdLeft -= 1f; if (v.holdLeft <= 0f) v.tail.release(env, xy) }
                 v.tail.stereo(x * v.pl, x * v.pr)
                 l[k] += v.tail.outL * v.gain; r[k] += v.tail.outR * v.gain
             }
-            if (v.pos !in 0.0..(d.size - 1.0) && v.tail.amp.level < 0.0005f) v.tail.kill()
+            if (v.pos !in v.lo..v.hi && v.tail.amp.level < 0.0005f) v.tail.kill()
         }
+        activeVoices = count
+        if (quality.index == 0) return
         // Vintage character: sample-and-hold decimation, bit reduction and saturation.
         for (k in 0 until n) {
             holdPhase += 1f
             if (holdPhase >= step) { holdPhase -= step; holdL = round(l[k] * levels) / levels; holdR = round(r[k] * levels) / levels }
             l[k] = tanh(holdL * sat) / sat * 1.2f; r[k] = tanh(holdR * sat) / sat * 1.2f
         }
-        activeVoices = count
     }
 
     override fun saveExtra(o: JSONObject) {
         o.put("pattern", JSONArray().apply { pattern.forEach { row -> put(JSONArray(row.map { it.toDouble() })) } })
         o.put("names", JSONArray(names.toList()))
+        o.put("kit", kitId)
     }
     override fun loadExtra(o: JSONObject?) {
         pattern.forEach { it.fill(0f) }
         val a = o?.optJSONArray("pattern")
+        // Projects from before the new kit keep the sounds they were made with.
+        kitId = o?.optString("kit", if (a != null) KIT_CLASSIC else KIT_STUDIO) ?: KIT_STUDIO
         if (a == null) { defaultBeat(); resetKit(); return }
         for (pd in 0 until minOf(PADS, a.length())) { val row = a.getJSONArray(pd); for (s in 0 until minOf(STEPS, row.length())) pattern[pd][s] = row.getDouble(s).toFloat() }
         o.optJSONArray("names")?.let { n -> for (k in 0 until minOf(PADS, n.length())) names[k] = n.getString(k) }
@@ -175,27 +205,4 @@ class Pickup : Engine("pickup", "Pickup") {
         pattern[4][14] = 0.6f
     }
     init { defaultBeat() }
-
-    /** The built-in kit: classic drum-machine sounds synthesized at start-up. */
-    private fun kitSound(i: Int): FloatArray {
-        val rnd = Rng(100 + i)
-        fun make(sec: Float, f: (Float, Int) -> Float): FloatArray = FloatArray((SR * sec).toInt()) { k -> f(k / SRF, k) }
-        var ph = 0.0
-        return when (i) {
-            0 -> make(0.6f) { t, _ -> ph += 2 * PI * (48 + 110 * exp(-t * 30.0)) / SR; (sin(ph) * exp(-t * 6.0) * 1.1).toFloat() }
-            1 -> make(0.35f) { t, _ -> ph += 2 * PI * 190 / SR; ((sin(ph) * 0.5 * exp(-t * 18.0)) + rnd.bi() * 0.6 * exp(-t * 14.0)).toFloat() }
-            2 -> make(0.4f) { t, _ -> val burst = if (t < 0.03f) (if ((t * 300).toInt() % 3 == 0) 1.0 else 0.3) else 1.0; (rnd.bi() * burst * exp(-t * 11.0) * 0.8).toFloat() }
-            3 -> { var hp = 0f; make(0.08f) { t, _ -> val x = rnd.bi(); val o = x - hp; hp = x * 0.6f; o * exp(-t * 60f) * 0.5f } }
-            4 -> { var hp = 0f; make(0.5f) { t, _ -> val x = rnd.bi(); val o = x - hp; hp = x * 0.6f; o * exp(-t * 6f) * 0.45f } }
-            5, 6, 7 -> { val f = floatArrayOf(90f, 130f, 180f)[i - 5]; make(0.5f) { t, _ -> ph += 2 * PI * f * (1 + 0.6 * exp(-t * 20.0)) / SR; (sin(ph) * exp(-t * 7.0)).toFloat() } }
-            8 -> make(0.06f) { t, _ -> ph += 2 * PI * 1700 / SR; ((sin(ph) * 0.7 + rnd.bi() * 0.3) * exp(-t * 80.0)).toFloat() }
-            9 -> { var p2 = 0.0; make(0.3f) { t, _ -> ph += 2 * PI * 540 / SR; p2 += 2 * PI * 800 / SR; ((if (sin(ph) > 0) 0.4 else -0.4) + (if (sin(p2) > 0) 0.4 else -0.4)).toFloat() * exp(-t * 12f) } }
-            10 -> make(0.15f) { t, _ -> rnd.bi() * 0.4f * sin(PI.toFloat() * minOf(1f, t / 0.15f)) }
-            11 -> { var hp = 0f; make(1.4f) { t, _ -> val x = rnd.bi(); val o = x - hp; hp = x * 0.4f; o * exp(-t * 2.5f) * 0.45f } }
-            12 -> make(0.12f) { t, _ -> ph += 2 * PI * (1800 * exp(-t * 25.0) + 300) / SR; (sin(ph) * exp(-t * 20.0) * 0.6).toFloat() }
-            13 -> { val notes = doubleArrayOf(220.0, 261.6, 329.6, 392.0); val phs = DoubleArray(4); make(0.6f) { t, _ -> var s = 0.0; for (k in 0..3) { phs[k] += 2 * PI * notes[k] / SR; s += (phs[k] / (2 * PI) % 1.0) * 2 - 1 }; (s * 0.2 * exp(-t * 5.0)).toFloat() } }
-            14 -> make(0.7f) { t, _ -> ph += 2 * PI * 55 / SR; (tanh(sin(ph) * 3) * 0.6 * exp(-t * 3.0)).toFloat() }
-            else -> make(1.0f) { t, k -> (if (k % 997 < 3) rnd.bi() else rnd.bi() * 0.05f) * exp(-t * 2f) }
-        }
-    }
 }

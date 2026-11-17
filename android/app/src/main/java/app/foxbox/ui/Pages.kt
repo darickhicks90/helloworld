@@ -147,7 +147,7 @@ class SeqPanel(c: Context, private val seq: NoteSeq, accent: Int) : LinearLayout
 }
 
 /**
- * Pickup: truck-dashboard XY pad | 16 pads (MPC style, pad 1 bottom left) |
+ * Pickup: truck-dashboard XY pad | 16 pads (classic 4x4 sampler layout, pad 1 bottom left) |
  * the selected pad's editor (load, record, tune, decay…) or its pattern.
  */
 @SuppressLint("ViewConstructor")
@@ -158,6 +158,7 @@ class PickupPage(c: Context, private val host: Host) : LinearLayout(c) {
     private val editor = LinearLayout(c).apply { orientation = VERTICAL }
     private val pattern = PatternPanel(c)
     private val modeBtn = Btn(c, "Pattern", Pal.ROSE)
+    private val qualityBtn = Btn(c, "Clean", Pal.AQUA)
     private val seqBtn = Btn(c, "Sequencer", Pal.ORANGE, 120)
     private val latchBtn = Btn(c, "Latch", Pal.SUN)
     private val nameP = Px.text(13f, Pal.BROWN_D)
@@ -175,7 +176,8 @@ class PickupPage(c: Context, private val host: Host) : LinearLayout(c) {
         seqBtn.onClick = { pu.seqOn.set(if (pu.seqOn.on) 0f else 1f); if (!pu.seqOn.on) Audio.post { pu.allOff() }; Studio.save(); Studio.changed() }
         latchBtn.onClick = { pu.latch.set(if (pu.latch.on) 0f else 1f); Studio.save(); Studio.changed() }
         col.addView(row(c, seqBtn, latchBtn).apply { seqBtn.layoutParams = lp(0, Px.dp(44), 1f); latchBtn.layoutParams = lp(Px.dp(80), Px.dp(44)) }, lp(MATCH, WRAP))
-        col.addView(modeBtn, lp(MATCH, Px.dp(42)))
+        qualityBtn.onClick = { pu.quality.set(if (pu.quality.index == 0) 1f else 0f); Studio.save(); Studio.changed() }
+        col.addView(row(c, modeBtn, qualityBtn).apply { modeBtn.layoutParams = lp(0, Px.dp(42), 1f); qualityBtn.layoutParams = lp(Px.dp(96), Px.dp(42)) }, lp(MATCH, WRAP))
         right.addView(ScrollView(c).apply { addView(editor) }, FrameLayout.LayoutParams(MATCH, MATCH))
         right.addView(pattern, FrameLayout.LayoutParams(MATCH, MATCH))
         pattern.visibility = GONE
@@ -191,6 +193,8 @@ class PickupPage(c: Context, private val host: Host) : LinearLayout(c) {
         modeBtn.requestLayout(); modeBtn.invalidate()
         seqBtn.on = pu.seqOn.on; seqBtn.text = if (pu.seqOn.on) "Sequencer ON" else "Sequencer OFF"; seqBtn.requestLayout(); seqBtn.invalidate()
         latchBtn.on = pu.latch.on; latchBtn.invalidate()
+        val vintage = pu.quality.index == 1
+        qualityBtn.on = vintage; qualityBtn.text = if (vintage) "Vintage" else "Clean"; qualityBtn.requestLayout(); qualityBtn.invalidate()
         recBtn?.let { b -> val on = host.micTarget() == "pad$i"; b.on = on; b.blink = on; b.text = if (on) "■ Stop" else "● Rec"; b.requestLayout() }
         pads.invalidate(); pattern.invalidate()
     }
@@ -208,8 +212,11 @@ class PickupPage(c: Context, private val host: Host) : LinearLayout(c) {
         val load = Btn(c, "Load to pad", Pal.AQUA).apply { onClick = { host.pickAudio("pad$i") } }
         recBtn = Btn(c, "● Rec", Pal.ORANGE_D).apply { onClick = { host.toggleMic("pad$i") } }
         editor.addView(row(c, load, recBtn!!).apply { load.layoutParams = lp(0, Px.dp(42), 1f); recBtn!!.layoutParams = lp(0, Px.dp(42), 1f) }, lp(MATCH, WRAP))
+        val chop = Btn(c, "Chop…", Pal.ORANGE).apply { onClick = { host.chopMenu(i) } }
+        val banks = Btn(c, "Banks…", Pal.HONEY).apply { onClick = { host.bankMenu() } }
+        editor.addView(row(c, chop, banks).apply { chop.layoutParams = lp(0, Px.dp(42), 1f); banks.layoutParams = lp(0, Px.dp(42), 1f) }, lp(MATCH, WRAP))
         val flow = Flow(c)
-        listOf(pad.tune, pad.level, pad.decay, pad.start, pad.pan, pad.reverse).forEach { flow.addView(Knob(c, it, Pal.ROSE)) }
+        listOf(pad.tune, pad.level, pad.decay, pad.start, pu.padEnd[i], pad.pan, pad.reverse, pu.padHold[i]).forEach { flow.addView(Knob(c, it, Pal.ROSE)) }
         editor.addView(flow, lp(MATCH, WRAP))
     }
 
@@ -218,23 +225,47 @@ class PickupPage(c: Context, private val host: Host) : LinearLayout(c) {
         private val flash = LongArray(Pickup.PADS)
         private val down = HashMap<Int, Int>()
         private val numP = Px.text(10f, Pal.BROWN, headFont = true, align = Paint.Align.LEFT)
+        private val PLATE = 0xFFC8C4CC.toInt(); private val PLATE_D = 0xFF8C8794.toInt(); private val WELL = 0xFF5A5664.toInt()
+        private val PAD = 0xFFDCD8E0.toInt(); private val PAD_SEL = 0xFFEDE9F2.toInt(); private val SHADOW = 0xFF34303C.toInt()
+        private val OUTLINE = 0xFF26222E.toInt(); private val HILITE = 0xFFFFFFFF.toInt(); private val EDGE_D = 0xFFA7A2B0.toInt()
+        private val ROW_GEM = intArrayOf(0xFFE04848.toInt(), 0xFFF2C230.toInt(), 0xFF4CB050.toInt(), 0xFF4870D8.toInt())
+        private val ROW_LIT = intArrayOf(0xFFE8746C.toInt(), 0xFFE8B83C.toInt(), 0xFF68B860.toInt(), 0xFF6A8CE0.toInt())
         private val nmP = Px.text(11f, Pal.BROWN_D)
         init { animated = true }
         private fun padAt(x: Float, y: Float): Int { val col = (x / width * 4).toInt().coerceIn(0, 3); val r = (y / height * 4).toInt().coerceIn(0, 3); return (3 - r) * 4 + col }
         override fun paint(c: Canvas) {
             val cw = width / 4f; val ch = height / 4f
-            c.fill(0f, 0f, width.toFloat(), height.toFloat(), 0xFF3A3532.toInt())
+            val w = width.toFloat(); val h = height.toFloat()
+            // A 16-bit console faceplate: two-tone grey plate with a recessed well.
+            c.fill(0f, 0f, w, h, PLATE_D)
+            c.fill(u, u, w - u, h - u, PLATE)
+            c.fill(u * 2, u * 2, w - u * 2, h - u * 2, WELL)
             val now = System.currentTimeMillis()
             val step = pu.currentStep
             for (i in 0 until Pickup.PADS) {
                 if (Audio.transport.playing && step >= 0 && pu.seqOn.on && pu.pattern[i][step] > 0f && flash[i] < now - 90) flash[i] = now
                 val col = i % 4; val r = 3 - i / 4
-                val l = col * cw; val t = r * ch
+                val l = col * cw + u * 3; val t = r * ch + u * 3; val rr = (col + 1) * cw - u * 3; val b = (r + 1) * ch - u * 3
                 val lit = now - flash[i] < 120 || i in down.values
                 val sel = i == Studio.selectedPad
-                c.pixelBox(l + u * 2, t + u * 2, l + cw - u * 2, t + ch - u * 2, if (lit) Pal.ORANGE_L else if (sel) 0xFFE2D6C0.toInt() else 0xFFC9C0B2.toInt(), border = if (sel) Pal.ORANGE_D else Pal.BROWN_D)
-                c.drawText("${i + 1}", l + u * 4, t + u * 4 + Px.dp(10f), numP)
-                c.textCentered(pu.names[i].take(9), l + cw / 2, t + ch * 0.62f, nmP)
+                val face = if (lit) ROW_LIT[i / 4] else if (sel) PAD_SEL else PAD
+                // drop shadow, then a chunky rounded key: light top-left edge, dark bottom-right edge
+                val press = if (lit) u else 0f
+                c.fill(l + u * 2, t + u * 2, rr + u, b + u, SHADOW)
+                c.fill(l + u + press, t + press, rr - u + press, b + press, OUTLINE); c.fill(l + press, t + u + press, rr + press, b - u + press, OUTLINE)
+                c.fill(l + u * 2 + press, t + u + press, rr - u * 2 + press, b - u + press, face); c.fill(l + u + press, t + u * 2 + press, rr - u + press, b - u * 2 + press, face)
+                c.fill(l + u * 2 + press, t + u + press, rr - u * 2 + press, t + u * 2 + press, HILITE)
+                c.fill(l + u + press, t + u * 2 + press, l + u * 2 + press, b - u * 3 + press, HILITE)
+                c.fill(l + u * 3 + press, b - u * 2 + press, rr - u * 2 + press, b - u + press, EDGE_D)
+                c.fill(rr - u * 2 + press, t + u * 3 + press, rr - u + press, b - u * 2 + press, EDGE_D)
+                // coloured row gem in the corner, like the face buttons on a pad controller
+                val gx = rr - u * 6 + press; val gy = t + u * 4 + press
+                c.fill(gx - u, gy - u, gx + u * 3, gy + u * 3, OUTLINE); c.fill(gx, gy, gx + u * 2, gy + u * 2, ROW_GEM[i / 4]); c.fill(gx, gy, gx + u, gy + u, HILITE)
+                if (sel) { c.fill(l + press, b + press - u * 0.5f, rr + press, b + press + u * 0.5f, Pal.ORANGE) }
+                numP.color = if (lit) Pal.CREAM else 0xFF4A4458.toInt()
+                c.drawText("${i + 1}", l + u * 4 + press, t + u * 4 + Px.dp(9f) + press, numP)
+                nmP.color = if (lit) Pal.CREAM else 0xFF2E2A38.toInt()
+                c.textCentered(pu.names[i].take(10), (l + rr) / 2 + press, t + (b - t) * 0.64f + press, nmP)
             }
         }
         @SuppressLint("ClickableViewAccessibility")
@@ -249,8 +280,8 @@ class PickupPage(c: Context, private val host: Host) : LinearLayout(c) {
                     Studio.hitPad(p, vel); flash[p] = System.currentTimeMillis()
                     if (p != Studio.selectedPad) Studio.selectPad(p)
                 }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> down.remove(e.getPointerId(i))
-                MotionEvent.ACTION_CANCEL -> down.clear()
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP -> down.remove(e.getPointerId(i))?.let { Studio.releasePad(it) }
+                MotionEvent.ACTION_CANCEL -> { down.values.forEach { Studio.releasePad(it) }; down.clear() }
             }
             return true
         }

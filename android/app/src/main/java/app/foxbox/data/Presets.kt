@@ -147,9 +147,9 @@ object Presets {
             f("bumble", "Growl", "w1" to 2.0, "w2" to 3.0, "semi2" to -12.0, "ftype" to 1.0, "cutoff" to 700.0, "res" to 0.5, "dist" to 0.5, "lfo2Filter" to 0.3, "lfo2" to 3.0),
         )
         "pickup" -> listOf(
-            f("pickup", "SP Grit", "rate" to 26040.0, "bits" to 12.0, "warmth" to 0.3),
-            f("pickup", "MPC Warm", "rate" to 40000.0, "bits" to 12.0, "warmth" to 0.15),
-            f("pickup", "Crunchy", "rate" to 12000.0, "bits" to 8.0, "warmth" to 0.5),
+            f("pickup", "Dusty Grit", "quality" to 1.0, "rate" to 26040.0, "bits" to 12.0, "warmth" to 0.3),
+            f("pickup", "Warm 12-bit", "quality" to 1.0, "rate" to 40000.0, "bits" to 12.0, "warmth" to 0.15),
+            f("pickup", "Crunchy", "quality" to 1.0, "rate" to 12000.0, "bits" to 8.0, "warmth" to 0.5),
         )
         else -> emptyList()
     }

@@ -65,6 +65,7 @@ class MainActivity : Activity(), Host {
         Px.init(this)
         ProjectStore.init(this)
         Presets.init(this)
+        app.foxbox.data.Banks.init(this)
         Store.init(this)
         MidiMap.init(this)
         Studio.init(this)
@@ -340,6 +341,67 @@ class MainActivity : Activity(), Host {
         }
     }
 
+    // ------------------------------------------------------------------ Pickup banks and chops
+
+    override fun bankMenu() {
+        Thread {
+            val banks = app.foxbox.data.Banks.list()
+            runOnUiThread {
+                val items = listOf("Save these pads as a bank…", "Import a bank (.foxbank or a zip of WAVs)…", "Put audio files onto pads from pad ${Studio.selectedPad + 1}…") +
+                    banks.map { (if (it.builtIn) "★ " else "") + it.name }
+                choose("Pickup banks", items) { i ->
+                    when (i) {
+                        0 -> textDialog("Name the bank", "My bank ${banks.count { !it.builtIn } + 1}") { name ->
+                            Studio.message("Saving $name…")
+                            Thread { runCatching { app.foxbox.data.Banks.save(name) }.onSuccess { Studio.message("Saved the $name bank") }.onFailure { Studio.message("Couldn't save the bank") } }.start()
+                        }
+                        1 -> openDocument(REQ_BANK, "*/*")
+                        2 -> openDocuments(REQ_PADS, "audio/*")
+                        else -> {
+                            val b = banks[i - 3]
+                            if (b.builtIn) { Studio.applyBank(b); return@choose }
+                            choose(b.name, listOf("Load onto the pads", "Share…", "Delete")) { k ->
+                                when (k) {
+                                    0 -> Studio.applyBank(b)
+                                    1 -> shareBank(b)
+                                    2 -> { app.foxbox.data.Banks.delete(b); Studio.message("Deleted ${b.name}") }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }.start()
+    }
+
+    private fun shareBank(b: app.foxbox.data.Banks.Bank) {
+        Thread {
+            val uri = runCatching { app.foxbox.data.Banks.export(b) }.getOrNull()
+            runOnUiThread {
+                if (uri == null) return@runOnUiThread Studio.message("Couldn't save the bank file")
+                startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
+                    type = "application/zip"; putExtra(Intent.EXTRA_STREAM, uri); putExtra(Intent.EXTRA_SUBJECT, "${b.name} (FoxBox bank)")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }, "Share ${b.name}"))
+            }
+        }.start()
+    }
+
+    override fun chopMenu(pad: Int) {
+        val name = Audio.pickup.names[pad]
+        val items = listOf("4 equal slices", "8 equal slices", "16 equal slices", "At each hit (transients)", "Every beat (${Studio.project.bpm.toInt()} BPM)", "Every half beat", "Every bar") +
+            (if (Studio.canUndoChop) listOf("Undo the last chop") else emptyList())
+        val modes = listOf("equal4", "equal8", "equal16", "hits", "beat", "halfbeat", "bar")
+        choose("Chop pad ${pad + 1} ($name) onto pads ${pad + 1}–16", items) { i ->
+            if (i < modes.size) Studio.chopPad(pad, modes[i]) else Studio.undoChop()
+        }
+    }
+
+    private fun openDocuments(req: Int, type: String) {
+        val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply { addCategory(Intent.CATEGORY_OPENABLE); this.type = type; putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true) }
+        @Suppress("DEPRECATION") startActivityForResult(i, req)
+    }
+
     private fun sharePreset(p: Presets.Preset) {
         Thread {
             val uri = Presets.export(p)
@@ -528,6 +590,16 @@ class MainActivity : Activity(), Host {
     @Deprecated("Activity result API")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         @Suppress("DEPRECATION") super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_PADS && resultCode == RESULT_OK && data != null) {
+            val uris = data.clipData?.let { cd -> (0 until cd.itemCount).map { cd.getItemAt(it).uri } } ?: listOfNotNull(data.data)
+            val first = Studio.selectedPad
+            Studio.message("Loading ${uris.size} sound" + if (uris.size == 1) "…" else "s…")
+            Thread {
+                val sounds = uris.mapNotNull { u -> runCatching { (displayName(u)?.substringBeforeLast('.') ?: "Sound").take(16) to AudioFiles.decode(this, u) }.getOrNull() }
+                runOnUiThread { if (sounds.isEmpty()) Studio.message("Couldn't read those files") else { Studio.fillPads(first, sounds); Studio.message("Loaded ${sounds.size} onto pads from pad ${first + 1}") } }
+            }.start()
+            return
+        }
         val uri = data?.data
         if (resultCode != RESULT_OK || uri == null) return
         when (requestCode) {
@@ -548,6 +620,15 @@ class MainActivity : Activity(), Host {
                     Studio.message("Imported ${p.name} for ${Blocks.type(p.blockId)?.title}: find it under Presets")
                 } catch (ex: Exception) { Studio.message(ex.message ?: "Couldn't import that preset") }
             }.start()
+            REQ_BANK -> {
+                val name = displayName(uri)?.substringBeforeLast('.') ?: "Imported bank"
+                Thread {
+                    try {
+                        val b = app.foxbox.data.Banks.import(this, uri, name)
+                        Studio.message("Imported the ${b.name} bank: Pickup → Banks…")
+                    } catch (ex: Exception) { Studio.message(ex.message ?: "Couldn't import that bank") }
+                }.start()
+            }
             REQ_PACK -> {
                 val name = displayName(uri)?.substringBeforeLast('.') ?: "Pack"
                 Thread {
@@ -605,6 +686,8 @@ class MainActivity : Activity(), Host {
         private const val REQ_BT = 3
         private const val REQ_PRESET = 4
         private const val REQ_PACK = 5
+        private const val REQ_BANK = 20
+        private const val REQ_PADS = 21
         private const val REQ_TREE = 6
     }
 }

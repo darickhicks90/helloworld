@@ -385,7 +385,8 @@ class PickupPage(c: Context, private val host: Host) : LinearLayout(c) {
                 numP.color = if (lit) Pal.CREAM else 0xFF4A4458.toInt()
                 c.drawText("${i + 1}", l + u * 4 + press, t + u * 4 + Px.dp(9f) + press, numP)
                 nmP.color = if (lit) Pal.CREAM else 0xFF2E2A38.toInt()
-                c.textCentered(pu.names[i].take(10), (l + rr) / 2 + press, t + (b - t) * 0.64f + press, nmP)
+                nmP.textSize = Px.dp(11f)
+                c.textFit(pu.names[i], (l + rr) / 2 + press, t + (b - t) * 0.64f + press, rr - l - u * 6, nmP, 8f)
             }
         }
         @SuppressLint("ClickableViewAccessibility")

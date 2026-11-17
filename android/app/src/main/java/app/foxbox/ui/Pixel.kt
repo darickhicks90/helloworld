@@ -141,6 +141,35 @@ fun Canvas.bands(l: Float, t: Float, r: Float, b: Float, colors: IntArray) {
 
 fun Canvas.textCentered(s: String, cx: Float, cy: Float, p: Paint) = drawText(s, cx, cy - (p.descent() + p.ascent()) / 2, p)
 
+/**
+ * Text that always fits its space: shrinks the paint (down to `minSp`) until
+ * `s` is no wider than `maxW`, then shortens it with "…" if it still doesn't
+ * fit. Draws vertically centred on `cy`; the paint's size is restored after.
+ */
+fun Canvas.textFit(s: String, x: Float, cy: Float, maxW: Float, p: Paint, minSp: Float = 8.5f) {
+    val orig = p.textSize
+    val t = fitText(s, maxW, p, minSp)
+    textCentered(t, x, cy, p)
+    p.textSize = orig
+}
+
+/** Shrinks `p` to fit `s` in `maxW` (not below `minSp`) and returns the text, shortened with "…" if needed. Leaves `p` resized. */
+fun fitText(s: String, maxW: Float, p: Paint, minSp: Float = 8.5f): String {
+    if (maxW <= 0f) return ""
+    val min = Px.dp(minSp)
+    while (p.measureText(s) > maxW && p.textSize > min) p.textSize = maxOf(min, p.textSize - Px.dp(0.5f))
+    if (p.measureText(s) <= maxW) return s
+    var t = s
+    while (t.length > 1 && p.measureText("$t…") > maxW) t = t.dropLast(1)
+    return "$t…"
+}
+
+/** Cream text on dark accents, dark text on light ones (yellow, pale aqua…), so labels stay readable. */
+fun textOn(bg: Int): Int {
+    val r = (bg shr 16 and 255); val g = (bg shr 8 and 255); val b = (bg and 255)
+    return if (0.299 * r + 0.587 * g + 0.114 * b > 168) Pal.BROWN_D else Pal.CREAM
+}
+
 /** Pixel art library. */
 object Sprites {
     private val FOX_HEAD = listOf(

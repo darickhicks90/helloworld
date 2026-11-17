@@ -1,5 +1,5 @@
-"""5 Eye Yeti title scene: the yeti in headphones, playing a pad sampler on a stump,
-in the moonlit clearing (SNES-style, 480x240). Writes yeti-scene.png and a 3x preview."""
+"""5 Eye Yeti title scene: the yeti waving hello in a starlit clearing
+(SNES-style, 480x240). Writes yeti-scene.png and a 3x preview."""
 import sys, math, random, json
 sys.path.insert(0, '.')
 from PIL import Image, ImageDraw, ImageFilter
@@ -22,20 +22,6 @@ hi.paste(pose, (0, TOP))
 d = ImageDraw.Draw(hi)
 def P(x, y): return (x + OX, y + OY + TOP)
 BLUE_D, BLUE, BLUE_L, CUSH = (24, 52, 112, 255), (52, 112, 208, 255), (150, 190, 245, 255), (30, 34, 52, 255)
-# headband: a thick arc over the crown
-cx, cy, rx, ry = 430, 120, 190, 175
-for wdt, col in ((40, BLUE_D), (28, BLUE), (8, BLUE_L)):
-    box = [P(cx - rx, cy - ry), P(cx + rx, cy + ry)]
-    d.arc([box[0], box[1]], 196, 344, fill=col, width=wdt)
-# ear cups on the sides of the head
-for sx in (262, 598):
-    l, t, r, b = sx - 42, 110, sx + 42, 250
-    d.rounded_rectangle([P(l - 6, t - 6), P(r + 6, b + 6)], radius=34, fill=BLUE_D)
-    d.rounded_rectangle([P(l, t), P(r, b)], radius=30, fill=BLUE)
-    d.rounded_rectangle([P(l + 10, t + 12), P(l + 26, b - 30)], radius=8, fill=BLUE_L)
-    cushion = (sx + (30 if sx < 430 else -30))
-    d.rounded_rectangle([P(cushion - 14, t + 6), P(cushion + 14, b - 6)], radius=12, fill=CUSH)
-
 # ---------------- pixelize (the liked v1 look), with a blue ramp for the headphones
 BLUES = [hx(c) for c in ('#10183a', '#1c3070', '#2c50a8', '#4a7ad8', '#8ab4f0', '#d4e6ff')]
 def creature_px(src, TH):
@@ -66,20 +52,6 @@ for _ in range(130):
     sc[y, x] = hx('#c8d0f0') if rnd.random() < 0.7 else hx('#fff4c0')
 for (x, y) in ((40, 70), (210, 24), (450, 30), (150, 96)):
     for dx, dy in ((0, 0), (1, 0), (-1, 0), (0, 1), (0, -1)): sc[y + dy, x + dx] = hx('#e8ecff')
-MOON = [hx(c) for c in ('#9aa6b8', '#c4ccd6', '#e4e6dc', '#f8f6e6')]
-mcx, mcy, mr = 262, 50, 26
-for y in range(mcy - mr - 7, mcy + mr + 8):
-    for x in range(mcx - mr - 7, mcx + mr + 8):
-        dd = math.hypot(x - mcx, y - mcy)
-        if mr < dd < mr + 7 and (dd - mr) / 7 < 0.5 + B4[y % 4, x % 4] * 0.9:
-            sc[y, x] = (np.array(sc[y, x], int) * 0.6 + np.array(SKY[4]) * 0.4).astype(np.uint8)
-        if dd <= mr:
-            k = 3 - (x - mcx + y - mcy + mr * 1.1) / (mr * 2.2) * 2.4 + B4[y % 4, x % 4] * 0.6
-            sc[y, x] = MOON[int(np.clip(k, 0, 3))]
-for ccx, ccy, ccr in ((254, 44, 5), (271, 58, 4), (266, 38, 2.5), (252, 60, 3)):
-    for y in range(int(ccy - ccr), int(ccy + ccr) + 1):
-        for x in range(int(ccx - ccr), int(ccx + ccr) + 1):
-            if math.hypot(x - ccx, y - ccy) <= ccr: sc[y, x] = MOON[1] if (x - ccx) + (y - ccy) > 0 else MOON[0]
 def ridge(base, amp, seed_, col, top_col=None, jag=0):
     rr = random.Random(seed_); ph = [rr.uniform(0, 6) for _ in range(4)]
     for x in range(W):
@@ -116,8 +88,6 @@ def note(x, y, shape, col):
             if ch == '#':
                 px[x + i, y + j] = col
                 if px[x + i + 1, y + j + 1] != col: px[x + i + 1, y + j + 1] = hx('#0c0a24') if y < 150 else px[x + i + 1, y + j + 1]
-for (x, y, s, col) in ((318, 96, NOTE, hx('#f6c26b')), (304, 70, NOTE2, hx('#8fd3f4')), (322, 46, NOTE, hx('#f7efdc')), (452, 124, NOTE2, hx('#f6c26b')), (462, 150, NOTE, hx('#8fd3f4'))):
-    note(x, y, s, col)
 # fireflies and flowers in the grass
 for _ in range(10):
     x, y = rnd.randrange(10, W - 10), rnd.randrange(110, 200)

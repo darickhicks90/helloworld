@@ -60,16 +60,21 @@ class Btn(c: Context, var text: String, var accent: Int = Pal.ORANGE, private va
         val lit = on && (!blink || (System.currentTimeMillis() / 300) % 2 == 0L)
         val bg = when { pressed -> Pal.PAPER; lit -> accent; else -> Pal.CREAM }
         c.pixelBox(u, u, width - u, height - u, bg)
-        textP.color = if (lit && !pressed) Pal.CREAM else Pal.BROWN_D
+        textP.color = if (lit && !pressed) textOn(accent) else Pal.BROWN_D
+        textP.textSize = Px.dp(14f)
+        val pad = Px.dp(8f)
         val ic = icon
         if (ic != null) {
-            val s = (height * 0.55f) / ic.h
+            // whole-pixel scaling keeps the sprite crisp; it never fills more than ~60% of the height
+            val s = maxOf(1f, kotlin.math.floor(height * 0.62f / ic.h)).coerceAtMost(height * 0.75f / ic.h)
             val iw = ic.w * s
-            val total = iw + if (text.isEmpty()) 0f else textP.measureText(text) + Px.dp(6)
-            val x0 = (width - total) / 2
+            val gap = if (text.isEmpty()) 0f else Px.dp(6f)
+            val t = if (text.isEmpty()) "" else fitText(text, width - pad * 2 - iw - gap, textP)
+            val total = iw + if (t.isEmpty()) 0f else textP.measureText(t) + gap
+            val x0 = maxOf(pad, (width - total) / 2)
             c.sprite(ic, x0, (height - ic.h * s) / 2, s)
-            if (text.isNotEmpty()) { textP.textAlign = android.graphics.Paint.Align.LEFT; c.textCentered(text, x0 + iw + Px.dp(6), height / 2f, textP.apply { }) ; textP.textAlign = android.graphics.Paint.Align.CENTER }
-        } else c.textCentered(text, width / 2f, height / 2f, textP)
+            if (t.isNotEmpty()) { textP.textAlign = android.graphics.Paint.Align.LEFT; c.textCentered(t, x0 + iw + gap, height / 2f, textP); textP.textAlign = android.graphics.Paint.Align.CENTER }
+        } else c.textFit(text, width / 2f, height / 2f, width - pad * 2, textP)
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -126,8 +131,19 @@ class Knob(c: Context, val param: Param, var accent: Int) : PixelView(c) {
         }
         val a = Math.toRadians(-225.0 + 270.0 * n)
         c.dot(cx + (cos(a) * br * 0.55f).toFloat() - u / 2, cy + (sin(a) * br * 0.55f).toFloat() - u / 2, Pal.BROWN_D, 2)
-        c.textCentered(param.text(), cx, Px.dp(60f), value)
-        c.textCentered(param.name, cx, Px.dp(75f), label.apply { textSize = Px.dp(if (param.name.length > 12) 9.5f else 11f) })
+        value.textSize = Px.dp(12f); label.textSize = Px.dp(11f)
+        c.textFit(param.text(), cx, Px.dp(60f), width - Px.dp(4f), value)
+        // "Pad 3 Tune" -> "Tune": the pad editor already says which pad
+        val name = param.name.replace(Regex("^Pad \\d+ "), "")
+        val words = name.split(' ')
+        if (label.measureText(name) <= width - Px.dp(4f) || words.size < 2) c.textFit(name, cx, Px.dp(75f), width - Px.dp(4f), label)
+        else {
+            // two short lines read better than one tiny one
+            val half = (1 until words.size).minByOrNull { k -> kotlin.math.abs(label.measureText(words.take(k).joinToString(" ")) - label.measureText(words.drop(k).joinToString(" "))) } ?: 1
+            label.textSize = Px.dp(10f)
+            c.textFit(words.take(half).joinToString(" "), cx, Px.dp(71f), width - Px.dp(4f), label)
+            c.textFit(words.drop(half).joinToString(" "), cx, Px.dp(81f), width - Px.dp(4f), label)
+        }
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -162,8 +178,11 @@ class Stepper(c: Context, private val label: String, private val minW: Int = 120
     override fun paint(c: Canvas) {
         c.pixelBox(u, u, width - u, height - u, Pal.CREAM)
         c.textCentered("◀", Px.dp(14f), height / 2f, tp); c.textCentered("▶", width - Px.dp(14f), height / 2f, tp)
-        if (label.isNotEmpty()) { c.textCentered(label, width / 2f, Px.dp(11f), lp); c.textCentered(text(), width / 2f, height / 2f + Px.dp(5f), tp) }
-        else c.textCentered(text(), width / 2f, height / 2f, tp)
+        // the value sits between the two arrows and shrinks to fit there
+        val room = width - Px.dp(56f)
+        tp.textSize = Px.dp(14f); lp.textSize = Px.dp(9f)
+        if (label.isNotEmpty()) { c.textFit(label, width / 2f, Px.dp(11f), room, lp, 7.5f); c.textFit(text(), width / 2f, height / 2f + Px.dp(5f), room, tp) }
+        else c.textFit(text(), width / 2f, height / 2f, room, tp)
     }
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(e: MotionEvent): Boolean {

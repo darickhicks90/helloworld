@@ -19,7 +19,6 @@ import java.util.Date
 class ProjectScreen(c: Context, private val onOpen: (Project) -> Unit, private val onNew: () -> Unit, private val onManage: (Project) -> Unit) : FrameLayout(c) {
     private val titleP = Px.text(26f, Pal.ORANGE, headFont = true)
     private val tagP = Px.text(14f, Pal.AQUA_D)
-    private val subP = Px.text(13f, Pal.SUN, headFont = true, align = Paint.Align.LEFT)
 
     init {
         setWillNotDraw(false)
@@ -36,23 +35,56 @@ class ProjectScreen(c: Context, private val onOpen: (Project) -> Unit, private v
     private val headP = Px.text(34f, Pal.ORANGE, headFont = true)
     private val shine = intArrayOf(0xFFFFF4D6.toInt(), 0xFFFFD27A.toInt(), 0xFFF4A259.toInt(), 0xFFE8742C.toInt(), 0xFFB8521B.toInt())
 
-    /** The title scene: the yeti waving in headphones in the moonlit clearing (pixel art, drawn with hard pixels). */
-    private val scene = context.assets.open("images/title_scene.png").use { android.graphics.BitmapFactory.decodeStream(it) }
-    private val scenePaint = Paint().apply { isFilterBitmap = false; isAntiAlias = false }
+    // ---- the title scene: a starlit clearing where the yeti reaches up to catch fireflies (pixel art, played back as frames)
+    private fun img(name: String) = context.assets.open("images/$name").use { android.graphics.BitmapFactory.decodeStream(it) }
+    private val bg = img("title_bg.png")
+    private val sheet = img("yeti_frames.png")
+    private val blink = img("yeti_blink.png")
+    private val anim = org.json.JSONObject(context.assets.open("images/yeti_anim.json").use { String(it.readBytes()) })
+    private val frames = anim.getInt("frames"); private val fw = anim.getInt("w"); private val fh = anim.getInt("h")
+    private val fx = anim.getInt("x"); private val fy = anim.getInt("y")
+    private val hands = anim.getJSONArray("hands").let { a -> Array(a.length()) { i -> a.getJSONArray(i).let { floatArrayOf(it.getDouble(0).toFloat(), it.getDouble(1).toFloat()) } } }
+    private val pixel = Paint().apply { isFilterBitmap = false; isAntiAlias = false }
+    private val glow = Paint()
     private val src = android.graphics.Rect(); private val dst = android.graphics.RectF()
+    private val t0 = System.nanoTime()
+    /** Fireflies: centre, orbit radii, speed and phase, in scene pixels. The first one is the one he reaches for. */
+    private val bugs = arrayOf(
+        floatArrayOf(388f, 34f, 22f, 10f, 0.9f, 0f), floatArrayOf(300f, 120f, 30f, 14f, 0.6f, 1.3f), floatArrayOf(440f, 110f, 18f, 22f, 0.7f, 2.1f),
+        floatArrayOf(210f, 150f, 40f, 12f, 0.5f, 0.4f), floatArrayOf(120f, 130f, 30f, 18f, 0.8f, 3.0f), floatArrayOf(470f, 60f, 14f, 20f, 0.65f, 4.2f),
+        floatArrayOf(60f, 165f, 26f, 10f, 0.75f, 5.1f),
+    )
 
     override fun onDraw(c: Canvas) {
         val w = width.toFloat(); val h = height.toFloat()
+        val t = (System.nanoTime() - t0) / 1e9f
         // Fill the screen; keep the right edge (where the yeti is) and crop from the left or top.
-        val k = maxOf(w / scene.width, h / scene.height)
-        val sw = (w / k).toInt().coerceAtMost(scene.width); val sh = (h / k).toInt().coerceAtMost(scene.height)
-        src.set(scene.width - sw, (scene.height - sh) / 2, scene.width, (scene.height - sh) / 2 + sh)
-        dst.set(0f, 0f, w, h)
-        c.drawBitmap(scene, src, dst, scenePaint)
+        val k = maxOf(w / bg.width, h / bg.height)
+        val sw = (w / k).toInt().coerceAtMost(bg.width); val sh = (h / k).toInt().coerceAtMost(bg.height)
+        val left = bg.width - sw; val top = (bg.height - sh) / 2
+        src.set(left, top, left + sw, top + sh); dst.set(0f, 0f, w, h)
+        c.drawBitmap(bg, src, dst, pixel)
+        fun at(sx: Float, sy: Float, bmp: android.graphics.Bitmap, sr: android.graphics.Rect) {
+            dst.set((sx - left) * k, (sy - top) * k, (sx - left + sr.width()) * k, (sy - top + sr.height()) * k); c.drawBitmap(bmp, sr, dst, pixel)
+        }
+        // reach up, hold a moment with the firefly, come back down (about 4 s a cycle)
+        val cyc = (t / 4.2f) % 1f
+        val reach = (1.35f * (0.5f - 0.5f * kotlin.math.cos(2 * Math.PI.toFloat() * cyc))).coerceAtMost(1f)
+        val f = (reach * (frames - 1) + 0.5f).toInt().coerceIn(0, frames - 1)
+        src.set(f * fw, 0, (f + 1) * fw, fh); at(fx.toFloat(), fy.toFloat(), sheet, src)
+        if ((t % 3.7f) < 0.14f) { src.set(0, 0, fw, fh); at(fx.toFloat(), fy.toFloat(), blink, src) }
+        // fireflies: soft pulsing lights; the first drifts down into his raised hand
+        for ((i, b) in bugs.withIndex()) {
+            var x = b[0] + b[2] * kotlin.math.sin(t * b[4] + b[5]); var y = b[1] + b[3] * kotlin.math.sin(t * b[4] * 1.7f + b[5] * 2f)
+            if (i == 0) { val hp = hands[f]; val g = reach * reach * reach; x += (hp[0] - x) * g; y += (hp[1] - 3f - y) * g }
+            val pulse = 0.55f + 0.45f * kotlin.math.sin(t * 3.1f + b[5] * 5f)
+            val px = ((x.toInt() - left) * k); val py = ((y.toInt() - top) * k)
+            glow.color = Pal.alpha(0xFFE8FF8A.toInt(), 0.35f * pulse); c.drawRect(px - k, py - k, px + 2 * k, py + 2 * k, glow)
+            glow.color = Pal.alpha(0xFFF6FF9A.toInt(), 0.6f + 0.4f * pulse); c.drawRect(px, py, px + k, py + k, glow)
+        }
         headP.textAlign = Paint.Align.LEFT
         snesTitle(c, "5 EYE YETI", Px.dp(28f), Px.dp(64f))
-        tagP.textAlign = Paint.Align.LEFT
-        c.drawText("5IY", Px.dp(32f), Px.dp(92f), subP)
+        postInvalidateDelayed(40)
     }
 
     /** Super Nintendo-style title: banded metallic fill, thick ink outline and a drop shadow. */

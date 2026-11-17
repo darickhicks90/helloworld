@@ -617,6 +617,19 @@ object Studio : Transport.Listener, MidiInput.Sink {
         changed()
     }
 
+    /**
+     * Going to Clibbins: the music keeps playing, but block sequencers that
+     * aren't latched switch off so they don't play over the scenes.
+     */
+    fun enterClibbins() {
+        val off = Audio.active.filter { e -> e.seqSwitch?.on == true && e.seqLatch?.on != true }
+        if (off.isEmpty()) return
+        off.forEach { it.seqSwitch?.set(0f) }
+        Audio.post { off.forEach { it.allOff() } }
+        message("Sequencers off: " + off.joinToString { it.title } + " (latch a sequencer to keep it running in Clibbins)")
+        save(); changed()
+    }
+
     /** The wall: stop everything. */
     fun stopScene() = Audio.post { t.stop() }
 
@@ -627,9 +640,89 @@ object Studio : Transport.Listener, MidiInput.Sink {
 
     fun setSample(e: SampleEngine, data: FloatArray, name: String) {
         e.setSample(data, name)
+        if (e === Audio.reflections) Audio.reflections.sampleBpm = 0f   // a new sample isn't tied to a tempo until a looper take sets it
         if (e === Audio.leaves) Audio.leaves.source.set(0f)
         Thread { ProjectStore.saveSample(project, e.id, data) }.start()
         message("Loaded $name into ${e.title}")
+        save(); changed()
+    }
+
+    // ------------------------------------------------------------------ sampler mic takes (Reflections, Leaves)
+
+    /** The sampler currently recording from the mic, or null. */
+    @Volatile var samplerTarget: SampleEngine? = null
+        private set
+    private var samplerIn: AudioIn? = null
+
+    /**
+     * The Mic button on Reflections / Leaves. From stop: a 4-beat count-in, then
+     * record until pressed again. While the clock runs, Reflections records as a
+     * looper (starts on a quarter note, ends on whole bars, comes back as a
+     * tempo-synced loop); Leaves records from the press. Press again to stop.
+     */
+    fun samplerMic(e: SampleEngine) {
+        val cur = samplerTarget
+        if (cur != null) {
+            if (cur === e) Audio.post { t.recordSampler(false) } else message("${cur.title} is recording from the mic: stop it first")
+            return
+        }
+        val input = try { AudioIn(app, AudioPrefs.inputDevice) } catch (ex: Exception) { return message(ex.message ?: "Couldn't open the microphone") }
+        samplerIn = input; samplerTarget = e
+        val looper = e === Audio.reflections
+        val latency = Audio.latencyMs + 12f + AudioPrefs.offsetMs
+        val running = t.playing
+        Audio.post {
+            t.sampIn = input
+            t.latencyFrames = (latency * SR / 1000f).toInt().coerceAtLeast(0)
+            t.recordSampler(looper)
+        }
+        message(when {
+            !running -> "Count-in… recording into ${e.title} from bar 1. Tap Mic to stop."
+            looper -> "Recording a loop from the next beat. Tap Mic to stop: it ends on a whole bar."
+            else -> "Recording into ${e.title}. Tap Mic to stop."
+        })
+        changed()
+    }
+
+    override fun onSamplerTakeEnded(startTick: Double, endTick: Double) {
+        val input = samplerIn ?: return
+        val e = samplerTarget ?: return
+        samplerIn = null; t.sampIn = null
+        val looper = t.sampQuantize && e === Audio.reflections
+        val bpm = t.bpm
+        Thread {
+            val raw = try { input.finish()[2] } catch (_: Exception) { FloatArray(0) }
+            main.post { samplerTarget = null; changed() }
+            if (startTick < 0 || endTick < 0) return@Thread message("Mic take cancelled")
+            if (raw.size < SR / 10) return@Thread message("No audio came in. Check the input in Audio settings.")
+            val data = if (looper) raw.copyOf(((endTick - startTick) * SR * 60.0 / (bpm * Ticks.PPQ)).toInt().coerceAtLeast(1)) else raw
+            // 3 ms fades at the edges so the start and the loop point don't click
+            val fade = minOf(data.size / 2, (SR * 0.003f).toInt())
+            for (i in 0 until fade) { val g = i / fade.toFloat(); data[i] *= g; data[data.size - 1 - i] *= g }
+            AudioFiles.normalize(data)
+            main.post { if (looper) applyLoopTake(data, bpm, startTick, endTick) else setSample(e, data, "Mic take") }
+        }.start()
+    }
+
+    /** A Reflections looper take: tempo-synced time stretch, looping, played back right away by a new clip. */
+    private fun applyLoopTake(data: FloatArray, bpm: Float, startTick: Double, endTick: Double) {
+        val r = Audio.reflections
+        val len = (endTick - startTick).toInt()
+        val bars = (len / Ticks.BAR).coerceAtLeast(1)
+        setSample(r, data, "Loop $bars bar" + if (bars > 1) "s" else "")
+        r.sampleBpm = bpm
+        val root = scaleNote(0)
+        mapOf("stretch" to 1f, "loop" to 1f, "speed" to 1f, "start" to 0f, "end" to 1f, "reverse" to 0f, "root" to root.toFloat(), "tune" to 0f)
+            .forEach { (k, v) -> r.p.all[k]?.set(v) }
+        if (clipsFor(r).size >= MAX_CLIPS) { message("Loop ready on ${Theory.noteNameOct(root)}. Reflections already has $MAX_CLIPS clips, so it isn't playing on its own."); return }
+        val clip = Clip(engine = r.id, name = "", lengthTicks = len, notes = mutableListOf(Clip.Note(0, len, root, 0.9f)))
+        val n = clipsFor(r).size + 1
+        clip.name = "Loop $n"; clip.variant = n - 1; clip.inClibbins = true
+        project.clips += clip
+        ProjectStore.saveClipMidi(project, clip)
+        // Keep the loop in phase with where it was recorded.
+        Audio.post { if (t.playing) t.launch(clip, r, startTick + ceil((t.tick - startTick) / len) * len) }
+        message("Loop recorded: ${clip.name} plays it in time (note ${Theory.noteNameOct(root)} plays the original)")
         save(); changed()
     }
 

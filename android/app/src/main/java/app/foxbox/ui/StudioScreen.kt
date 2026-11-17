@@ -44,7 +44,7 @@ interface Host {
 /**
  * The writing screen: the rail of blocks (hold one and drag it to the
  * tombstone to remove it; + adds one), the top bar with the MIDI transport,
- * audio rec and the File / Audio / MIDI tabs, the page, and the clip bar.
+ * and the File / Audio / MIDI tabs, the page, and the clip bar.
  */
 @SuppressLint("ViewConstructor")
 class StudioScreen(c: Context, private val host: Host) : FrameLayout(c) {
@@ -119,7 +119,6 @@ class StudioScreen(c: Context, private val host: Host) : FrameLayout(c) {
 
     private lateinit var playBtn: Btn
     private lateinit var recBtn: Btn
-    private lateinit var audioBtn: Btn
     private lateinit var metroBtn: Btn
     private lateinit var nameBtn: Btn
 
@@ -129,12 +128,11 @@ class StudioScreen(c: Context, private val host: Host) : FrameLayout(c) {
         playBtn = Btn(c, "▶", Pal.AQUA, 44).apply { onClick = { Studio.play() } }
         val stopBtn = Btn(c, "■", Pal.BROWN_L, 44).apply { onClick = { Studio.stop() } }
         recBtn = Btn(c, "●", Pal.ORANGE_D, 44).apply { onClick = { Studio.recordMidi() } }
-        audioBtn = Btn(c, "audio rec", Pal.ROSE).apply { onClick = { Studio.recordAudio() } }
         val bpm = Stepper(c, "BPM", 92, { Studio.project.bpm.toInt().toString() }) { Studio.setBpm(Studio.project.bpm + it) }
         bpm.onMiddle = { host.bpmDialog() }
         metroBtn = Btn(c, "Click", Pal.AQUA).apply { onClick = { Studio.setMetronome(!t.metronome) } }
         val left = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
-        listOf(nameBtn, playBtn, stopBtn, recBtn, audioBtn, Position(c), bpm, metroBtn).forEach { left.addView(it, lp(WRAP, Px.dp(44))) }
+        listOf(nameBtn, playBtn, stopBtn, recBtn, Position(c), bpm, metroBtn).forEach { left.addView(it, lp(WRAP, Px.dp(44))) }
         val tabs = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
         tabs.addView(Btn(c, "File", Pal.BROWN_L).apply { onClick = { host.fileMenu() } }, lp(WRAP, Px.dp(44)))
         tabs.addView(Btn(c, "Audio", Pal.BROWN_L).apply { onClick = { host.audioSettings() } }, lp(WRAP, Px.dp(44)))
@@ -153,8 +151,8 @@ class StudioScreen(c: Context, private val host: Host) : FrameLayout(c) {
         override fun onMeasure(w: Int, h: Int) = setMeasuredDimension(Px.dp(96), Px.dp(44))
         override fun paint(c: Canvas) {
             val t = Audio.transport
-            val counting = (t.rec == Transport.Rec.ARMED && t.tick < t.recStart) || t.audioRec == Transport.Rec.ARMED
-            val recording = t.rec == Transport.Rec.RECORDING || t.audioRec == Transport.Rec.RECORDING
+            val counting = (t.rec == Transport.Rec.ARMED && t.tick < t.recStart) || t.audioRec == Transport.Rec.ARMED || (t.sampRec == Transport.Rec.ARMED && t.tick < 0)
+            val recording = t.rec == Transport.Rec.RECORDING || t.audioRec == Transport.Rec.RECORDING || t.sampRec == Transport.Rec.RECORDING
             val bg = when { recording -> Pal.ORANGE_D; counting -> Pal.ORANGE_L; else -> Pal.BROWN_D }
             c.pixelBox(u, u, width - u, height - u, bg)
             val s = when {
@@ -248,14 +246,21 @@ class StudioScreen(c: Context, private val host: Host) : FrameLayout(c) {
         playBtn.on = t.playing
         val rec = t.rec != Transport.Rec.OFF
         recBtn.on = rec; recBtn.blink = rec && t.rec == Transport.Rec.ARMED
-        val arec = t.audioRec != Transport.Rec.OFF
-        audioBtn.on = arec; audioBtn.blink = t.audioRec == Transport.Rec.ARMED
-        audioBtn.text = when (t.audioRec) { Transport.Rec.ARMED -> "count-in…"; Transport.Rec.RECORDING -> "■ stop take"; else -> "audio rec" }
         metroBtn.on = t.metronome
-        micBtn?.let { b -> val on = host.micTarget() == Studio.current.id; b.on = on; b.blink = on; b.text = if (on) "■ Stop mic" else "Mic"; b.requestLayout() }
+        micBtn?.let { b ->
+            val on = host.micTarget() == Studio.current.id
+            b.on = on; b.blink = on && t.sampRec != Transport.Rec.RECORDING
+            b.text = when {
+                !on -> "Mic"
+                t.sampRec == Transport.Rec.ARMED -> if (t.tick < 0) "count-in…" else "next beat…"
+                t.sampEnd >= 0 -> "ending on bar…"
+                else -> "■ Stop mic"
+            }
+            b.requestLayout()
+        }
         auditionBtn?.let { it.on = Studio.auditioning }
         if (Studio.page != Studio.FLOWERS) refreshChips()
-        listOf(nameBtn, playBtn, recBtn, audioBtn, metroBtn).forEach { it.requestLayout(); it.invalidate() }
+        listOf(nameBtn, playBtn, recBtn, metroBtn).forEach { it.requestLayout(); it.invalidate() }
         for (i in 0 until clipBar.childCount) clipBar.getChildAt(i).invalidate()
     }
 

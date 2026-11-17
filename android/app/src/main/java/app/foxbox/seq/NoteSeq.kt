@@ -16,6 +16,8 @@ import org.json.JSONObject
 class NoteSeq(private val engine: Engine, p: Params, defaultOctave: Int = 0, defaultOn: Boolean = false) {
     init { p.section("Step Sequencer") }
     val enabled = p.toggle("seqOn", "Step Sequencer", defaultOn)
+    /** Keep running when you leave the Studio for Clibbins. */
+    val latch = p.toggle("seqLatch", "Seq Latch")
     val length = p.num("seqSteps", "Steps", 1f, 16f, 16f, step = 1f)
     val rate = p.choice("seqRate", "Rate", listOf("1/16", "1/8", "1/4"), 0)
     val gate = p.num("seqGate", "Gate Length", 0.1f, 1f, 0.55f, Fmt.PCT)

@@ -104,6 +104,7 @@ class StrumPad(c: Context, private val chords: ChordButtons) : PixelView(c) {
     private val tileText = Px.text(15f)
     private val small = Px.text(9f, Pal.BROWN)
     private val rows = 3
+    private val ORIGINAL = 0xFF8FD3F4.toInt()   // a clear sky blue, used nowhere else on the grid
 
     // keyboard mode
     private val down = HashMap<Int, Int>() // pointer -> note
@@ -142,14 +143,18 @@ class StrumPad(c: Context, private val chords: ChordButtons) : PixelView(c) {
         for (r in 0 until rows) for (col in 0 until cols) {
             val note = Studio.scaleNote(col + (rows - 1 - r) * cols)
             val root = Studio.isRoot(note)
-            val bg = when { note in held -> accent; root -> Pal.ORANGE_L; (col + r) % 2 == 0 -> Pal.CREAM; else -> Pal.PAPER }
+            val original = note == origNote
+            val bg = when { note in held -> accent; original -> ORIGINAL; root -> Pal.ORANGE_L; (col + r) % 2 == 0 -> Pal.CREAM; else -> Pal.PAPER }
             val l = col * tw; val t = r * th
             c.pixelBox(l + u, t + u, l + tw - u, t + th - u, bg)
             tileText.color = if (note in held) Pal.CREAM else Pal.BROWN_D
             c.textCentered(Theory.noteName(note), l + tw / 2, t + th / 2 - Px.dp(4f), tileText)
-            c.textCentered((note / 12 - 1).toString(), l + tw / 2, t + th / 2 + Px.dp(12f), small)
+            c.textCentered(if (original) "original" else (note / 12 - 1).toString(), l + tw / 2, t + th / 2 + Px.dp(12f), small)
         }
     }
+
+    /** The note that plays a sampler's recording at its original pitch (-1 for other blocks). */
+    private val origNote get() = (Studio.target as? app.foxbox.engines.SampleEngine)?.rootNote ?: -1
 
     private fun paintStrings(c: Canvas, w: Float, h: Float) {
         c.pixelBox(0f, 0f, w, h, Pal.BROWN, shade = false)

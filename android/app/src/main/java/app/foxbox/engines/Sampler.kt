@@ -30,6 +30,8 @@ import kotlin.math.sqrt
 abstract class SampleEngine(id: String, title: String, attack: Float, release: Float) : Engine(id, title) {
     init { p.section("Sample") }
     protected val root = p.num("root", "Root Note", 24f, 96f, 60f, Fmt.NOTE, step = 1f)
+    /** The note that plays the sample at its original pitch. */
+    val rootNote get() = root.value.toInt()
     protected val tune = p.num("tune", "Fine Tune", -12f, 12f, 0f, Fmt.ST)
     protected val start = p.num("start", "Sample Start", 0f, 1f, 0f, Fmt.PCT)
     protected val end = p.num("end", "Sample End", 0f, 1f, 1f, Fmt.PCT)
@@ -160,6 +162,11 @@ class Reflections : SampleEngine("reflections", "Reflections", 0.003f, 0.4f) {
 
     override fun defaultSample() = droplet()
 
+    /** Tempo the sample was recorded at (a looper take); time stretch then follows the clock. 0 = not synced. */
+    @Volatile var sampleBpm = 0f
+    override fun saveExtra(o: JSONObject) { super.saveExtra(o); o.put("sampleBpm", sampleBpm.toDouble()) }
+    override fun loadExtra(o: JSONObject?) { super.loadExtra(o); sampleBpm = o?.optDouble("sampleBpm", 0.0)?.toFloat() ?: 0f }
+
     override fun noteOn(key: Int, note: Int, vel: Float) {
         val d = sample
         val v = pool.start(key, note, vel) as V
@@ -200,7 +207,8 @@ class Reflections : SampleEngine("reflections", "Reflections", 0.003f, 0.4f) {
             spawnGrain(v.index, v.data, (v.pos + jitter).coerceIn(v.s.toDouble(), maxOf(v.s.toDouble(), v.e - 2.0)), ratio * dir, len, 0.5f, 0.5f, v.s, v.e)
             v.hop += hop
         }
-        v.pos += v(speed) * n * dir
+        val sync = sampleBpm.let { if (it > 0f) app.foxbox.audio.Audio.transport.bpm / it else 1f }
+        v.pos += v(speed) * sync * n * dir
         if (v.pos >= v.e - 1 || v.pos < v.s) {
             if (v.looping) v.pos = if (v.rev) v.e - 2.0 else v.s.toDouble() else v.tail.release(env, xy)
         }

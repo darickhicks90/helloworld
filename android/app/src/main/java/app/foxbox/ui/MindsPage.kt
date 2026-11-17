@@ -19,6 +19,7 @@ class MindsPage(c: Context) : LinearLayout(c) {
     private val grid = StepGrid(c)
     private val drumPanel = Panel(c, "Drum", accent = Pal.ORANGE)
     private val onBtn = Btn(c, "Sequencer", Pal.ORANGE, 120)
+    private val latchBtn = Btn(c, "Latch", Pal.SUN)
 
     init {
         orientation = HORIZONTAL
@@ -29,7 +30,8 @@ class MindsPage(c: Context) : LinearLayout(c) {
         val keep = Btn(c, "Keep", Pal.AQUA).apply { onClick = { minds.keepGenerated(); Studio.save(); grid.invalidate() } }
         val clear = Btn(c, "Clear").apply { onClick = { minds.clear(); Studio.save(); grid.invalidate() } }
         val btns = LinearLayout(c).apply { orientation = VERTICAL; addView(gen, lp(MATCH, Px.dp(40))); addView(row(c, keep, clear).apply { keep.layoutParams = lp(0, Px.dp(40), 1f); clear.layoutParams = lp(0, Px.dp(40), 1f) }, lp(MATCH, WRAP)) }
-        side.addView(onBtn, lp(MATCH, Px.dp(44)))
+        latchBtn.onClick = { minds.latch.set(if (minds.latch.on) 0f else 1f); Studio.save(); refresh() }
+        side.addView(row(c, onBtn, latchBtn).apply { onBtn.layoutParams = lp(0, Px.dp(44), 1f); latchBtn.layoutParams = lp(Px.dp(76), Px.dp(44)) }, lp(MATCH, WRAP))
         side.addView(row(c, Knob(c, minds.generative, Pal.ORANGE), btns).apply { btns.layoutParams = lp(0, WRAP, 1f) }, lp(MATCH, WRAP))
         side.addView(drumPanel, lp(MATCH, 0, 1f))
         addView(side, lp(Px.dp(250), MATCH))
@@ -40,6 +42,7 @@ class MindsPage(c: Context) : LinearLayout(c) {
         onBtn.on = minds.enabled.on
         onBtn.text = if (minds.enabled.on) "Sequencer ON" else "Sequencer OFF"
         onBtn.invalidate()
+        latchBtn.on = minds.latch.on; latchBtn.invalidate()
         buildDrumPanel()
         grid.invalidate()
     }

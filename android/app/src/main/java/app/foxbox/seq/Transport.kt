@@ -21,6 +21,8 @@ class Transport {
         fun onChanged()
         /** An audio take finished (called on the audio thread). */
         fun onAudioTakeEnded() {}
+        /** A sampler mic take finished (audio thread); ticks are where it started and ended. */
+        fun onSamplerTakeEnded(startTick: Double, endTick: Double) {}
     }
 
     @Volatile var bpm = 110f
@@ -83,6 +85,8 @@ class Transport {
         players.forEach { it.releaseAll() }
         players.clear(); audioPlayers.clear(); syncIds()
         if (audioRec != Rec.OFF) endAudioTake()
+        if (sampRec == Rec.RECORDING) { sampEnd = tick; sampIn?.markEnd(latencyFrames); endSamplerTake() }
+        else if (sampRec == Rec.ARMED) { sampRec = Rec.OFF; listener?.onSamplerTakeEnded(-1.0, -1.0) }
         engines.forEach { it.allOff() }
         playing = false; rec = Rec.OFF; takes.clear(); tick = 0.0
         queued = null; queuedAt = -1.0; onSwitch = null; sceneLen = 0; sceneStart = 0.0
@@ -198,6 +202,17 @@ class Transport {
         val t1 = t0 + n * bpm * Ticks.PPQ / 60.0 / SR
         if (rec == Rec.ARMED && t1 > recStart) { rec = Rec.RECORDING; takes.clear(); changed() }
         if (audioRec == Rec.ARMED && t1 > audioRecStart) { audioRec = Rec.RECORDING; audioIn?.markStart(latencyFrames); changed() }
+        if (sampRec == Rec.ARMED && t1 > sampStart) {
+            sampRec = Rec.RECORDING
+            // the start tick falls inside this block: count back the frames after it
+            val after = ((t1 - sampStart) / (bpm * Ticks.PPQ / 60.0 / SR)).toInt().coerceIn(0, n)
+            sampIn?.markStart(latencyFrames + after); changed()
+        }
+        if (sampRec == Rec.RECORDING && sampEnd >= 0 && t1 >= sampEnd) {
+            val after = ((t1 - sampEnd) / (bpm * Ticks.PPQ / 60.0 / SR)).toInt().coerceAtLeast(0)
+            sampIn?.markEnd(latencyFrames + after)
+            endSamplerTake()
+        }
         if (queued != null && t1 > queuedAt) { switchScene(); if (!playing) return }
         // Index loops below: no iterator allocation on the audio thread.
 
@@ -230,7 +245,7 @@ class Transport {
 
     private fun step(s: Long) {
         if (s >= 0) for (i in engines.indices) engines[i].onStep(s)
-        val counting = audioRec == Rec.ARMED || rec == Rec.ARMED
+        val counting = audioRec == Rec.ARMED || rec == Rec.ARMED || (sampRec == Rec.ARMED && s < 0)
         if ((counting || (metronome && (rec != Rec.OFF || audioRec != Rec.OFF))) && Math.floorMod(s, 4L) == 0L) click(Math.floorMod(s, 16L) == 0L)
     }
 
@@ -255,6 +270,54 @@ class Transport {
 
     private fun syncIds() { playing_ids = (players.map { it.clip.id } + audioPlayers.map { it.clip.id }).toSet() }
     private var queuedAudio: List<AudioClip> = emptyList()
+
+    // ---------------------------------------------------------------- sampler mic takes (Reflections, Leaves)
+
+    /** Sampler take: OFF, counting in / waiting for its start (ARMED) or RECORDING. */
+    @Volatile var sampRec = Rec.OFF; private set
+    @Volatile var sampStart = 0.0; private set
+    /** Where the take will end (-1 = until pressed again). */
+    @Volatile var sampEnd = -1.0; private set
+    @Volatile var sampQuantize = false; private set
+    /** The input recording the take (set by the Studio). */
+    @Volatile var sampIn: app.foxbox.data.AudioIn? = null
+
+    /**
+     * Start or stop a sampler take. From stop: one bar of count-in, then record
+     * from bar 1. While playing: `quantize` starts on the next quarter note (at
+     * least 150 ms away, so the input is warmed up) and ends on a whole number
+     * of bars; otherwise it records from now until pressed again.
+     */
+    fun recordSampler(quantize: Boolean) {
+        when (sampRec) {
+            Rec.ARMED -> { sampRec = Rec.OFF; sampEnd = -1.0; listener?.onSamplerTakeEnded(-1.0, -1.0); changed(); return }
+            Rec.RECORDING -> {
+                if (!sampQuantize) { sampEnd = tick; return }
+                // End on whole bars from the start: a press just after a bar line (within a beat) ends at that line,
+                // otherwise the take runs on to the next bar line.
+                val len = tick - sampStart
+                val k = Math.floor(len / Ticks.BAR)
+                sampEnd = sampStart + Ticks.BAR * (if (k >= 1 && len - k * Ticks.BAR <= Ticks.PPQ) k else k + 1)
+                changed(); return
+            }
+            Rec.OFF -> {}
+        }
+        sampQuantize = quantize; sampEnd = -1.0
+        if (!playing) { tick = -Ticks.BAR.toDouble(); playing = true; sampStart = 0.0 }
+        else if (quantize) {
+            val lead = 0.15 * bpm / 60.0 * Ticks.PPQ
+            sampStart = Math.ceil((tick + lead) / Ticks.PPQ) * Ticks.PPQ
+        } else sampStart = tick
+        sampRec = Rec.ARMED
+        changed()
+    }
+
+    private fun endSamplerTake() {
+        val s = sampStart; val e = sampEnd
+        sampRec = Rec.OFF; sampEnd = -1.0
+        listener?.onSamplerTakeEnded(s, e)
+        changed()
+    }
 
     // ---------------------------------------------------------------- audio takes
 

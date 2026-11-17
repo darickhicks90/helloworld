@@ -114,7 +114,7 @@ object Presets {
     private fun f(blockId: String, name: String, vararg values: Pair<String, Double>): Preset {
         val e = Audio.engine(blockId)
         val params = JSONObject().apply {
-            e.p.all.values.filter { !it.id.startsWith("xy") && !it.id.startsWith("seq") && it.id != "padSeq" && it.id != "on" }.forEach { put(it.id, it.def.toDouble()) }
+            e.p.all.values.filter { !it.id.startsWith("xy") && !it.id.startsWith("seq") && it.id != "padSeq" && it.id != "on" && it.id != "latch" && it.id != "padLatch" }.forEach { put(it.id, it.def.toDouble()) }
             values.forEach { (k, v) -> put(k, v) }
         }
         return Preset(name, blockId, params, JSONObject().put("keep", true), factory = true)

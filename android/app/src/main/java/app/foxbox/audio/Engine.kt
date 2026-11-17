@@ -41,6 +41,9 @@ abstract class Engine(val id: String, val title: String) {
 
     /** The block's step sequencer, if it has one (melodic blocks). */
     open val seq: app.foxbox.seq.NoteSeq? = null
+    /** The block's sequencer on/off switch and its latch (keeps it running in Clibbins), if it has a sequencer. */
+    open val seqSwitch: Param? get() = seq?.enabled
+    open val seqLatch: Param? get() = seq?.latch
 
     abstract fun noteOn(key: Int, note: Int, vel: Float)
     abstract fun noteOff(key: Int)

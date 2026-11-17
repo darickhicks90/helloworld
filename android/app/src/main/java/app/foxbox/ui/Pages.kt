@@ -39,6 +39,7 @@ class InstrumentPage(c: Context, id: String, host: Host) : LinearLayout(c) {
     private val steps: SeqPanel?
     private val seqBtn = Btn(c, "Seq", Pal.accent(id))
     private val viewBtn = Btn(c, "Steps", Pal.AQUA)
+    private val latchBtn = Btn(c, "Latch", Pal.SUN)
 
     init {
         orientation = HORIZONTAL
@@ -51,7 +52,8 @@ class InstrumentPage(c: Context, id: String, host: Host) : LinearLayout(c) {
         if (seq != null) {
             seqBtn.onClick = { seq.enabled.set(if (seq.enabled.on) 0f else 1f); if (seq.enabled.on) showSteps(true); Studio.save(); refresh() }
             viewBtn.onClick = { showSteps(steps?.visibility != VISIBLE) }
-            chords.footer(seqBtn, viewBtn)
+            latchBtn.onClick = { seq.latch.set(if (seq.latch.on) 0f else 1f); Studio.save(); refresh() }
+            chords.footer(seqBtn, latchBtn, viewBtn)
         }
         addView(col, lp(Px.dp(264), MATCH).apply { leftMargin = Px.dp(6) })
         val right = FrameLayout(c)
@@ -73,6 +75,7 @@ class InstrumentPage(c: Context, id: String, host: Host) : LinearLayout(c) {
     private fun refresh() {
         val s = seq ?: return
         seqBtn.on = s.enabled.on; seqBtn.text = if (s.enabled.on) "Seq ON" else "Seq OFF"
+        latchBtn.on = s.latch.on; latchBtn.invalidate()
         viewBtn.text = if (steps?.visibility == VISIBLE) "Strum" else "Steps"
         seqBtn.requestLayout(); viewBtn.requestLayout(); seqBtn.invalidate(); viewBtn.invalidate()
     }
@@ -156,6 +159,7 @@ class PickupPage(c: Context, private val host: Host) : LinearLayout(c) {
     private val pattern = PatternPanel(c)
     private val modeBtn = Btn(c, "Pattern", Pal.ROSE)
     private val seqBtn = Btn(c, "Sequencer", Pal.ORANGE, 120)
+    private val latchBtn = Btn(c, "Latch", Pal.SUN)
     private val nameP = Px.text(13f, Pal.BROWN_D)
     private var builtFor = -1
     private var recBtn: Btn? = null
@@ -169,7 +173,8 @@ class PickupPage(c: Context, private val host: Host) : LinearLayout(c) {
         modeBtn.onClick = { val showPattern = pattern.visibility != VISIBLE; pattern.visibility = if (showPattern) VISIBLE else GONE; editor.visibility = if (showPattern) GONE else VISIBLE; refresh() }
         // Like Minds: one switch that stops or starts the whole pad sequencer.
         seqBtn.onClick = { pu.seqOn.set(if (pu.seqOn.on) 0f else 1f); if (!pu.seqOn.on) Audio.post { pu.allOff() }; Studio.save(); Studio.changed() }
-        col.addView(seqBtn, lp(MATCH, Px.dp(44)))
+        latchBtn.onClick = { pu.latch.set(if (pu.latch.on) 0f else 1f); Studio.save(); Studio.changed() }
+        col.addView(row(c, seqBtn, latchBtn).apply { seqBtn.layoutParams = lp(0, Px.dp(44), 1f); latchBtn.layoutParams = lp(Px.dp(80), Px.dp(44)) }, lp(MATCH, WRAP))
         col.addView(modeBtn, lp(MATCH, Px.dp(42)))
         right.addView(ScrollView(c).apply { addView(editor) }, FrameLayout.LayoutParams(MATCH, MATCH))
         right.addView(pattern, FrameLayout.LayoutParams(MATCH, MATCH))
@@ -185,6 +190,7 @@ class PickupPage(c: Context, private val host: Host) : LinearLayout(c) {
         modeBtn.text = if (pattern.visibility == VISIBLE) "Pad ${i + 1}: sound" else "Pad ${i + 1}: pattern"
         modeBtn.requestLayout(); modeBtn.invalidate()
         seqBtn.on = pu.seqOn.on; seqBtn.text = if (pu.seqOn.on) "Sequencer ON" else "Sequencer OFF"; seqBtn.requestLayout(); seqBtn.invalidate()
+        latchBtn.on = pu.latch.on; latchBtn.invalidate()
         recBtn?.let { b -> val on = host.micTarget() == "pad$i"; b.on = on; b.blink = on; b.text = if (on) "■ Stop" else "● Rec"; b.requestLayout() }
         pads.invalidate(); pattern.invalidate()
     }

@@ -54,7 +54,7 @@ class MainActivity : Activity(), Host {
     private var mic: AudioFiles.Mic? = null
     private var micFor: String? = null
     private val main = Handler(Looper.getMainLooper())
-    override fun micTarget() = if (mic != null) micFor else null
+    override fun micTarget() = Studio.samplerTarget?.id ?: if (mic != null) micFor else null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -134,17 +134,13 @@ class MainActivity : Activity(), Host {
         showStudio()
     }
 
-    /** Switching between the studio and Clibbins stops whatever was playing there. */
-    private fun stopPlayback() = Audio.post { Audio.transport.stop(); Audio.engines.forEach { it.allOff() } }
-
     private fun showStudio() {
-        if (screen == 2) stopPlayback()
         screen = 1
         setContentView(studio ?: StudioScreen(this, this).also { studio = it })
     }
 
     override fun showClibbins() {
-        stopPlayback()
+        Studio.enterClibbins()
         screen = 2
         (studio?.parent as? android.view.ViewGroup)?.removeView(studio)
         setContentView(ClibbinsScreen(this, this).apply { backToStudio = { showStudio() } })
@@ -568,6 +564,11 @@ class MainActivity : Activity(), Host {
     }
 
     override fun toggleMic(target: String) {
+        // Reflections and Leaves record through the clock (count-in, looper takes); Pickup pads keep the simple recorder.
+        (Audio.engines.firstOrNull { it.id == target } as? SampleEngine)?.let { e ->
+            if (Studio.samplerTarget != null) Studio.samplerMic(e) else withMic { Studio.samplerMic(e) }
+            return
+        }
         val m = mic
         if (m != null) {
             val t = micFor ?: target

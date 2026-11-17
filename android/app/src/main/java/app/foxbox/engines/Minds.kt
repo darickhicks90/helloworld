@@ -32,6 +32,9 @@ class Minds : Engine("minds", "Minds") {
 
     init { p.section("Sequencer") }
     val enabled = p.toggle("on", "Sequencer", true)
+    val latch = p.toggle("latch", "Sequencer Latch")
+    override val seqSwitch get() = enabled
+    override val seqLatch get() = latch
     val generative = p.num("generative", "Generative", 0f, 1f, 0.5f, Fmt.PCT)
     val density = p.num("density", "Density", 0f, 1f, 0.5f, Fmt.PCT)
     val swing = p.num("swing", "Swing", 0f, 0.6f, 0f, Fmt.PCT)

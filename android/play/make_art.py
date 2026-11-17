@@ -1,7 +1,7 @@
 """Play Store graphics for 5 Eye Yeti (5IY).
 The app icon is built from the blue yeti line drawing (see concepts/icon.py);
 this script makes the 1024x500 feature graphic from the pixel-art title scene
-(the clearing and one frame of the yeti digging) with just the name.
+(the clearing and the yeti holding a firefly he has just caught) with just the name.
 Run: python3 play/make_art.py"""
 import os
 from PIL import Image, ImageDraw, ImageFont
@@ -10,10 +10,13 @@ here = os.path.dirname(os.path.abspath(__file__))
 imgs = os.path.join(here, '..', 'app', 'src', 'main', 'assets', 'images')
 import json
 scene = Image.open(os.path.join(imgs, 'title_bg.png')).convert('RGBA')
-meta = json.load(open(os.path.join(imgs, 'yeti_anim.json')))
-f = meta['frames'] - 1   # the yeti, kneeling and turned away, with his hand down in the hole
-cell = Image.open(os.path.join(imgs, 'yeti_frames.png')).crop((f * meta['w'], 0, (f + 1) * meta['w'], meta['h']))
-scene.alpha_composite(cell, (meta['x'], meta['y']))
+meta = json.load(open(os.path.join(imgs, 'title_story.json')))
+step = int(4.6 * meta['fps'])   # just caught a firefly, looking at it
+fx_, fy_, fw_, fh_, x_, y_, hx_, hy_ = meta['frames'][meta['steps'][step]]
+cell = Image.open(os.path.join(imgs, 'yeti_frames.png')).crop((fx_, fy_, fx_ + fw_, fy_ + fh_))
+scene.alpha_composite(cell, (x_, y_))
+for dx, dy, col in ((0, 0, (246, 255, 154, 255)), (-1, 0, (232, 255, 138, 120)), (1, 0, (232, 255, 138, 120)), (0, -1, (232, 255, 138, 120)), (0, 1, (232, 255, 138, 120))):
+    scene.putpixel((int(hx_) + dx, int(hy_) + dy), col)
 scene.alpha_composite(Image.open(os.path.join(imgs, 'title_fg.png')).convert('RGBA'))
 scene = scene.convert('RGB')
 W, H = 1024, 500

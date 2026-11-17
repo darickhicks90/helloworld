@@ -94,13 +94,16 @@ class Pickup : Engine("pickup", "Pickup") {
     // ---- rhythm chop: the source sample plays in time while you tap pads to place chops
     @Volatile var chopSrc: FloatArray = FloatArray(0); private set
     @Volatile var chopSrcName = ""; private set
-    fun setChopSource(d: FloatArray, name: String) { chopSrc = d; chopSrcName = name }
+    fun setChopSource(d: FloatArray, name: String) { chopSrc = d; chopSrcName = name; chopTrimStart = 0; chopTrimEnd = d.size }
+    /** The part of the source the pass plays (frames): trimmed with the handles on the chop screen. */
+    @Volatile var chopTrimStart = 0
+    @Volatile var chopTrimEnd = 0
     /** Frames of the source played so far in this pass (-1 = not playing). */
     @Volatile var chopPos = -1; private set
     private var chopOffset = 0
     /** Audio thread: the pass reached the end of the source. */
     var onChopEnded: (() -> Unit)? = null
-    fun startChop(offset: Int) { chopOffset = offset; chopPos = 0 }
+    fun startChop(offset: Int) { chopOffset = offset; chopPos = chopTrimStart.coerceIn(0, maxOf(0, chopSrc.size - 1)) }
     fun stopChop() { chopPos = -1 }
 
     fun setPadSample(i: Int, data: FloatArray, name: String) {
@@ -160,9 +163,9 @@ class Pickup : Engine("pickup", "Pickup") {
     override fun render(l: FloatArray, r: FloatArray, n: Int) {
         xy.begin()
         if (chopPos >= 0) {
-            val src = chopSrc; var pos = chopPos
+            val src = chopSrc; var pos = chopPos; val stopAt = chopTrimEnd.coerceIn(1, src.size)
             for (k in chopOffset until n) {
-                if (pos >= src.size) { chopPos = -1; Audio.transport.chopDone(); onChopEnded?.invoke(); break }
+                if (pos >= stopAt) { chopPos = -1; Audio.transport.chopDone(); onChopEnded?.invoke(); break }
                 val x = src[pos++] * 0.8f; l[k] += x; r[k] += x
             }
             chopOffset = 0

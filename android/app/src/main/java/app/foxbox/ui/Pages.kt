@@ -247,7 +247,21 @@ class PickupPage(c: Context, private val host: Host) : LinearLayout(c) {
                     peaks = FloatArray(cols) { k -> val a = (src.size.toLong() * k / cols).toInt(); val b = (src.size.toLong() * (k + 1) / cols).toInt(); var m = 0f; for (j in a until maxOf(a + 1, b).coerceAtMost(src.size)) m = maxOf(m, kotlin.math.abs(src[j])); m }
                 }
                 val mid = h / 2
-                for (k in 0 until cols) { val ph = peaks[k] * (h / 2 - u * 3); c.fill(k * u, mid - ph, k * u + u, mid + ph + u, 0xFF9AA0C8.toInt()) }
+                val ts = pu.chopTrimStart.toFloat() / src.size * w; val te = pu.chopTrimEnd.toFloat() / src.size * w
+                for (k in 0 until cols) {
+                    val x = k * u; val inside = x + u > ts && x < te
+                    val ph = peaks[k] * (h / 2 - u * 3)
+                    c.fill(x, mid - ph, x + u, mid + ph + u, if (inside) 0xFF9AA0C8.toInt() else 0xFF5C5870.toInt())
+                }
+                // trim handles: shaded outside, a flag at each edge you can drag
+                c.fill(u, u, ts, h - u, Pal.alpha(0xFF000000.toInt(), 0.35f)); c.fill(te, u, w - u, h - u, Pal.alpha(0xFF000000.toInt(), 0.35f))
+                for ((x, label, left) in listOf(Triple(ts, "S", true), Triple(te, "E", false))) {
+                    c.fill(x - u, 0f, x + u, h, Pal.SUN)
+                    val fx = if (left) x else x - Px.dp(16f)
+                    c.fill(fx, h - Px.dp(18f), fx + Px.dp(16f), h - u, Pal.SUN)
+                    c.textCentered(label, fx + Px.dp(8f), h - Px.dp(10f), num.apply { color = Pal.BROWN_D })
+                }
+                num.color = Pal.CREAM
                 // chop markers in the colour of the tapped pad's row
                 val rowCol = intArrayOf(0xFFE8746C.toInt(), 0xFFE8B83C.toInt(), 0xFF68B860.toInt(), 0xFF6A8CE0.toInt())
                 for ((f, pad) in Studio.chopMarksView) {
@@ -265,11 +279,25 @@ class PickupPage(c: Context, private val host: Host) : LinearLayout(c) {
                     c.textCentered("count-in… $beatsLeft", w / 2, mid, big)
                 }
             }
+            private var dragging = -1   // 0 start handle, 1 end handle
+            @SuppressLint("ClickableViewAccessibility")
+            override fun onTouchEvent(e: MotionEvent): Boolean {
+                val src = pu.chopSrc
+                if (src.isEmpty() || Audio.transport.chopRec != app.foxbox.seq.Transport.Rec.OFF) return true
+                val f = (e.x / width * src.size).toInt()
+                when (e.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> dragging = if (kotlin.math.abs(f - pu.chopTrimStart) <= kotlin.math.abs(f - pu.chopTrimEnd)) 0 else 1
+                    MotionEvent.ACTION_MOVE -> if (dragging == 0) Studio.setChopTrim(f, pu.chopTrimEnd) else if (dragging == 1) Studio.setChopTrim(pu.chopTrimStart, f)
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { dragging = -1; Studio.changed() }
+                }
+                parent.requestDisallowInterceptTouchEvent(true)
+                invalidate(); return true
+            }
         }
         init {
             orientation = VERTICAL
             val title = object : PixelView(c) {
-                override fun paint(c: Canvas) { c.pixelBox(0f, 0f, width.toFloat(), height.toFloat(), Pal.CREAM, shade = false); c.textCentered(if (pu.chopSrc.isEmpty()) "Rhythm chop" else "Chopping: ${pu.chopSrcName}", width / 2f, height / 2f, nameP) }
+                override fun paint(c: Canvas) { c.pixelBox(0f, 0f, width.toFloat(), height.toFloat(), Pal.CREAM, shade = false); c.textCentered(if (pu.chopSrc.isEmpty()) "Rhythm chop" else "${pu.chopSrcName} · %.2fs (drag S and E to trim)".format((pu.chopTrimEnd - pu.chopTrimStart) / app.foxbox.audio.SRF), width / 2f, height / 2f, nameP) }
             }
             addView(title, lp(MATCH, Px.dp(28)))
             addView(wave, lp(MATCH, 0, 1f))

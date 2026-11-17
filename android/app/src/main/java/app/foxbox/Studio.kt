@@ -819,7 +819,15 @@ object Studio : Transport.Listener, MidiInput.Sink {
         private set
     fun setChopSnap(steps: Int) { chopSnap = steps; changed() }
     val chopMarksView: List<Pair<Int, Int>> get() = synchronized(chopMarks) { chopMarks.toList() } +
-        (if (chopFirstPad >= 0) listOf(0 to chopFirstPad) else emptyList())
+        (if (chopFirstPad >= 0) listOf(Audio.pickup.chopTrimStart to chopFirstPad) else emptyList())
+
+    /** Move the chop source's start or end handle (frames). */
+    fun setChopTrim(start: Int, end: Int) {
+        val pu = Audio.pickup; val n = pu.chopSrc.size
+        val minLen = SR / 20
+        val s = start.coerceIn(0, maxOf(0, n - minLen)); val e = end.coerceIn(minOf(n, s + minLen), n)
+        pu.chopTrimStart = s; pu.chopTrimEnd = e
+    }
 
     fun setChopSource(d: FloatArray, name: String) {
         Audio.pickup.setChopSource(d, name)
@@ -834,7 +842,7 @@ object Studio : Transport.Listener, MidiInput.Sink {
         if (t.chopRec == Transport.Rec.ARMED) { Audio.post { t.chopCountIn() }; return }   // cancels
         if (pu.chopSrc.size < SR / 10) return message("Load a sample to chop first")
         synchronized(chopMarks) { chopMarks.clear() }; chopFirstPad = -1
-        pu.onChopEnded = { main.post { finishRhythmChop(pu.chopSrc.size) } }
+        pu.onChopEnded = { main.post { finishRhythmChop(pu.chopTrimEnd) } }
         t.onChopStart = { off -> pu.startChop(off) }
         t.onChopStop = { val e = pu.chopPos; pu.stopChop(); if (e > 0) main.post { finishRhythmChop(e) } }
         Audio.post { t.chopCountIn() }
@@ -848,14 +856,18 @@ object Studio : Transport.Listener, MidiInput.Sink {
         when (t.chopRec) {
             Transport.Rec.ARMED -> chopFirstPad = pad
             Transport.Rec.RECORDING -> {
+                // Once every pad holds a chop, the next tap ends the last one and stops the pass.
+                val used = chopMarksView.map { it.second }.toSet()
+                if (used.size >= Pickup.PADS) { val end = pu.chopPos; Audio.post { pu.stopChop(); t.chopDone() }; finishRhythmChop(end); return }
                 // what you hear lags the play position by the output latency, and the touch itself by ~10 ms
                 var f = pu.chopPos - ((Audio.latencyMs + 10f) * SR / 1000f).toInt()
                 if (chopSnap > 0) {
                     val grid = SR * 60.0 / project.bpm / 4 * chopSnap
                     f = (Math.round(f / grid) * grid).toInt()
                 }
-                f = f.coerceIn(0, maxOf(0, pu.chopSrc.size - 1))
+                f = f.coerceIn(pu.chopTrimStart, maxOf(pu.chopTrimStart, pu.chopTrimEnd - 1))
                 synchronized(chopMarks) { chopMarks += f to pad }
+                if ((used + pad).size >= Pickup.PADS) message("All 16 pads have a chop: tap any pad to end the last one")
             }
             else -> {}
         }
@@ -867,7 +879,7 @@ object Studio : Transport.Listener, MidiInput.Sink {
         val src = pu.chopSrc
         val marks = (chopMarksView).sortedBy { it.first }.distinctBy { it.first }
         if (marks.isEmpty()) { message("No pads tapped, so nothing was chopped"); changed(); return }
-        val end = endFrame.coerceIn(1, src.size)
+        val end = endFrame.coerceIn(1, minOf(src.size, maxOf(1, pu.chopTrimEnd)))
         val starts = marks.map { it.first }.toIntArray()
         val bounds = starts + end
         chopUndo = pu.samples.copyOf() to pu.names.copyOf()

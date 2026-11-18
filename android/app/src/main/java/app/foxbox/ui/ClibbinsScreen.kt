@@ -54,7 +54,7 @@ class LaunchModel(
 object ClipField {
     const val K_CLIP = 0; const val K_TAKE = 1; const val K_FLOWER = 2; const val K_ARM = 3
     const val K_PLAY = 4; const val K_STOP = 5; const val K_REC = 6; const val K_BACK = 7; const val K_INPUT = 8
-    const val K_SHUFFLE = 9; const val K_POEM = 10; const val K_MASTER = 11; const val K_MASTER_ARM = 12
+    const val K_SHUFFLE = 9; const val K_POEM = 10; const val K_MASTER = 11; const val K_MASTER_ARM = 12; const val K_PEAK = 13
     const val POEM_ID = "poem-stone"
     /** Daisy-chain tracer colours: red, yellow, blue. */
     val CHAIN = intArrayOf(0xFFE0533F.toInt(), 0xFFF0C23B.toInt(), 0xFF4A8FD8.toInt())
@@ -76,6 +76,15 @@ object ClipField {
         fun has(x: Float, y: Float) = x in l..r && y in t..b
     }
 
+    /** The mixer's bounds this frame (the eye never opens on top of it). */
+    val mixerBox = FloatArray(4)
+    /** Peak-hold level of each mixer strip (Red, Yellow, Blue, Master) until its readout is tapped. */
+    val held = FloatArray(4)
+    fun resetPeak(i: Int) { if (i in held.indices) held[i] = 0f }
+    private val mixHead by lazy { Px.text(10f, Snes.INK, headFont = true, align = Paint.Align.LEFT) }
+    private val mixLabel by lazy { Px.text(9f, Snes.DEEP, align = Paint.Align.LEFT) }
+    private val mixName by lazy { Px.text(12f, Snes.INK) }
+    private val mixRead by lazy { Px.text(13f, WHITE, headFont = false) }
     private val txt by lazy { Px.text(12f, WHITE) }
     private val sub by lazy { Px.text(9f, GREY) }
     private val big by lazy { Px.text(14f, WHITE) }
@@ -104,9 +113,41 @@ object ClipField {
         p.textSize = base
     }
 
+    /**
+     * A selected clip glows (a soft, breathing halo in warm white) and sparkles:
+     * little four-point stars wink on and off around its edge.
+     */
+    private fun glow(c: Canvas, l: Float, t: Float, r: Float, b: Float, time: Float, id: String) {
+        val breath = 0.55f + 0.45f * kotlin.math.sin(time * 4.2f)
+        for (k in 6 downTo 1) {
+            val g = Px.dp(2.2f) * k
+            c.fill(l - g, t - g, r + g, b + g, Pal.alpha(0xFFFFF2B0.toInt(), 0.07f * breath * (7 - k) / 6f))
+        }
+        val star = 0xFFFFFFFF.toInt(); val gold = 0xFFFFE07A.toInt()
+        val per = 2f * ((r - l) + (b - t))
+        for (k in 0 until 9) {
+            val phase = (time * 1.3f + k * 0.37f + (id.hashCode() and 7) * 0.11f) % 1f
+            if (phase > 0.55f) continue
+            val size = Px.dp(1.5f) + Px.dp(4.5f) * kotlin.math.sin(phase / 0.55f * kotlin.math.PI.toFloat())
+            // walk round the edge, a little outside it
+            var d = ((k * 0.113f + time * 0.05f) % 1f) * per
+            val off = Px.dp(5f)
+            val (x, y) = when {
+                d < r - l -> (l + d) to (t - off)
+                d < (r - l) + (b - t) -> { d -= (r - l); (r + off) to (t + d) }
+                d < 2 * (r - l) + (b - t) -> { d -= (r - l) + (b - t); (r - d) to (b + off) }
+                else -> { d -= 2 * (r - l) + (b - t); (l - off) to (b - d) }
+            }
+            val col = if (k % 3 == 0) gold else star
+            c.fill(x - size, y - Px.dp(0.8f), x + size, y + Px.dp(0.8f), col)
+            c.fill(x - Px.dp(0.8f), y - size, x + Px.dp(0.8f), y + size, col)
+            c.fill(x - Px.dp(1.5f), y - Px.dp(1.5f), x + Px.dp(1.5f), y + Px.dp(1.5f), col)
+        }
+    }
+
     /** Peak (linear) to 0..1 on a −48…+3 dB scale. */
     private fun meter(peak: Float): Float = if (peak < 1e-5f) 0f else ((20f * log10(peak) + 48f) / 51f).coerceIn(0f, 1f)
-    private fun dbText(peak: Float) = if (peak < 1e-4f) "-∞" else "%.0f".format(20f * log10(peak))
+    private fun dbText(peak: Float) = if (peak < 1e-4f) "-∞" else "%.1f".format(20f * log10(peak))
 
     fun draw(c: Canvas, w: Float, h: Float, m: LaunchModel, time: Float, selected: String?, hits: MutableList<Hit>) {
         hits.clear(); centres.clear()
@@ -135,59 +176,95 @@ object ClipField {
             label(c, if (m.taping) "● Mixing down to tape  ·  ${m.status}" else m.status, (x + sr) / 2, pad + topH / 2, txt, if (m.taping) 0xFFFFB0A8.toInt() else WHITE, sr - x - Px.dp(16f))
         }
 
-        // ---- the mixer: vertical strips for Red, Yellow, Blue and the Master
-        val stripW = Px.dp(48f); val sg = Px.dp(4f)
-        val mixW = stripW * 4 + sg * 5; val mixH = minOf(Px.dp(168f), h * 0.42f)
+        // ---- the mixer: a grey console panel with a strip each for Red, Yellow, Blue and the Master.
+        // Meters hold their highest level until its readout is tapped.
+        val stripW = Px.dp(64f); val sg = Px.dp(6f)
+        val mixW = stripW * 4 + sg * 5 + Px.dp(6f); val mixH = minOf(Px.dp(260f), h * 0.56f)
         val mixL = pad; val mixT = h - pad - mixH
-        box(c, mixL, mixT, mixL + mixW, mixT + mixH, 0.88f)
+        mixerBox[0] = mixL; mixerBox[1] = mixT; mixerBox[2] = mixL + mixW; mixerBox[3] = mixT + mixH
+        val bar = Px.dp(24f)
+        with(Snes) {
+            c.plate(mixL, mixT, mixL + mixW, mixT + mixH)
+            c.fill(mixL + Px.u * 3, mixT + Px.u * 3, mixL + mixW - Px.u * 3, mixT + bar, Snes.FACE_D)
+            c.lamps(mixL + Px.dp(10f), mixT + (Px.u * 3 + bar) / 2, Px.dp(7f))
+        }
+        mixHead.textSize = Px.dp(10f)
+        c.drawText("MIXER", mixL + Px.dp(58f), mixT + (Px.u * 3 + bar) / 2 - (mixHead.descent() + mixHead.ascent()) / 2, mixHead)
+        mixLabel.textSize = Px.dp(9f); mixLabel.color = Snes.DEEP
+        c.drawText("tap a readout to reset its peak", mixL + Px.dp(112f), mixT + (Px.u * 3 + bar) / 2 - (mixLabel.descent() + mixLabel.ascent()) / 2, mixLabel)
         for (i in 0 until 4) {
-            val sl = mixL + sg + i * (stripW + sg); val st = mixT + sg; val sb = mixT + mixH - sg
+            val sl = mixL + Px.dp(3f) + sg + i * (stripW + sg); val st = mixT + bar + Px.dp(6f); val sb = mixT + mixH - Px.dp(9f)
             val isMaster = i == 3
             val strip = m.strips.getOrNull(i)
-            val accent = if (isMaster) WHITE else strip?.accent ?: WHITE
-            box(c, sl, st, sl + stripW, sb, 1f, Pal.alpha(accent, 0.55f), 0xFF141414.toInt())
-            sub.textSize = Px.dp(8f)
-            label(c, if (isMaster) "Master" else strip?.name ?: "", sl + stripW / 2, st + Px.dp(9f), sub, accent, stripW - Px.dp(4f))
+            val accent = if (isMaster) Snes.PURPLE else strip?.accent ?: Snes.PURPLE
             val peak = if (isMaster) m.masterPeak else strip?.peak ?: 0f
-            // dB meter
-            val mt = st + Px.dp(18f); val mb = sb - Px.dp(50f)
-            val ml = sl + Px.dp(6f); val mr = ml + Px.dp(7f)
-            c.fill(ml, mt, mr, mb, 0xFF050505.toInt())
-            val lv = meter(peak); val segs = 14
+            if (peak > held[i]) held[i] = peak
+            // the strip: a recessed darker plate with its colour along the top
+            c.fill(sl, st, sl + stripW, sb, Snes.INK)
+            c.fill(sl + Px.dp(1.5f), st + Px.dp(1.5f), sl + stripW - Px.dp(1.5f), sb - Px.dp(1.5f), Snes.FACE_D)
+            c.fill(sl + Px.dp(1.5f), st + Px.dp(1.5f), sl + stripW - Px.dp(1.5f), st + Px.dp(20f), accent)
+            mixName.textSize = Px.dp(12f); mixName.color = textOn(accent)
+            label(c, if (isMaster) "Master" else strip?.name ?: "", sl + stripW / 2, st + Px.dp(11f), mixName, textOn(accent), stripW - Px.dp(6f))
+            // meter window
+            val mt = st + Px.dp(26f); val mb = sb - Px.dp(88f)
+            val ml = sl + Px.dp(7f); val mr = ml + Px.dp(14f)
+            c.fill(ml - Px.dp(1.5f), mt - Px.dp(1.5f), mr + Px.dp(1.5f), mb + Px.dp(1.5f), Snes.INK)
+            c.fill(ml, mt, mr, mb, 0xFF1C1B24.toInt())
+            val lv = meter(peak); val hv = meter(held[i]); val segs = 18
             val segH = (mb - mt) / segs
             for (k in 0 until segs) {
                 val on = k < (lv * segs).toInt()
-                val col = when { k >= segs - 2 -> REC; k >= segs - 5 -> 0xFFF0C23B.toInt(); else -> 0xFF7FD98F.toInt() }
+                val col = when { k >= segs - 2 -> Snes.RED; k >= segs - 6 -> Snes.YELLOW; else -> Snes.GREEN }
                 val sy = mb - (k + 1) * segH
-                c.fill(ml + Px.dp(1f), sy + Px.dp(1f), mr - Px.dp(1f), sy + segH, if (on) col else 0xFF1C1C1C.toInt())
+                c.fill(ml + Px.dp(1.5f), sy + Px.dp(1f), mr - Px.dp(1.5f), sy + segH, if (on) col else 0xFF2E2C38.toInt())
             }
-            sub.textSize = Px.dp(7f)
-            label(c, dbText(peak), sl + stripW / 2, mb + Px.dp(7f), sub, GREY, stripW - Px.dp(4f))
+            // the held peak: a bright line that stays put
+            if (held[i] > 1e-5f) {
+                val py = mb - (mb - mt) * hv
+                c.fill(ml, py - Px.dp(1.5f), mr, py + Px.dp(1f), if (hv > 1f - 2f / segs) Snes.RED else 0xFFFFFFFF.toInt())
+            }
+            // dB scale beside the meter
+            mixLabel.textSize = Px.dp(8f); mixLabel.color = Snes.DEEP
+            for ((db, lab) in listOf(0f to "0", -12f to "12", -24f to "24", -48f to "48")) {
+                val y = mb - (mb - mt) * ((db + 48f) / 51f)
+                c.drawText(lab, mr + Px.dp(3f), y + Px.dp(3f), mixLabel)
+            }
             if (isMaster) {
                 // the master fader (global output)
-                val gl = mr + Px.dp(10f); val gr = sl + stripW - Px.dp(8f)
-                c.fill((gl + gr) / 2 - Px.dp(1f), mt, (gl + gr) / 2 + Px.dp(1f), mb, 0xFF3A3A3A.toInt())
+                val gl = mr + Px.dp(18f); val gr = sl + stripW - Px.dp(6f)
+                val gx = (gl + gr) / 2
+                c.fill(gx - Px.dp(2f), mt, gx + Px.dp(2f), mb, Snes.INK)
                 val ky = mb - (mb - mt) * m.master
-                c.fill(gl, ky - Px.dp(3f), gr, ky + Px.dp(3f), WHITE)
-                masterLane[0] = gl - Px.dp(8f); masterLane[1] = mt; masterLane[2] = gr + Px.dp(8f); masterLane[3] = mb
-                hits += Hit("master", K_MASTER, gl - Px.dp(8f), mt, gr + Px.dp(8f), mb)
-            } else {
-                // a thin level line beside the meter, in the track's colour
-                c.fill(mr + Px.dp(6f), mt, mr + Px.dp(8f), mb, Pal.alpha(accent, 0.35f))
+                c.fill(gl - Px.dp(1f), ky - Px.dp(6f), gr + Px.dp(1f), ky + Px.dp(6f), Snes.INK)
+                c.fill(gl, ky - Px.dp(5f), gr, ky + Px.dp(5f), Snes.HI)
+                c.fill(gl, ky - Px.dp(0.5f), gr, ky + Px.dp(0.5f), Snes.PURPLE)
+                masterLane[0] = gl - Px.dp(10f); masterLane[1] = mt; masterLane[2] = gr + Px.dp(6f); masterLane[3] = mb
+                hits += Hit("master", K_MASTER, gl - Px.dp(10f), mt, gr + Px.dp(6f), mb)
             }
-            // arm button
-            val at = sb - Px.dp(40f)
+            // the held peak readout (tap it to reset)
+            val rt = mb + Px.dp(8f); val rb = rt + Px.dp(22f)
+            c.fill(sl + Px.dp(4f), rt, sl + stripW - Px.dp(4f), rb, Snes.INK)
+            c.fill(sl + Px.dp(5.5f), rt + Px.dp(1.5f), sl + stripW - Px.dp(5.5f), rb - Px.dp(1.5f), 0xFF26242F.toInt())
+            mixRead.textSize = Px.dp(13f)
+            label(c, dbText(held[i]), sl + stripW / 2, (rt + rb) / 2, mixRead, if (held[i] >= 0.89f) 0xFFFF8A80.toInt() else 0xFFB8F0C0.toInt(), stripW - Px.dp(12f))
+            hits += Hit(i.toString(), K_PEAK, sl, rt - Px.dp(3f), sl + stripW, rb + Px.dp(3f))
+            // arm (or tape) key
+            val at = rb + Px.dp(5f); val ab = at + Px.dp(22f)
             val armed = if (isMaster) m.masterArmed else strip?.armed == true
             val lit = armed && (blink || (isMaster && m.taping) || (!isMaster && m.audioRec == Transport.Rec.RECORDING))
-            box(c, sl + Px.dp(4f), at, sl + stripW - Px.dp(4f), at + Px.dp(18f), 1f, if (armed) REC else EDGE, if (lit) 0xFF5A1410.toInt() else BLACK)
-            label(c, if (isMaster) "● Tape" else "● Arm", sl + stripW / 2, at + Px.dp(9f), sub.apply { textSize = Px.dp(8f) }, if (armed) REC else WHITE, stripW - Px.dp(10f))
-            hits += Hit(if (isMaster) "master-arm" else i.toString(), if (isMaster) K_MASTER_ARM else K_ARM, sl, at, sl + stripW, at + Px.dp(18f))
-            // input configuration (tracks only)
+            c.fill(sl + Px.dp(4f), at, sl + stripW - Px.dp(4f), ab, Snes.INK)
+            c.fill(sl + Px.dp(5.5f), at + Px.dp(1.5f), sl + stripW - Px.dp(5.5f), ab - Px.dp(1.5f), if (lit) Snes.RED else if (armed) 0xFFE8A0A0.toInt() else Snes.FACE)
+            mixName.textSize = Px.dp(12f)
+            label(c, if (isMaster) "● Tape" else "● Arm", sl + stripW / 2, (at + ab) / 2, mixName, if (lit) 0xFFFFFFFF.toInt() else Snes.INK, stripW - Px.dp(12f))
+            hits += Hit(if (isMaster) "master-arm" else i.toString(), if (isMaster) K_MASTER_ARM else K_ARM, sl, at, sl + stripW, ab)
+            // input choice (tracks only)
             if (!isMaster && strip != null) {
-                val it = sb - Px.dp(19f)
-                box(c, sl + Px.dp(4f), it, sl + stripW - Px.dp(4f), it + Px.dp(16f), 1f)
-                label(c, strip.input, sl + stripW / 2, it + Px.dp(8f), sub.apply { textSize = Px.dp(8f) }, GREY, stripW - Px.dp(10f))
-                hits += Hit(i.toString(), K_INPUT, sl, it, sl + stripW, it + Px.dp(16f))
+                val it = ab + Px.dp(4f); val ib = minOf(sb - Px.dp(3f), it + Px.dp(20f))
+                c.fill(sl + Px.dp(4f), it, sl + stripW - Px.dp(4f), ib, Snes.INK)
+                c.fill(sl + Px.dp(5.5f), it + Px.dp(1.5f), sl + stripW - Px.dp(5.5f), ib - Px.dp(1.5f), Snes.HI)
+                mixName.textSize = Px.dp(11f)
+                label(c, strip.input, sl + stripW / 2, (it + ib) / 2, mixName, Snes.INK, stripW - Px.dp(12f))
+                hits += Hit(i.toString(), K_INPUT, sl, it, sl + stripW, ib)
             }
         }
 
@@ -223,6 +300,7 @@ object ClipField {
             val pulse = if (b.playing && blink) 1f else 0f
             val edge = if (selected == b.id) WHITE else if (b.playing) PLAYING else if (b.queued) QUEUED else if (b.wave != null) Pal.alpha(b.accent, 0.7f) else EDGE
             c.save(); c.rotate(s.tilt, s.x + s.w / 2, s.y + s.h / 2)
+            if (selected == b.id) glow(c, s.x, s.y - pulse, s.x + s.w, s.y + s.h - pulse, time, b.id)
             val ta = maxOf(alpha, 0.75f)
             val wv = b.wave
             if (wv != null) {
@@ -480,7 +558,9 @@ class ClibbinsScreen(c: Context, private val host: Host) : PixelView(c) {
         repeat(60) {
             val x = ew / 2 + rnd.nextFloat() * (w - ew); val y = bannerBottom + eh / 2 + rnd.nextFloat() * (h - bannerBottom - eh)
             val l = x - ew / 2 - pad; val r = x + ew / 2 + pad; val t = y - eh / 2 - pad; val b = y + eh / 2 + pad
-            if (hits.none { it.l < r && l < it.r && it.t < b && t < it.b }) { eyeX = x; eyeY = y; return true }
+            val mx = ClipField.mixerBox
+            val onMixer = mx[2] > mx[0] && mx[0] < r && l < mx[2] && mx[1] < b && t < mx[3]
+            if (!onMixer && hits.none { it.l < r && l < it.r && it.t < b && t < it.b }) { eyeX = x; eyeY = y; return true }
         }
         return false
     }
@@ -650,6 +730,7 @@ class ClibbinsScreen(c: Context, private val host: Host) : PixelView(c) {
             ClipField.K_INPUT -> host.channelInput(hh.id.toInt())
             ClipField.K_MASTER_ARM -> Studio.toggleMasterArm()
             ClipField.K_MASTER -> {}
+            ClipField.K_PEAK -> ClipField.resetPeak(hh.id.toInt())
             else -> {
                 val now = System.currentTimeMillis()
                 val double = lastTapId == hh.id && now - lastTapAt < 300

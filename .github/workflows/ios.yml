@@ -61,6 +61,13 @@ jobs:
           xcrun simctl io "$UDID" screenshot shots/studio.png
           xcrun simctl spawn "$UDID" log show --last 2m --predicate 'process == "FiveEyeYeti"' --style compact | tail -60 > shots/log.txt || true
 
+      - name: Screenshot previews in the log
+        run: |
+          for f in title studio; do
+            sips -Z 640 shots/$f.png --out shots/$f-small.jpg -s format jpeg -s formatOptions 60 >/dev/null
+            echo "=====BEGIN $f====="; base64 -i shots/$f-small.jpg | tr -d '\n'; echo; echo "=====END $f====="
+          done
+
       - name: Package
         run: |
           cd build/Build/Products/Debug-iphonesimulator && zip -qr "$GITHUB_WORKSPACE/5IY-ios-simulator.zip" FiveEyeYeti.app

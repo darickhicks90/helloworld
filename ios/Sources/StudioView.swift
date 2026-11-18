@@ -40,8 +40,8 @@ struct StudioView: View {
     private var topBar: some View {
         HStack(spacing: 6) {
             Text("5 EYE YETI").font(Look.head(11)).foregroundColor(Look.ink).padding(.horizontal, 10).frame(minHeight: 38).plate(Look.faceD)
-            Key(title: "▶", color: Look.green, on: playing) { audio.play(); playing = true }
-            Key(title: "■", color: Look.red) { audio.stop(); playing = false }
+            Key(title: "▶\u{FE0E}", color: Look.green, on: playing) { audio.play(); playing = true }
+            Key(title: "■\u{FE0E}", color: Look.red) { audio.stop(); playing = false }
             TimelineView(.periodic(from: .now, by: 0.1)) { _ in
                 Text(audio.position()).font(Look.body(14)).foregroundColor(Look.ink).frame(width: 80, height: 38).plate(Look.faceD)
             }

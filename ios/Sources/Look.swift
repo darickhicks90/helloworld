@@ -74,12 +74,12 @@ struct Stepper5: View {
     let step: (Int) -> Void
     var body: some View {
         HStack(spacing: 0) {
-            Text("◀").font(Look.body(15)).frame(width: 22).contentShape(Rectangle()).onTapGesture { step(-1) }
+            Text("◀\u{FE0E}").font(Look.body(15)).frame(width: 22).contentShape(Rectangle()).onTapGesture { step(-1) }
             VStack(spacing: 0) {
                 Text(label).font(Look.body(10)).foregroundColor(Look.deep).lineLimit(1).minimumScaleFactor(0.7)
                 Text(value).font(Look.body(15)).lineLimit(1).minimumScaleFactor(0.6)
             }.frame(maxWidth: .infinity)
-            Text("▶").font(Look.body(15)).frame(width: 22).contentShape(Rectangle()).onTapGesture { step(1) }
+            Text("▶\u{FE0E}").font(Look.body(15)).frame(width: 22).contentShape(Rectangle()).onTapGesture { step(1) }
         }
         .foregroundColor(Look.ink)
         .frame(minHeight: 38)

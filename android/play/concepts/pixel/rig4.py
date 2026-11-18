@@ -30,6 +30,8 @@ class Side:
         def canvas(im):
             c = Image.new('RGBA', (self.W, self.H)); c.paste(im.resize(sz, Image.LANCZOS), (pad, pad)); return np.asarray(c).copy()
         orig = canvas(raw); body = canvas(noarm)
+        import legfix
+        legsrc = canvas(Image.fromarray(legfix.single_leg(noarm)))   # one clean leg (no overlap seams)
         yy, xx = np.mgrid[0:self.H, 0:self.W]
         sy = (yy - pad) / S; sx = (xx - pad) / S          # source (side.png) coordinates
         # arm: the painted-out region of the original, with a soft top so it melts into the shoulder
@@ -60,13 +62,13 @@ class Side:
         hipline = np.interp(sx, [0, 110, 235, 330, 400], [575, 590, 612, 650, 660])
         # legs: everything below the hip line, faded in so the top tucks under the body
         lf = skin.ss((sy - hipline + 45) / 40.0)
-        l = body.copy(); l[..., 3] = (l[..., 3] * lf).astype(np.uint8)
+        l = legsrc.copy(); l[..., 3] = (l[..., 3] * lf).astype(np.uint8)
         self.leg = l
         thw = 1 - skin.ss((sy - self.KNEE[1] - 8) / 30.0); snw = skin.ss((sy - self.KNEE[1] + 22) / 30.0)
         def part(img, w):
             o = img.copy(); o[..., 3] = (img[..., 3] * w).astype(np.uint8); return o
         self.thigh = part(l, thw); self.shin = part(l, snw)
-        dk = lambda im: np.concatenate([(im[..., :3] * 0.88).astype(np.uint8), im[..., 3:4]], 2)
+        dk = lambda im: np.concatenate([(im[..., :3] * 0.78).astype(np.uint8), im[..., 3:4]], 2)
         self.fthigh = dk(self.thigh); self.fshin = dk(self.shin)
         # body: everything above the legs (head included), fading out over the thighs
         bf = 1 - skin.ss((sy - hipline + 4) / 18.0)

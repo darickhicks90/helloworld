@@ -43,7 +43,7 @@ def single_leg(img, y0=560, y1=1000):
     # back edge of the near leg (traced by hand over the model): everything behind it is the
     # far leg and the buttock, which the far-leg layer and the body draw instead
     by = [600, 612, 640, 660, 700, 740, 800, 860, 920, 960, 1000, 1030]
-    bx = [345, 338, 300, 262, 250, 250, 256, 294, 314, 310, 292, 284]
+    bx = [345, 340, 310, 282, 268, 262, 262, 294, 314, 310, 292, 284]
     yy, xx = np.mgrid[0:H, 0:W]
     edge = np.interp(yy, by, bx)
     keep = 1 - ss((xx - edge + 2) / 5.0)

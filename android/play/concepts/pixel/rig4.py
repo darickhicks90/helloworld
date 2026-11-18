@@ -18,8 +18,9 @@ S = 0.5
 def P(c, p): return (p[0] * S + c, p[1] * S + c)
 
 class Side:
-    HIP, KNEE, SHOULDER, ELBOW, NECK, HAND = (235, 610), (205, 880), (195, 320), (232, 545), (175, 262), (252, 762)
+    HIP, KNEE, SHOULDER, ELBOW, NECK, HAND = (235, 610), (232, 875), (195, 320), (232, 545), (175, 262), (252, 762)
     ARM = rig3.Side.ARM
+    ANKLE = (256, 1008)
     def __init__(self):
         raw = Image.open('side.png')
         noarm = self._inpaint(raw)
@@ -34,6 +35,9 @@ class Side:
         legsrc = canvas(Image.fromarray(legfix.single_leg(noarm)))   # one clean leg (no overlap seams)
         yy, xx = np.mgrid[0:self.H, 0:self.W]
         sy = (yy - pad) / S; sx = (xx - pad) / S          # source (side.png) coordinates
+        # round joint caps: both pieces of a joint share a soft disc around the pivot, so the
+        # overlap looks the same at any angle (no straight cut shows when the joint bends)
+        def disc(c, R): return 1 - skin.ss((np.hypot(sx - c[0], sy - c[1]) - R + 3) / 6.0)
         # arm: the painted-out region of the original, with a soft top so it melts into the shoulder
         armM = Image.new('L', raw.size, 0); ImageDraw.Draw(armM).polygon(self.ARM, fill=255)
         armM = np.asarray(Image.fromarray(np.asarray(armM)).resize(sz, Image.LANCZOS).filter(ImageFilter.GaussianBlur(1.5))).astype(float) / 255
@@ -50,6 +54,7 @@ class Side:
         fore_w = skin.ss((sA - sE + 16) / 22.0)
         # the top of the upper arm melts into the shoulder over a long, soft fade
         upper_w = upper_w * skin.ss((sA + 30) / 75.0)
+        upper_w = np.maximum(upper_w, disc(self.ELBOW, 40) * skin.ss((sA + 30) / 75.0)); fore_w = np.maximum(fore_w, disc(self.ELBOW, 40))
         # round the fingertips: soften the hand end into a rounded silhouette
         sHand = (self.HAND[0] - shx) * d[0] + (self.HAND[1] - shy) * d[1]
         endz = skin.ss((sA - sHand + 70) / 30.0)
@@ -61,15 +66,18 @@ class Side:
         # the hip line: front of the thigh (low) up through the hip joint to the buttocks (lower at the back)
         hipline = np.interp(sx, [0, 110, 235, 330, 400], [575, 590, 612, 650, 660])
         # legs: everything below the hip line, faded in so the top tucks under the body
-        lf = skin.ss((sy - hipline + 45) / 40.0)
+        lf = np.maximum(skin.ss((sy - hipline + 45) / 40.0), disc(self.HIP, 70) * skin.ss((sy - self.HIP[1] + 6) / 12.0))   # lower half: what's above the hip stays with the body
         l = legsrc.copy(); l[..., 3] = (l[..., 3] * lf).astype(np.uint8)
         self.leg = l
-        thw = 1 - skin.ss((sy - self.KNEE[1] - 8) / 30.0); snw = skin.ss((sy - self.KNEE[1] + 22) / 30.0)
+        kd = disc(self.KNEE, 62); ad = disc(self.ANKLE, 50)
+        thw = np.maximum(1 - skin.ss((sy - self.KNEE[1] - 8) / 30.0), kd); snw = np.maximum(skin.ss((sy - self.KNEE[1] + 22) / 30.0), kd)
+        snw = snw * np.maximum(1 - skin.ss((sy - self.ANKLE[1] - 6) / 20.0), ad)
+        ftw = np.maximum(skin.ss((sy - self.ANKLE[1] + 10) / 20.0), ad)
         def part(img, w):
             o = img.copy(); o[..., 3] = (img[..., 3] * w).astype(np.uint8); return o
-        self.thigh = part(l, thw); self.shin = part(l, snw)
+        self.thigh = part(l, thw); self.shin = part(l, snw); self.foot = part(l, ftw)
         dk = lambda im: np.concatenate([(im[..., :3] * 0.78).astype(np.uint8), im[..., 3:4]], 2)
-        self.fthigh = dk(self.thigh); self.fshin = dk(self.shin)
+        self.fthigh = dk(self.thigh); self.fshin = dk(self.shin); self.ffoot = dk(self.foot)
         # body: everything above the legs (head included), fading out over the thighs
         bf = 1 - skin.ss((sy - hipline + 4) / 18.0)
         bd = body.copy(); bd[..., 3] = (bd[..., 3] * bf).astype(np.uint8)
@@ -124,11 +132,11 @@ class Side:
         wh = skin.ss((up + 40) / 120.0) * (1 - skin.ss((sx - 250) / 120.0))
         return [1 - wh, wh]
 
-    def pose(self, torso=0, head=0, nsh=-8, nel=0, fsh=-4, fel=0, nth=0, nsn=0, fth=0, fsn=0):
+    def pose(self, torso=0, head=0, nsh=-8, nel=0, fsh=-4, fel=0, nth=0, nsn=0, fth=0, fsn=0, nft=0, fft=0):
         """Limbs move as solid pieces (they never crumple) and fade into the body at the shoulder
         and hip; the neck is skinned. Upper arm and forearm overlap at the elbow, thigh and shin at the knee."""
         c = self.PAD
-        H_, K_, SH_, EL_, N_ = (P(c, p) for p in (self.HIP, self.KNEE, self.SHOULDER, self.ELBOW, self.NECK))
+        H_, K_, SH_, EL_, N_, AN_ = (P(c, p) for p in (self.HIP, self.KNEE, self.SHOULDER, self.ELBOW, self.NECK, self.ANKLE))
         T = skin.rot(torso, *H_)
         out = np.zeros((self.H, self.W, 4), np.float32)
         def over(layer):
@@ -145,14 +153,14 @@ class Side:
         def arm(up, fo, sh, el):
             A = T @ skin.rot(sh, *SH_); F = A @ skin.rot(el, *EL_)
             return rigid(up, A), rigid(fo, F), A, F
-        def leg(th_l, sn_l, th, sn, off=(0.0, 0.0)):
+        def leg(th_l, sn_l, ft_l, th, sn, ft, off=(0.0, 0.0)):
             O = np.eye(3); O[0, 2], O[1, 2] = off[0] * S, off[1] * S
-            Th = O @ skin.rot(th, *H_); Sn = Th @ skin.rot(sn, *K_)
-            return rigid(th_l, Th), rigid(sn_l, Sn)
+            Th = O @ skin.rot(th, *H_); Sn = Th @ skin.rot(sn, *K_); Ft = Sn @ skin.rot(ft, *AN_)
+            return rigid(th_l, Th), rigid(sn_l, Sn), rigid(ft_l, Ft)
         fu, ff, fA, fF = arm(self.fupper, self.ffore, fsh, fel)
         over(fu); over(ff)
-        a1, a2 = leg(self.fthigh, self.fshin, fth, fsn, (38, -6)); over(a2); over(a1)
-        b1, b2 = leg(self.thigh, self.shin, nth, nsn); over(b2); over(b1)
+        a1, a2, a3 = leg(self.fthigh, self.fshin, self.ffoot, fth, fsn, fft, (38, -6)); over(a3); over(a2); over(a1)
+        b1, b2, b3 = leg(self.thigh, self.shin, self.foot, nth, nsn, nft); over(b3); over(b2); over(b1)
         over(skin.warp(self.body, [T, T @ skin.rot(head, *N_)], self.w_body))
         nu, nf, nA, nF = arm(self.upper, self.fore, nsh, nel)
         over(nu); over(nf)
@@ -161,32 +169,32 @@ class Side:
         return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8)), info
 
 class Back:
-    """Back views: the arms come down from the T-pose, skinned at the shoulder (they stay attached)."""
+    """Back views. The upper body is ONE skinned layer: each arm swings in from the A-pose about
+    its shoulder, and the shoulder fur stretches with it (linear blend skinning), so there is no
+    cut at the shoulder. The arm itself is a second layer warped by the very same field and drawn
+    on top, so where it swings in over the body's side it stays in front."""
     def __init__(self, name, arms, lhang, rhang, crotch):
         raw = Image.open(name); self.src = raw
         sz = (round(raw.width * S), round(raw.height * S)); self.PAD = pad = 300
         self.W, self.H = sz[0] + 2 * pad, sz[1] + 2 * pad
         c = Image.new('RGBA', (self.W, self.H)); c.paste(raw.resize(sz, Image.LANCZOS), (pad, pad)); full = np.asarray(c).copy()
         yy, xx = np.mgrid[0:self.H, 0:self.W]; sx = (xx - pad) / S; sy = (yy - pad) / S
-        self.arms = []; body_alpha = full[..., 3].astype(float)
+        self.armdefs = []; body_alpha = full[..., 3].astype(float); armlayer = np.zeros_like(full)
         for poly, sh, hand, hang in ((arms[0][0], arms[0][1], arms[0][2], lhang), (arms[1][0], arms[1][1], arms[1][2], rhang)):
             m = Image.new('L', raw.size, 0); ImageDraw.Draw(m).polygon(poly, fill=255)
+            mw = np.asarray(m.filter(ImageFilter.MaxFilter(41)).resize(sz, Image.LANCZOS).filter(ImageFilter.GaussianBlur(10))).astype(float) / 255
             m = np.asarray(m.resize(sz, Image.LANCZOS).filter(ImageFilter.GaussianBlur(2))).astype(float) / 255
             M = np.zeros((self.H, self.W)); M[pad:pad + sz[1], pad:pad + sz[0]] = m
+            MW = np.zeros((self.H, self.W)); MW[pad:pad + sz[1], pad:pad + sz[0]] = mw
             d = (hand[0] - sh[0], hand[1] - sh[1]); L = math.hypot(*d); d = (d[0] / L, d[1] / L)
-            s = (sx - sh[0]) * d[0] + (sy - sh[1]) * d[1]
-            fade = skin.ss((s + 30) / 40.0)
-            layer = full.copy(); layer[..., 3] = (full[..., 3] * M * fade).astype(np.uint8)
-            body_alpha = body_alpha * (1 - M * skin.ss((s + 10) / 30.0))
-            self.arms.append((layer, sh, d, hang))
+            sA = (sx - sh[0]) * d[0] + (sy - sh[1]) * d[1]
+            # the arm layer starts a little past the shoulder; the body keeps everything before it
+            af = M * skin.ss((sA - 20) / 40.0)
+            armlayer[..., :3] = np.where(af[..., None] > 0.01, full[..., :3], armlayer[..., :3])
+            armlayer[..., 3] = np.maximum(armlayer[..., 3], (full[..., 3] * af)).astype(np.uint8)
+            body_alpha = body_alpha * (1 - M * skin.ss((sA - 62) / 20.0))   # only once the arm layer is opaque
+            self.armdefs.append(((sh[0] * S + pad, sh[1] * S + pad), d, sh, hang, MW))
         b = full.copy(); b[..., 3] = np.clip(body_alpha, 0, 255).astype(np.uint8)
-        # round the shoulders where the arms came away
-        bi = Image.fromarray(b); al = bi.getchannel('A')
-        top = Image.new('L', bi.size, 0); ImageDraw.Draw(top).rectangle([0, 0, self.W, int(pad + (arms[0][1][1] + 160) * S)], fill=255)
-        dome = al.filter(ImageFilter.GaussianBlur(14)).point(lambda v: 255 if v > 140 else 0)
-        from PIL import ImageChops
-        bi.putalpha(Image.composite(ImageChops.multiply(dome, al), al, top))
-        b = np.asarray(bi).copy()
         # legs, split at the crotch, so each foot can step during a turn
         cx_, cy_ = crotch
         legf = skin.ss((sy - cy_ + 70) / 40.0)
@@ -197,13 +205,47 @@ class Back:
             self.legs.append(l)
         bodyf = 1 - skin.ss((sy - cy_ - 10) / 20.0)
         b[..., 3] = (b[..., 3] * bodyf).astype(np.uint8)
-        self.body = b
+        self.body = b; self.armlayer = armlayer
         self.crotch = (cx_ * S + pad, cy_ * S + pad)
         self.hipx = ((arms[0][1][0] + arms[1][1][0]) / 2) * S + pad
 
+    def _weights(self):
+        pad = self.PAD; defs = self.armdefs
+        def w(x, y):
+            sx = (x - pad) / S; sy = (y - pad) / S
+            ws = []
+            for piv, d, sh, hang, MW in defs:
+                sA = (sx - sh[0]) * d[0] + (sy - sh[1]) * d[1]
+                # the arm (dilated into the armpit gap), and everything outward of its axis, belongs to the
+                # arm (so the inverse warp has one answer and nothing is left behind)
+                t = (d[0] * (sy - sh[1]) - d[1] * (sx - sh[0])) * (-1 if d[0] > 0 else 1)
+                xi = np.clip(np.round(x).astype(int), 0, self.W - 1); yi = np.clip(np.round(y).astype(int), 0, self.H - 1)
+                ws.append(np.maximum(MW[yi, xi], skin.ss(t / 30.0)) * skin.ss((sA + 50) / 110.0))
+            tot = ws[0] + ws[1]; sc = np.where(tot > 1, 1 / np.maximum(tot, 1e-6), 1.0)
+            ws = [ws[0] * sc, ws[1] * sc]
+            return [1 - ws[0] - ws[1]] + ws
+        return w
+
+    def _arm_weights(self):
+        """For the arm layer alone: each half of the picture follows its arm (ramping in from the
+        shoulder exactly as the body's field does inside the arm), so a hand that swings in front of
+        the hips is still found."""
+        pad = self.PAD; defs = self.armdefs; mid = self.hipx
+        def w(x, y):
+            sx = (x - pad) / S; sy = (y - pad) / S; ws = []
+            for k, (piv, d, sh, hang, MW) in enumerate(defs):
+                sA = (sx - sh[0]) * d[0] + (sy - sh[1]) * d[1]
+                half = (x < mid) if k == 0 else (x >= mid)
+                ws.append(skin.ss((sA + 50) / 110.0) * half)
+            return [1 - ws[0] - ws[1]] + ws
+        return w
+
     def pose(self, tuck=0.0, lift=(0.0, 0.0)):
-        """tuck: hands in toward the chest; lift: how far each foot (left, right as seen) is raised in a step."""
+        """tuck: hands in toward the body; lift: how far each foot (left, right as seen) is raised in a step."""
         out = np.zeros((self.H, self.W, 4), np.float32)
+        def over(l):
+            a = l[..., 3:4].astype(np.float32) / 255
+            out[..., :3] = l[..., :3] * a + out[..., :3] * (1 - a); out[..., 3] = np.maximum(out[..., 3], l[..., 3])
         for side, l in enumerate(self.legs):
             u = lift[side]
             if u > 0.01:
@@ -215,27 +257,21 @@ class Back:
                 pm = np.concatenate([f[..., :3] * al, f[..., 3:4]], 2)
                 r = cv2.warpAffine(pm, M[:2].astype(np.float32), (self.W, self.H), flags=cv2.INTER_LINEAR, borderValue=0)
                 alr = r[..., 3:4] / 255; l = np.zeros_like(l); l[..., :3] = np.clip(np.where(alr > 1e-3, r[..., :3] / np.maximum(alr, 1e-3), 0), 0, 255); l[..., 3] = np.clip(r[..., 3], 0, 255)
-            a = l[..., 3:4].astype(np.float32) / 255
-            out[..., :3] = l[..., :3] * a + out[..., :3] * (1 - a); out[..., 3] = np.maximum(out[..., 3], l[..., 3])
-        a = self.body[..., 3:4].astype(np.float32) / 255
-        out[..., :3] = self.body[..., :3] * a + out[..., :3] * (1 - a); out[..., 3] = np.maximum(out[..., 3], self.body[..., 3])
-        for layer, sh, d, hang in self.arms:
-            ang = hang + (12 * tuck if hang > 0 else -12 * tuck)
-            piv = (sh[0] * S + self.PAD, sh[1] * S + self.PAD)
-            bones = [np.eye(3), skin.rot(ang, *piv)]
-            def w(x, y, sh=sh, d=d):
-                s = ((x - self.PAD) / S - sh[0]) * d[0] + ((y - self.PAD) / S - sh[1]) * d[1]
-                w1 = skin.ss((s + 10) / 70.0); return [1 - w1, w1]
-            a = skin.warp(layer, bones, w).astype(np.float32)
-            al = a[..., 3:4] / 255
-            out[..., :3] = a[..., :3] * al + out[..., :3] * (1 - al); out[..., 3] = np.maximum(out[..., 3], a[..., 3])
+            over(l)
+        bones = [np.eye(3)]
+        for piv, d, sh, hang, MW in self.armdefs:
+            ang = hang + (8 * tuck if hang > 0 else -8 * tuck)
+            bones.append(skin.rot(ang, *piv))
+        w = self._weights()
+        over(skin.warp(self.body, bones, w))
+        over(skin.warp(self.armlayer, bones, self._arm_weights()))
         return Image.fromarray(out.astype(np.uint8)), dict(hip=(self.hipx, 0))
 
 def back():
     L = [(300, 240), (330, 80), (-40, 380), (-40, 640), (90, 640), (110, 560)]
     R = [(906 - x, y) for x, y in L]
-    return Back('back.png', ((L, (300, 205), (40, 500)), (R, (606, 205), (866, 500))), 40, -40, (453, 600))
+    return Back('back.png', ((L, (300, 205), (40, 500)), (R, (606, 205), (866, 500))), 20, -20, (453, 600))
 def back34():
     L = [(330, 330), (372, 150), (-40, 330), (-40, 700), (90, 700), (140, 620)]
     R = [(690, 380), (640, 150), (1010, 300), (1010, 700), (900, 700), (860, 640)]
-    return Back('back34.png', ((L, (320, 235), (60, 580)), (R, (690, 268), (930, 590))), 35, -35, (496, 690))
+    return Back('back34.png', ((L, (320, 235), (60, 580)), (R, (690, 268), (930, 590))), 18, -18, (496, 690))

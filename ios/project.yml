@@ -1,0 +1,47 @@
+# Generates FiveEyeYeti.xcodeproj (run `xcodegen generate` in this folder).
+# The sound core comes from the Kotlin Multiplatform module in ../android/shared:
+# build it first with `./gradlew :shared:assembleSharedDebugXCFramework` in ../android.
+name: FiveEyeYeti
+options:
+  bundleIdPrefix: app.foxbox
+  deploymentTarget:
+    iOS: "16.0"
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MARKETING_VERSION: "1.6.0"
+    CURRENT_PROJECT_VERSION: "17"
+targets:
+  FiveEyeYeti:
+    type: application
+    platform: iOS
+    sources:
+      - Sources
+      - path: Resources
+        buildPhase: resources
+        excludes: [Info.plist]
+    info:
+      path: Resources/Info.plist
+      properties:
+        CFBundleDisplayName: 5 Eye Yeti
+        UILaunchScreen: {}
+        UIRequiresFullScreen: true
+        UIStatusBarHidden: true
+        UIViewControllerBasedStatusBarAppearance: false
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UIBackgroundModes: [audio]
+        NSMicrophoneUsageDescription: 5 Eye Yeti records from the microphone into its samplers and audio tracks.
+        UIAppFonts: [PressStart2P-Regular.ttf, PixelifySans.ttf]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.foxbox.fiveeyeyeti
+        PRODUCT_NAME: FiveEyeYeti
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: "1,2"
+        OTHER_LDFLAGS: ["-lc++"]
+        ENABLE_BITCODE: NO
+    dependencies:
+      - framework: ../android/shared/build/XCFrameworks/debug/Shared.xcframework
+        embed: false
+      - sdk: AVFoundation.framework

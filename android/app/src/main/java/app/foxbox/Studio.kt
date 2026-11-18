@@ -329,7 +329,7 @@ object Studio : Transport.Listener, MidiInput.Sink {
     fun refreshLive() {
         if (!isOpen) return
         for (ch in 0 until 3) { Audio.liveArm[ch] = armed[ch]; Audio.liveInput[ch] = AudioPrefs.planeInput(ch) }
-        val take = t.audioIn
+        val take = t.audioIn as AudioIn?
         if (take != null) { monitorIn?.close(); monitorIn = null; Audio.liveIn = take; return }
         val need = tape != null && armed.any { it }
         if (need && monitorIn == null) {
@@ -491,7 +491,7 @@ object Studio : Transport.Listener, MidiInput.Sink {
     }
 
     override fun onAudioTakeEnded() {
-        val input = t.audioIn ?: return
+        val input = t.audioIn as? AudioIn ?: return
         t.audioIn = null
         Audio.liveIn = null
         val chans = armed.indices.filter { armed[it] && project.planes[it] }

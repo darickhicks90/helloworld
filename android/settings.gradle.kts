@@ -14,3 +14,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "FoxBox"
 include(":app")
+include(":shared")

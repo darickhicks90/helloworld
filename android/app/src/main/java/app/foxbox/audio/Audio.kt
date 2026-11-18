@@ -4,13 +4,6 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
 import android.os.Process
-import app.foxbox.engines.Bumble
-import app.foxbox.engines.Gusts
-import app.foxbox.engines.Leaves
-import app.foxbox.engines.Minds
-import app.foxbox.engines.Reflections
-import app.foxbox.fx.FlowerRack
-import app.foxbox.seq.Transport
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.math.abs
 import kotlin.math.max
@@ -23,16 +16,17 @@ import kotlin.math.max
 object Audio {
     const val BLOCK = 64
 
-    val transport = Transport()
-    val gusts = Gusts()
-    val reflections = Reflections()
-    val leaves = Leaves()
-    val minds = Minds()
-    val bumble = Bumble()
-    val pickup = app.foxbox.engines.Pickup()
+    // The engines, transport and flower rack live in the shared core (also used by the iOS app).
+    val transport = Core.transport
+    val gusts = Core.gusts
+    val reflections = Core.reflections
+    val leaves = Core.leaves
+    val minds = Core.minds
+    val bumble = Core.bumble
+    val pickup = Core.pickup
     /** Every engine FoxBox has (one per block type). */
-    val engines: List<Engine> = listOf(gusts, reflections, leaves, minds, bumble, pickup)
-    fun engine(id: String): Engine = engines.first { it.id == id }
+    val engines: List<Engine> = Core.engines
+    fun engine(id: String): Engine = Core.engine(id)
     /** Engines of the blocks in the current session (audio-thread snapshot). */
     @Volatile var active: Array<Engine> = arrayOf(gusts, minds)
         private set
@@ -46,7 +40,7 @@ object Audio {
             transport.engines = list
         }
     }
-    val flowers = FlowerRack()
+    val flowers = Core.flowers
 
     @Volatile var masterVolume = 0.7f
     @Volatile var peak = 0f
@@ -69,7 +63,6 @@ object Audio {
 
     init {
         transport.engines = active.toList()
-        leaves.reflectionsSample = { reflections.sample }
     }
 
     fun post(fn: () -> Unit) { queue.add(Runnable(fn)) }

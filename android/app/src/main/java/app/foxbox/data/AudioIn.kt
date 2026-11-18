@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * or the built-in mic) in stereo, so each biplane can take input 1, input 2
  * or both. The audio thread marks where the take starts and ends.
  */
-class AudioIn(context: Context, deviceId: Int, private val keep: Boolean = true) {
+class AudioIn(context: Context, deviceId: Int, private val keep: Boolean = true) : app.foxbox.seq.TakeInput {
     // ---- live monitor: a lock-free ring the audio thread reads (for mixing down to tape)
     private val ringL = FloatArray(16384); private val ringR = FloatArray(16384)
     @Volatile private var ringW = 0
@@ -79,8 +79,8 @@ class AudioIn(context: Context, deviceId: Int, private val keep: Boolean = true)
     }
 
     /** Called from the audio thread when the take starts / ends; `latencyFrames` compensates the round trip. */
-    fun markStart(latencyFrames: Int) { startFrame = maxOf(0, captured.get() - latencyFrames) }
-    fun markEnd(latencyFrames: Int) { endFrame = maxOf(0, captured.get() - latencyFrames) }
+    override fun markStart(latencyFrames: Int) { startFrame = maxOf(0, captured.get() - latencyFrames) }
+    override fun markEnd(latencyFrames: Int) { endFrame = maxOf(0, captured.get() - latencyFrames) }
 
     /** Stop and return the take for input 0 (left), 1 (right) or 2 (both mixed). */
     fun finish(): Array<FloatArray> {

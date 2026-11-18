@@ -65,5 +65,6 @@ android {
 }
 
 dependencies {
-    // No libraries needed: 5IY uses only the Android framework.
+    // The sound core (engines, sequencer, flowers) shared with the iOS app.
+    implementation(project(":shared"))
 }

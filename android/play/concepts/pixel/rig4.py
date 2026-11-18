@@ -79,7 +79,10 @@ class Side:
         dk = lambda im: np.concatenate([(im[..., :3] * 0.78).astype(np.uint8), im[..., 3:4]], 2)
         self.fthigh = dk(self.thigh); self.fshin = dk(self.shin); self.ffoot = dk(self.foot)
         # body: everything above the legs (head included), fading out over the thighs
-        bf = 1 - skin.ss((sy - hipline + 4) / 18.0)
+        # the belly in front and the buttock behind hang a little lower than the hip line, so a thigh
+        # swinging forward or back slides under them instead of opening a gap at the hip
+        overhang = np.interp(sx, [0, 140, 200, 270, 330, 420], [26, 26, 0, 0, 24, 24])
+        bf = 1 - skin.ss((sy - hipline - overhang + 4) / 18.0)
         bd = body.copy(); bd[..., 3] = (bd[..., 3] * bf).astype(np.uint8)
         self.body = bd
         # joint directions for the arm weights
@@ -280,13 +283,24 @@ class Back:
         w = self._weights()
         over(skin.warp(self.body, bones, w))
         over(skin.warp(self.armlayer, bones, self._arm_weights()))
-        return Image.fromarray(out.astype(np.uint8)), dict(hip=(self.hipx, 0))
+        # where a hanging arm rests against the body's side only a hairline of sky would show:
+        # fill it with the fur around it in shadow (a crease, as on the model), never see-through
+        al = out[..., 3] / 255; solid = (al > 0.5).astype(np.uint8)
+        closed = cv2.morphologyEx(solid, cv2.MORPH_CLOSE, np.ones((11, 11), np.uint8)) > 0
+        crotch_y = int(self.crotch[1])
+        gap = closed & (al < 0.9); gap[crotch_y - 8:, :] = False          # leave the gap between the legs alone
+        if gap.any():
+            w = cv2.GaussianBlur(al, (0, 0), 3); col = cv2.GaussianBlur(out[..., :3] * al[..., None], (0, 0), 3) / np.maximum(w, 1e-3)[..., None]
+            k = gap.astype(np.float32) * (1 - al)
+            out[..., :3] = out[..., :3] * (1 - k[..., None]) + col * 0.62 * k[..., None]
+            out[..., 3] = np.maximum(out[..., 3], gap * 255)
+        return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8)), dict(hip=(self.hipx, 0))
 
 def back():
     L = [(300, 240), (330, 80), (-40, 380), (-40, 640), (90, 640), (110, 560)]
     R = [(906 - x, y) for x, y in L]
-    return Back('back.png', ((L, (300, 205), (40, 500)), (R, (606, 205), (866, 500))), 20, -20, (453, 600))
+    return Back('back.png', ((L, (300, 205), (40, 500)), (R, (606, 205), (866, 500))), 23, -23, (453, 600))
 def back34():
     L = [(330, 330), (372, 150), (-40, 330), (-40, 700), (90, 700), (140, 620)]
     R = [(690, 380), (640, 150), (1010, 300), (1010, 700), (900, 700), (860, 640)]
-    return Back('back34.png', ((L, (320, 235), (60, 580)), (R, (690, 268), (930, 590))), 18, -18, (496, 690))
+    return Back('back34.png', ((L, (320, 235), (60, 580)), (R, (690, 268), (930, 590))), 21, -21, (496, 690))

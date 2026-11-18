@@ -28,8 +28,6 @@ class HallScreen(c: Context) : PixelView(c) {
         // the handheld: the same grey console plastic and coloured keys as the app's parameter panels
         val SHELL = Snes.FACE; val SHELL_D = Snes.SHADE; val SHELL_L = Snes.HI
         const val BEZEL = 0xFF3A3A48.toInt(); const val KEY = 0xFF2A2A34.toInt()
-        /** SELECT steps through these tints of the hall (white, then pale blue, rose, mint). */
-        val TINTS = intArrayOf(0x00000000, 0x2A6A8CE0, 0x2AE07A8A, 0x2A5CC88A)
         val RANT = listOf(
             "#@%&!! WHO POKED MY EYE?!",
             "YOU! YEAH, YOU! I SAW THAT. WITH ALL FIVE OF THEM.",
@@ -75,8 +73,9 @@ class HallScreen(c: Context) : PixelView(c) {
     private var facing = 1; private var walkT = 0f
     private var dirX = 0; private var dirY = 0
     private var talking = true; private var line = 0; private var shown = 0f
-    /** START pauses; SELECT changes the hall's tint; the XY pad flies a firefly about the hall. */
-    private var paused = false; private var tint = 0
+    /** The XY pad flies a firefly about the hall. L and R are spare game buttons for the mini game to come. */
+    var onL: (() -> Unit)? = null
+    var onR: (() -> Unit)? = null
     private var flyX = 120f; private var flyY = 60f; private var flyTX = 120f; private var flyTY = 60f
     /** Back to the music (set by the activity: Clibbins). */
     var onExit: (() -> Unit)? = null
@@ -95,7 +94,6 @@ class HallScreen(c: Context) : PixelView(c) {
     }
 
     private fun update(dt: Float) {
-        if (paused) return
         // the firefly drifts after where the XY pad points, with a little wobble
         flyX += (flyTX - flyX) * minOf(1f, dt * 4f); flyY += (flyTY - flyY) * minOf(1f, dt * 4f)
         if (dirX != 0 || dirY != 0) {
@@ -233,12 +231,8 @@ class HallScreen(c: Context) : PixelView(c) {
         // whoever is lower on screen is drawn in front
         drawHero()
         drawFly(time)
-        if (TINTS[tint] != 0) { p.color = TINTS[tint]; sc.drawRect(0f, 0f, W.toFloat(), H.toFloat(), p) }
         drawTalk(time)
-        if (paused) {
-            box(44f, 60f, 116f, 80f, INK); box(46f, 62f, 114f, 78f, WHITE)
-            sc.drawText("PAUSE", 60f, 74f, font)
-        }
+
 
         val w = width.toFloat(); val h = height.toFloat()
         c.drawColor(SHELL)
@@ -275,12 +269,12 @@ class HallScreen(c: Context) : PixelView(c) {
         exitRect.set(Px.dp(10f), Px.dp(8f), Px.dp(116f), Px.dp(40f))
         pill(c, exitRect, "◀ Music", Snes.GREEN, exitDown)
 
-        // D-pad, left, with SELECT above it
+        // D-pad, left, with the L button above it
         val ds = minOf(Px.dp(150f), sl - Px.dp(40f)).coerceAtLeast(Px.dp(96f))
         val dcx = sl / 2; val dcy = h * 0.62f
         pad.set(dcx - ds / 2, dcy - ds / 2, dcx + ds / 2, dcy + ds / 2)
         selRect.set(dcx - Px.dp(46f), pad.top - Px.dp(58f), dcx + Px.dp(46f), pad.top - Px.dp(28f))
-        pill(c, selRect, "SELECT", Snes.PURPLE, selDown)
+        pill(c, selRect, "L", Snes.PURPLE, selDown)
         val arm = ds / 3
         shellP.color = SHELL_D; c.drawCircle(dcx, dcy, ds * 0.62f, shellP)
         shellP.color = KEY
@@ -292,13 +286,13 @@ class HallScreen(c: Context) : PixelView(c) {
             shellP.color = if (lit) 0xFF8A8A98.toInt() else 0xFF4A4A56.toInt()
             c.drawCircle(dcx + ax * ds * 0.36f, dcy + ay * ds * 0.36f, tri, shellP)
         }
-        // A and B, right, on a slant, with START above them
+        // A and B, right, on a slant, with the R button above them
         val r = minOf(Px.dp(34f), (w - sl - sw) / 6f).coerceAtLeast(Px.dp(24f))
         val rcx = sl + sw + (w - sl - sw) / 2
         aKey.set(rcx + r * 0.3f, h * 0.55f - r, rcx + r * 2.3f, h * 0.55f + r)
         bKey.set(rcx - r * 2.1f, h * 0.69f - r, rcx - r * 0.1f, h * 0.69f + r)
         startRect.set(rcx - Px.dp(46f), aKey.top - Px.dp(58f), rcx + Px.dp(46f), aKey.top - Px.dp(28f))
-        pill(c, startRect, if (paused) "RESUME" else "START", Snes.YELLOW, startDown)
+        pill(c, startRect, "R", Snes.GREEN, startDown)
         shellP.color = SHELL_D; c.drawRoundRect(bKey.left - r * 0.4f, aKey.top - r * 0.3f, aKey.right + r * 0.4f, bKey.bottom + r * 0.3f, r, r, shellP)
         for ((k, s) in listOf(aKey to "A", bKey to "B")) {
             val col = if (s == "A") Snes.RED else Snes.YELLOW
@@ -321,7 +315,7 @@ class HallScreen(c: Context) : PixelView(c) {
         val rad = r.height() / 2
         shellP.color = Snes.INK; c.drawRoundRect(r.left, r.top, r.right, r.bottom + Px.dp(2f), rad, rad, shellP)
         shellP.color = if (down) darker(col) else col; c.drawRoundRect(r.left + Px.dp(2f), r.top + Px.dp(2f), r.right - Px.dp(2f), r.bottom - Px.dp(1f), rad, rad, shellP)
-        label.textSize = Px.dp(10f); label.color = textOn(col)
+        label.textSize = Px.dp(if (text.length <= 2) 13f else 10f); label.color = textOn(col)
         c.textCentered(text, r.centerX(), r.centerY(), label)
     }
 
@@ -343,7 +337,6 @@ class HallScreen(c: Context) : PixelView(c) {
     }
 
     private fun pressA() {
-        if (paused) return
         if (talking) {
             if (shown < RANT[line].length) shown = RANT[line].length.toFloat()
             else if (line < RANT.size - 1) { line++; shown = 0f } else { talking = false }
@@ -363,8 +356,8 @@ class HallScreen(c: Context) : PixelView(c) {
                 val x = e.getX(i); val y = e.getY(i)
                 when {
                     exitRect.contains(x, y) -> { exitDown = true; performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP) }
-                    selRect.contains(x, y) -> { selDown = true; tint = (tint + 1) % TINTS.size; performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP) }
-                    startRect.contains(x, y) -> { startDown = true; paused = !paused; performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP) }
+                    selRect.contains(x, y) -> { selDown = true; onL?.invoke(); performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP) }
+                    startRect.contains(x, y) -> { startDown = true; onR?.invoke(); performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP) }
                     xyRect.contains(x, y) -> { xyPointer = e.getPointerId(i); aimFly(x, y) }
                     x < pad.right + pad.width() * 0.3f && y > pad.top - pad.height() * 0.3f && y < pad.bottom + pad.height() * 0.3f -> { padPointer = e.getPointerId(i); steer(x, y) }
                     near(aKey, x, y) -> { aDown = true; pressA(); performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP) }

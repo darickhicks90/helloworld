@@ -46,7 +46,9 @@ class ProjectScreen(c: Context, private val onOpen: (Project) -> Unit, private v
     private val fps = story.getInt("fps")
     private val frameRects = story.getJSONArray("frames").let { a -> Array(a.length()) { i -> a.getJSONArray(i).let { r -> IntArray(6) { r.getInt(it) } } } }
     private val steps = story.getJSONArray("steps").let { a -> IntArray(a.length()) { a.getInt(it) } }
-    private val fly = story.getJSONArray("fly").let { a -> Array(a.length()) { i -> a.getJSONArray(i).let { r -> floatArrayOf(r.getDouble(0).toFloat(), r.getDouble(1).toFloat(), r.getDouble(2).toFloat()) } } }
+    /** The firefly he chases, per step: x, y, brightness, state (0 free, 1 in his hands, 2 hidden in his hands, 3 in the ground, 4 a new one arriving). */
+    private val fly = story.getJSONArray("fly").let { a -> Array(a.length()) { i -> a.getJSONArray(i).let { r -> floatArrayOf(r.getDouble(0).toFloat(), r.getDouble(1).toFloat(), r.getDouble(2).toFloat(), r.optDouble(3, 0.0).toFloat()) } } }
+    private val digs = story.optJSONArray("digs")?.let { a -> FloatArray(a.length()) { a.getDouble(it).toFloat() } } ?: FloatArray(0)
     private val hole = story.getJSONArray("hole").let { floatArrayOf(it.getDouble(0).toFloat(), it.getDouble(1).toFloat()) }
     private val tPlace = story.getDouble("place").toFloat()
     private val scoops = story.getJSONArray("scoops").let { a -> FloatArray(a.length()) { a.getDouble(it).toFloat() } }
@@ -77,13 +79,17 @@ class ProjectScreen(c: Context, private val onOpen: (Project) -> Unit, private v
         fun sx(x: Float) = (x - left) * k
         fun sy(y: Float) = (y - top) * k
         fun px(x: Int, y: Int, col: Int, size: Int = 1) { dot.color = col; c.drawRect(sx(x.toFloat()), sy(y.toFloat()), sx((x + size).toFloat()), sy((y + size).toFloat()), dot) }
-        // the little grave: a dark hole once he lays the firefly in, then a mound that grows with each scoop
+        // the little grave: a hole once he starts scratching, then a mound that grows with each scoop
+        if (digs.isNotEmpty() && t >= digs[0] && t < tPlace) {
+            val hx = hole[0].toInt(); val hy = hole[1].toInt(); val n = digs.count { t >= it }
+            for (x in -2 - n..2 + n) px(hx + x, hy, DIRT[0]); for (x in -1 - n..1 + n) px(hx + x, hy - 1, DIRT[1])
+        }
         if (t >= tPlace) {
             val hx = hole[0].toInt(); val hy = hole[1].toInt()
             val filled = scoops.count { t >= it }
             if (filled == 0) { for (x in -3..3) px(hx + x, hy, DIRT[0]); for (x in -2..2) px(hx + x, hy - 1, DIRT[0]) }
             else for (row in 0 until 1 + filled) { val half = 5 - row; for (x in -half..half) px(hx + x, hy - row, DIRT[if ((x + row) % 3 == 0) 2 else 1]) }
-            val glow = fly[step][2]
+            val glow = if (fly[step][3] == 3f) fly[step][2] else 0f
             if (glow > 0.02f) { dot.color = Pal.alpha(0xFFE8FF8A.toInt(), 0.45f * glow); c.drawRect(sx(hx - 2f), sy(hy - 2f - filled), sx(hx + 3f), sy(hy + 1f), dot) }
         }
         // the yeti
@@ -91,6 +97,17 @@ class ProjectScreen(c: Context, private val onOpen: (Project) -> Unit, private v
         src.set(fr[0], fr[1], fr[0] + fr[2], fr[1] + fr[3])
         dst.set(sx(fr[4].toFloat()), sy(fr[5].toFloat()), sx((fr[4] + fr[2]).toFloat()), sy((fr[5] + fr[3]).toFloat()))
         c.drawBitmap(sheet, src, dst, pixel)
+        // earth scratched out of the hole flies back behind him
+        for ((di, d0) in digs.withIndex()) {
+            val age = t - d0
+            if (age < 0f || age > 0.55f) continue
+            for (j in 0 until 5) {
+                val r1 = hash(di * 91 + j); val r2 = hash(di * 37 + j * 5)
+                val x = hole[0] - (20f + 26f * r1) * age / 0.55f
+                val y = hole[1] - 2f - (16f + 12f * r2) * kotlin.math.sin(Math.PI.toFloat() * age / 0.55f)
+                px(x.toInt(), y.toInt(), DIRT[(r2 * 3.99f).toInt()], if (j % 2 == 0) 2 else 1)
+            }
+        }
         // earth he pulls over it, flying in little arcs
         for ((si, s0) in scoops.withIndex()) {
             val age = t - (s0 - 0.35f)
@@ -104,11 +121,9 @@ class ProjectScreen(c: Context, private val onOpen: (Project) -> Unit, private v
         }
         // the firefly he's after (in his hand once caught)
         val f = fly[step]
-        if (t < tPlace && f[2] > 0.02f) {
+        if (f[3] != 2f && f[3] != 3f && f[2] > 0.02f) {   // (state 2: hidden in his hands while he turns his back)
             val pulse = 0.6f + 0.4f * kotlin.math.sin(clock * 6f)
             dot.color = Pal.alpha(0xFFE8FF8A.toInt(), 0.4f * pulse * f[2]); c.drawRect(sx(f[0] - 1), sy(f[1] - 1), sx(f[0] + 2), sy(f[1] + 2), dot)
-            dot.color = Pal.alpha(0xFFF6FF9A.toInt(), f[2]); c.drawRect(sx(f[0].toInt().toFloat()), sy(f[1].toInt().toFloat()), sx(f[0].toInt() + 1f), sy(f[1].toInt() + 1f), dot)
-        } else if (t >= tPlace && step >= 0 && f[2] > 0.3f && f[1] < hole[1] - 3) {
             dot.color = Pal.alpha(0xFFF6FF9A.toInt(), f[2]); c.drawRect(sx(f[0].toInt().toFloat()), sy(f[1].toInt().toFloat()), sx(f[0].toInt() + 1f), sy(f[1].toInt() + 1f), dot)
         }
         // tall grass in front

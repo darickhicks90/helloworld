@@ -11,10 +11,11 @@ imgs = os.path.join(here, '..', 'app', 'src', 'main', 'assets', 'images')
 import json
 scene = Image.open(os.path.join(imgs, 'title_bg.png')).convert('RGBA')
 meta = json.load(open(os.path.join(imgs, 'title_story.json')))
-step = int(4.6 * meta['fps'])   # just caught a firefly, looking at it
-fx_, fy_, fw_, fh_, x_, y_, hx_, hy_ = meta['frames'][meta['steps'][step]]
+step = int(6.6 * meta['fps'])   # just caught a firefly, peeking at it in his hands
+fx_, fy_, fw_, fh_, x_, y_ = meta['frames'][meta['steps'][step]]
 cell = Image.open(os.path.join(imgs, 'yeti_frames.png')).crop((fx_, fy_, fx_ + fw_, fy_ + fh_))
 scene.alpha_composite(cell, (x_, y_))
+hx_, hy_ = meta['fly'][step][:2]
 for dx, dy, col in ((0, 0, (246, 255, 154, 255)), (-1, 0, (232, 255, 138, 120)), (1, 0, (232, 255, 138, 120)), (0, -1, (232, 255, 138, 120)), (0, 1, (232, 255, 138, 120))):
     scene.putpixel((int(hx_) + dx, int(hy_) + dy), col)
 scene.alpha_composite(Image.open(os.path.join(imgs, 'title_fg.png')).convert('RGBA'))

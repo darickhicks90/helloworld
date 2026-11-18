@@ -15,7 +15,8 @@ import numpy as np
 import rig3, rig4, pxfast
 
 OUT = sys.argv[1]
-FPS = 15
+FPS = 12
+SLOW = 1.5   # the whole story at two-thirds speed: unhurried
 FEET = 228
 # ---------------- background (the clearing; no moon) and foreground grass
 src = open('yeti_dig.py').read()
@@ -31,8 +32,9 @@ REST = dict(torso=0, head=0, nsh=-8, nel=0, fsh=-4, fel=0, nth=0, nsn=0, fth=0, 
 keys = {c: [] for c in CH}
 views = []        # (time, view, face)
 def K(t, **kw):
+    t = t * SLOW
     for c, v in kw.items(): keys[c].append((t, v))
-def V(t, view, face): views.append((t, view, face))
+def V(t, view, face): views.append((t * SLOW, view, face))
 HOLD = dict(nsh=-70, nel=-118, fsh=-64, fel=-110)
 STAND_LEGS = dict(nth=0, nsn=0, fth=0, fsn=0)
 
@@ -108,15 +110,17 @@ K(13.8, nsh=-30, nel=-26, fsh=-24, fel=-20); K(13.95, nsh=-22, nel=-4, fsh=-18, 
 K(14.15, nsh=-30, nel=-26); K(14.3, nsh=-22, nel=-4)
 # a moment, looking at it
 K(14.9, head=18, torso=40, nsh=-16, nel=0, fsh=-10, fel=0, **KN)
+# stays down on the one knee a while longer, looking at the little mound
+K(15.4, head=22, torso=36); K(15.9, head=18, torso=38, **KN)
 # get up: lean over the front foot, push, the back knee comes up, stand
-K(15.3, torso=34, head=10, nsh=-12, fsh=-8)
-K(15.75, fth=-40, fsn=44, nth=4, nsn=46, torso=22, head=4)
-K(16.2, **STAND_LEGS, torso=2, head=0, nsh=-8, fsh=-4)
-turn(16.3, 'R', 'L')
+K(16.3, torso=34, head=10, nsh=-12, fsh=-8)
+K(16.75, fth=-40, fsn=44, nth=4, nsn=46, torso=22, head=4)
+K(17.2, **STAND_LEGS, torso=2, head=0, nsh=-8, fsh=-4)
+turn(17.3, 'R', 'L')
 # idle while a new firefly drifts down; he looks up at it
-K(17.6, look=1, breath=1)
-K(18.6, hipx=390)
-DUR = 20.0
+K(18.6, look=1, breath=1)
+K(19.6, hipx=390)
+DUR = 21.0 * SLOW
 K(DUR, **REST)
 
 def ease(u): return u * u * (3 - 2 * u)
@@ -136,16 +140,17 @@ def view_at(t):
     return v[1], v[2]
 
 # ---------------- the firefly: free (with jitter), dodging, caught, carried, laid in the hole
-FK = [(0.0, 352, 78), (1.0, 348, 84), (1.36, 344, 70), (1.62, 300, 150), (2.4, 296, 142), (3.0, 292, 150), (3.42, 300, 150), (3.62, 340, 36), (4.2, 352, 28), (5.15, 348, 34)]
+FK0 = [(0.0, 352, 78), (1.0, 348, 84), (1.36, 344, 70), (1.62, 300, 150), (2.4, 296, 142), (3.0, 292, 150), (3.42, 300, 150), (3.62, 340, 36), (4.2, 352, 28), (5.15, 348, 34)]
+FK = [(t * SLOW, x, y) for t, x, y in FK0]
 def free_fly(t):
     for (t0, x0, y0), (t1, x1, y1) in zip(FK, FK[1:]):
         if t0 <= t <= t1:
             u = ease((t - t0) / (t1 - t0)); x, y = x0 + (x1 - x0) * u, y0 + (y1 - y0) * u
-            return x + 3.0 * math.sin(t * 5.3) + 1.5 * math.sin(t * 11.0), y + 2.2 * math.sin(t * 6.7 + 1)
-    return FK[-1][1] + 3 * math.sin(t * 5.3), FK[-1][2] + 2 * math.sin(t * 6.7)
-T_CLAP, T_PLACE, T_COVER0, T_COVERED = 5.3, 11.35, 11.8, 13.6
-SCOOPS = [11.8 + i * 0.6 + 0.45 for i in range(3)]
-DIGS = [10.3 + i * 0.34 + 0.17 for i in range(2)]
+            return x + 3.0 * math.sin(t * 4.4) + 1.5 * math.sin(t * 9.0), y + 2.2 * math.sin(t * 5.6 + 1)
+    return FK[-1][1] + 3 * math.sin(t * 4.4), FK[-1][2] + 2 * math.sin(t * 5.6)
+T_CLAP, T_PLACE, T_COVER0, T_COVERED = (x * SLOW for x in (5.3, 11.35, 11.8, 13.6))
+SCOOPS = [(11.8 + i * 0.6 + 0.45) * SLOW for i in range(3)]
+DIGS = [(10.3 + i * 0.34 + 0.17) * SLOW for i in range(2)]
 
 # ---------------- simulate and render
 side = rig4.Side(); b = rig4.back(); b34 = rig4.back34()
@@ -159,7 +164,7 @@ for n in range(N):
     v = {c: chan(c, t) for c in CH}
     view, face = view_at(t)
     # breathing while idle
-    v['torso'] += v['breath'] * 1.3 * math.sin(2 * math.pi * t / 3.2)
+    v['torso'] += v['breath'] * 1.3 * math.sin(2 * math.pi * t / 4.5)
     fx, fy = free_fly(t)
     key_pose = None
     if view == 'S':
@@ -210,14 +215,14 @@ HOLE = ((hp[0][0] + hp[1][0]) / 2, FEET - 1)
 fly = []
 for n in range(N):
     t = n / FPS
-    if t < T_CLAP - 0.12:
+    if t < T_CLAP - 0.18:
         x, y = free_fly(t); a = 1.0; state = 0
     elif t < T_PLACE:
         h = hands[n]
         if h: x, y = (h[0][0] + h[1][0]) / 2, (h[0][1] + h[1][1]) / 2; state = 1
         else: x, y = fly[-1][0], fly[-1][1]; state = 2     # hidden in his hands while he turns
         if t < T_CLAP:
-            u = (t - (T_CLAP - 0.12)) / 0.12; fx_, fy_ = free_fly(t); x, y = fx_ + (x - fx_) * u, fy_ + (y - fy_) * u
+            u = (t - (T_CLAP - 0.18)) / 0.18; fx_, fy_ = free_fly(t); x, y = fx_ + (x - fx_) * u, fy_ + (y - fy_) * u
         a = 1.0
     else:
         x, y = HOLE; state = 3
@@ -225,7 +230,7 @@ for n in range(N):
         if t > T_COVERED: a = 0.2 * max(0.0, 1 - (t - T_COVERED) / 3.0)
     fly.append([round(x, 1), round(y, 1), round(a, 2), state])
 # a new one drifts down from the sky toward where the next chase starts
-T_NEW = 17.6
+T_NEW = 18.6 * SLOW
 for n in range(int(T_NEW * FPS), N):
     u = ease((n / FPS - T_NEW) / (DUR - T_NEW)); x0, y0 = 300, 6; x1, y1 = free_fly(0.0)
     fly[n] = [round(x0 + (x1 - x0) * u, 1), round(y0 + (y1 - y0) * u, 1), round(min(1, u * 3), 2), 4]
@@ -243,7 +248,7 @@ for i, (s, sx0, sy0) in enumerate(sprites):
     px_, py_ = place[i]; sheet.paste(s, (px_, py_)); meta.append([px_, py_, s.width, s.height, sx0, sy0])
 sheet.save(os.path.join(OUT, 'yeti_frames.png'), optimize=True)
 json.dump({'fps': FPS, 'duration': DUR, 'frames': meta, 'steps': steps, 'fly': fly, 'hole': [round(HOLE[0], 1), HOLE[1]],
-           'place': T_PLACE, 'scoops': SCOOPS, 'digs': DIGS, 'covered': T_COVERED, 'facing_at_dig': 'R'},
+           'place': T_PLACE, 'scoops': SCOOPS, 'digs': DIGS, 'covered': T_COVERED, 'facing_at_dig': 'R', 'slow': SLOW},
           open(os.path.join(OUT, 'title_story.json'), 'w'))
 # foreground: a few blades of grass in front of his feet
 fg = Image.new('RGBA', (W, H), (0, 0, 0, 0)); fp = fg.load()

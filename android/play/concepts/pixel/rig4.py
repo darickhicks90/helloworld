@@ -143,12 +143,13 @@ class Side:
         def arm(up, fo, sh, el):
             A = T @ skin.rot(sh, *SH_); F = A @ skin.rot(el, *EL_)
             return rigid(up, A), rigid(fo, F), A, F
-        def leg(th_l, sn_l, th, sn):
-            Th = skin.rot(th, *H_); Sn = Th @ skin.rot(sn, *K_)
+        def leg(th_l, sn_l, th, sn, off=(0.0, 0.0)):
+            O = np.eye(3); O[0, 2], O[1, 2] = off[0] * S, off[1] * S
+            Th = O @ skin.rot(th, *H_); Sn = Th @ skin.rot(sn, *K_)
             return rigid(th_l, Th), rigid(sn_l, Sn)
         fu, ff, fA, fF = arm(self.fupper, self.ffore, fsh, fel)
         over(fu); over(ff)
-        a1, a2 = leg(self.fthigh, self.fshin, fth, fsn); over(a2); over(a1)
+        a1, a2 = leg(self.fthigh, self.fshin, fth, fsn, (38, -6)); over(a2); over(a1)
         b1, b2 = leg(self.thigh, self.shin, nth, nsn); over(b2); over(b1)
         over(skin.warp(self.body, [T, T @ skin.rot(head, *N_)], self.w_body))
         nu, nf, nA, nF = arm(self.upper, self.fore, nsh, nel)

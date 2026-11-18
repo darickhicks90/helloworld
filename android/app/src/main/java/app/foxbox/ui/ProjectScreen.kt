@@ -53,6 +53,8 @@ class ProjectScreen(c: Context, private val onOpen: (Project) -> Unit, private v
     private val tPlace = story.getDouble("place").toFloat()
     private val scoops = story.getJSONArray("scoops").let { a -> FloatArray(a.length()) { a.getDouble(it).toFloat() } }
     private val duration = story.getDouble("duration").toFloat()
+    /** How much slower than the original timing the story plays (the dirt flies at the same pace). */
+    private val slow = story.optDouble("slow", 1.0).toFloat()
     private val pixel = Paint().apply { isFilterBitmap = false; isAntiAlias = false }
     private val dot = Paint()
     private val src = android.graphics.Rect(); private val dst = android.graphics.RectF()
@@ -99,7 +101,7 @@ class ProjectScreen(c: Context, private val onOpen: (Project) -> Unit, private v
         c.drawBitmap(sheet, src, dst, pixel)
         // earth scratched out of the hole flies back behind him
         for ((di, d0) in digs.withIndex()) {
-            val age = t - d0
+            val age = (t - d0) / slow
             if (age < 0f || age > 0.55f) continue
             for (j in 0 until 5) {
                 val r1 = hash(di * 91 + j); val r2 = hash(di * 37 + j * 5)
@@ -110,7 +112,7 @@ class ProjectScreen(c: Context, private val onOpen: (Project) -> Unit, private v
         }
         // earth he pulls over it, flying in little arcs
         for ((si, s0) in scoops.withIndex()) {
-            val age = t - (s0 - 0.35f)
+            val age = (t - s0) / slow + 0.35f
             if (age < 0f || age > 0.6f) continue
             for (j in 0 until 6) {
                 val r1 = hash(si * 31 + j); val r2 = hash(si * 57 + j * 7)

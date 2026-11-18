@@ -32,7 +32,7 @@ class MindsPage(c: Context) : LinearLayout(c) {
         val btns = LinearLayout(c).apply { orientation = VERTICAL; addView(gen, lp(MATCH, Px.dp(40))); addView(row(c, keep, clear).apply { keep.layoutParams = lp(0, Px.dp(40), 1f); clear.layoutParams = lp(0, Px.dp(40), 1f) }, lp(MATCH, WRAP)) }
         latchBtn.onClick = { minds.latch.set(if (minds.latch.on) 0f else 1f); Studio.save(); refresh() }
         side.addView(row(c, onBtn, latchBtn).apply { onBtn.layoutParams = lp(0, Px.dp(44), 1f); latchBtn.layoutParams = lp(Px.dp(76), Px.dp(44)) }, lp(MATCH, WRAP))
-        side.addView(row(c, Knob(c, minds.generative, Snes.PURPLE), btns).apply { btns.layoutParams = lp(0, WRAP, 1f) }, lp(MATCH, WRAP))
+        side.addView(row(c, Knob(c, minds.generative, Pal.ORANGE, classic = true), btns).apply { btns.layoutParams = lp(0, WRAP, 1f) }, lp(MATCH, WRAP))
         side.addView(drumPanel, lp(MATCH, 0, 1f))
         addView(side, lp(Px.dp(250), MATCH))
         onStudio { refresh() }
@@ -52,11 +52,41 @@ class MindsPage(c: Context) : LinearLayout(c) {
         if (builtFor == selected) return
         builtFor = selected
         drumPanel.removeAllViews()
-        val dp = minds.drumParams[selected]
-        val flow = Flow(context)
-        listOf(dp.tune, dp.decay, dp.tone, dp.level).forEachIndexed { k, p -> flow.addView(Knob(context, p, Snes.accent(k))) }
-        drumPanel.addView(Btn(context, Minds.DRUMS[selected], Pal.ORANGE).apply { on = true; onClick = { hit(selected) } }, lp(MATCH, Px.dp(38)))
-        drumPanel.addView(flow, lp(MATCH, WRAP))
+        drumPanel.addView(Btn(context, "▶ " + Minds.DRUMS[selected], Pal.ORANGE).apply { on = true; onClick = { hit(selected) } }, lp(MATCH, Px.dp(40)))
+        drumPanel.addView(Btn(context, "Sound design…", Snes.PURPLE).apply { onClick = { soundPopup(selected) } }, lp(MATCH, Px.dp(48)).apply { topMargin = Px.dp(6) })
+    }
+
+    /**
+     * Every Minds sound option in one pop-out: a tab per drum (tune, decay, tone,
+     * level, punch, snap, noise, drive, cutoff, pan) and one for the whole kit
+     * (amp envelope, filter, bitcrush). Tap a drum's tab to hear it.
+     */
+    private fun soundPopup(start: Int) {
+        val a = context as? android.app.Activity ?: return
+        val d = SnesDialog(a, "Minds · sound design", wide = 0.94f)
+        val tabs = LinearLayout(context).apply { orientation = HORIZONTAL }
+        val knobs = Panel(context, "", accent = Snes.PURPLE)
+        var tab = start
+        fun build() {
+            tabs.removeAllViews()
+            (Minds.DRUMS + "Whole kit").forEachIndexed { k, name ->
+                tabs.addView(SnesKey(context, name, if (k == tab) Snes.accent(k) else Snes.FACE).apply {
+                    onClick = { tab = k; if (k < Minds.DRUMS.size) { selected = k; hit(k) }; build(); grid.invalidate() }
+                }, lp(0, Px.dp(42), 1f).apply { rightMargin = Px.dp(3) })
+            }
+            knobs.removeAllViews()
+            val params = if (tab < Minds.DRUMS.size) minds.drumParams[tab].all else minds.kitParams
+            val flow = Flow(context)
+            params.forEachIndexed { k, p -> flow.addView(Knob(context, p, Snes.accent(k))) }
+            knobs.addView(flow, lp(MATCH, WRAP))
+        }
+        build()
+        d.view(android.widget.HorizontalScrollView(context).apply { isHorizontalScrollBarEnabled = false; addView(tabs, android.widget.FrameLayout.LayoutParams(maxOf(Px.dp(720), resources.displayMetrics.widthPixels * 8 / 10), WRAP)) })
+        d.view(knobs.apply { layoutParams = lp(MATCH, WRAP).apply { topMargin = Px.dp(6) } })
+        d.key("Hit it", Snes.YELLOW, close = false) { if (tab < Minds.DRUMS.size) hit(tab) }
+        d.key("Done", Snes.GREEN) { Studio.save(); builtFor = -1; refresh() }
+        d.onDismiss { Studio.save(); builtFor = -1; refresh() }
+        d.show()
     }
 
     private fun hit(d: Int) {

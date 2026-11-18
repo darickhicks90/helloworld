@@ -257,9 +257,19 @@ class SnesDialog(private val a: Activity, title: String, private val wide: Float
  * pointer, sitting in a dark well ringed by lamps, with the value in a little
  * backlit window below and the name under that.
  */
-class KnobFace {
+class KnobFace(classic: Boolean = false) {
+    // the console grey by default; `classic` uses the app's original cream, browns and orange
+    private val cHi = if (classic) Pal.CREAM else Snes.HI
+    private val cFace = if (classic) Pal.PAPER else Snes.FACE
+    private val cFaceD = if (classic) 0xFFD9C29A.toInt() else Snes.FACE_D
+    private val cShade = if (classic) Pal.BROWN_L else Snes.SHADE
+    private val cDeep = if (classic) Pal.BROWN else Snes.DEEP
+    private val cInk = if (classic) Pal.BROWN_D else Snes.INK
+    private val cWell = if (classic) 0xFF4A2C18.toInt() else 0xFF3A3846.toInt()
+    private val cOff = if (classic) 0xFF6E4A30.toInt() else 0xFF56535F.toInt()
+    private val cWindow = if (classic) 0xFF3D2414.toInt() else 0xFF2E2C3A.toInt()
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val label = Px.text(11f, Snes.INK)
+    private val label = Px.text(11f, cInk)
     private val value = Px.text(11f, Snes.HI, headFont = false)
 
     fun draw(c: Canvas, w: Float, norm: Float, accent: Int, valueText: String, name: String) {
@@ -267,42 +277,42 @@ class KnobFace {
         val ring = Px.dp(21f); val capR = Px.dp(14f)
         // the well
         p.shader = null; p.style = Paint.Style.FILL
-        p.color = Snes.SHADE; c.drawCircle(cx + Px.dp(1f), cy + Px.dp(1.5f), ring + Px.dp(3f), p)
-        p.color = Snes.INK; c.drawCircle(cx, cy, ring + Px.dp(2f), p)
-        p.color = 0xFF3A3846.toInt(); c.drawCircle(cx, cy, ring, p)
+        p.color = cShade; c.drawCircle(cx + Px.dp(1f), cy + Px.dp(1.5f), ring + Px.dp(3f), p)
+        p.color = cInk; c.drawCircle(cx, cy, ring + Px.dp(2f), p)
+        p.color = cWell; c.drawCircle(cx, cy, ring, p)
         // lamps around the arc
         val segs = 13
         val lit = (norm * (segs - 1) + 0.5f).toInt()
         for (i in 0 until segs) {
             val a = Math.toRadians(-225.0 + 270.0 * i / (segs - 1))
             val on = i <= lit && (norm > 0.001f || i == 0)
-            p.color = if (on) accent else 0xFF56535F.toInt()
+            p.color = if (on) accent else cOff
             val r = ring - Px.dp(3.5f)
             c.drawCircle(cx + (Math.cos(a) * r).toFloat(), cy + (Math.sin(a) * r).toFloat(), Px.dp(if (on) 2f else 1.5f), p)
         }
         // cap: drop shadow, knurled rim, brushed top with a soft highlight
         p.color = 0x66000000; c.drawCircle(cx + Px.dp(1.5f), cy + Px.dp(2f), capR, p)
-        p.shader = LinearGradient(cx - capR, cy - capR, cx + capR, cy + capR, Snes.HI, Snes.SHADE, Shader.TileMode.CLAMP)
+        p.shader = LinearGradient(cx - capR, cy - capR, cx + capR, cy + capR, cHi, cShade, Shader.TileMode.CLAMP)
         c.drawCircle(cx, cy, capR, p)
-        p.shader = null; p.color = Snes.DEEP; p.strokeWidth = Px.dp(1f)
+        p.shader = null; p.color = cDeep; p.strokeWidth = Px.dp(1f)
         for (k in 0 until 24) {
             val a = Math.PI * 2 * k / 24
             c.drawLine(cx + (Math.cos(a) * (capR - Px.dp(2f))).toFloat(), cy + (Math.sin(a) * (capR - Px.dp(2f))).toFloat(),
                 cx + (Math.cos(a) * capR).toFloat(), cy + (Math.sin(a) * capR).toFloat(), p)
         }
-        p.shader = RadialGradient(cx - capR * 0.35f, cy - capR * 0.4f, capR * 1.2f, intArrayOf(0xFFFFFFFF.toInt(), Snes.FACE, Snes.FACE_D), floatArrayOf(0f, 0.45f, 1f), Shader.TileMode.CLAMP)
+        p.shader = RadialGradient(cx - capR * 0.35f, cy - capR * 0.4f, capR * 1.2f, intArrayOf(0xFFFFFFFF.toInt(), cFace, cFaceD), floatArrayOf(0f, 0.45f, 1f), Shader.TileMode.CLAMP)
         c.drawCircle(cx, cy, capR - Px.dp(2.5f), p)
         p.shader = null
         // pointer
         val a = Math.toRadians(-225.0 + 270.0 * norm)
-        p.color = Snes.INK; p.strokeWidth = Px.dp(4f); p.strokeCap = Paint.Cap.ROUND
+        p.color = cInk; p.strokeWidth = Px.dp(4f); p.strokeCap = Paint.Cap.ROUND
         c.drawLine(cx + (Math.cos(a) * capR * 0.2f).toFloat(), cy + (Math.sin(a) * capR * 0.2f).toFloat(), cx + (Math.cos(a) * (capR - Px.dp(3.5f))).toFloat(), cy + (Math.sin(a) * (capR - Px.dp(3.5f))).toFloat(), p)
         p.color = accent; p.strokeWidth = Px.dp(2.2f)
         c.drawLine(cx + (Math.cos(a) * capR * 0.25f).toFloat(), cy + (Math.sin(a) * capR * 0.25f).toFloat(), cx + (Math.cos(a) * (capR - Px.dp(4f))).toFloat(), cy + (Math.sin(a) * (capR - Px.dp(4f))).toFloat(), p)
         // value window
         val vw = w - Px.dp(8f); val vt = Px.dp(52f); val vb = Px.dp(66f)
-        c.fill(cx - vw / 2, vt, cx + vw / 2, vb, Snes.INK)
-        c.fill(cx - vw / 2 + Px.dp(1f), vt + Px.dp(1f), cx + vw / 2 - Px.dp(1f), vb - Px.dp(1f), 0xFF2E2C3A.toInt())
+        c.fill(cx - vw / 2, vt, cx + vw / 2, vb, cInk)
+        c.fill(cx - vw / 2 + Px.dp(1f), vt + Px.dp(1f), cx + vw / 2 - Px.dp(1f), vb - Px.dp(1f), cWindow)
         value.color = brighten(accent); value.textSize = Px.dp(11f)
         c.textFit(valueText, cx, (vt + vb) / 2, vw - Px.dp(6f), value, 7f)
         // name, on two lines if that reads better

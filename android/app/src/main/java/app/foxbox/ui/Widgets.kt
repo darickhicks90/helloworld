@@ -96,7 +96,7 @@ class Btn(c: Context, var text: String, var accent: Int = Pal.ORANGE, private va
 
 /** Rotary knob bound to a [Param]: drag up/down, double-tap to reset; choices step on tap. */
 @SuppressLint("ViewConstructor")
-class Knob(c: Context, val param: Param, var accent: Int) : PixelView(c) {
+class Knob(c: Context, val param: Param, var accent: Int, classic: Boolean = false) : PixelView(c) {
     private var startY = 0f; private var startN = 0f; private var lastTap = 0L; private var moved = false
     private val listener: () -> Unit = { postInvalidate() }
 
@@ -104,7 +104,7 @@ class Knob(c: Context, val param: Param, var accent: Int) : PixelView(c) {
     override fun onDetachedFromWindow() { param.listeners.remove(listener); super.onDetachedFromWindow() }
     override fun onMeasure(w: Int, h: Int) = setMeasuredDimension(Px.dp(70), Px.dp(84))
 
-    private val face = KnobFace()
+    private val face = KnobFace(classic)
     override fun paint(c: Canvas) {
         // "Pad 3 Tune" -> "Tune": the pad editor already says which pad
         face.draw(c, width.toFloat(), param.norm, accent, param.text(), param.name.replace(Regex("^Pad \\d+ "), ""))

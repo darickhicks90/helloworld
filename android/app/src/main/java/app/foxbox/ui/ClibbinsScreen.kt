@@ -117,13 +117,17 @@ object ClipField {
      * A selected clip glows (a soft, breathing halo in warm white) and sparkles:
      * little four-point stars wink on and off around its edge.
      */
-    private fun glow(c: Canvas, l: Float, t: Float, r: Float, b: Float, time: Float, id: String) {
+    private fun halo(c: Canvas, l: Float, t: Float, r: Float, b: Float, time: Float) {
         val breath = 0.55f + 0.45f * kotlin.math.sin(time * 4.2f)
         for (k in 6 downTo 1) {
             val g = Px.dp(2.2f) * k
             c.fill(l - g, t - g, r + g, b + g, Pal.alpha(0xFFFFF2B0.toInt(), 0.07f * breath * (7 - k) / 6f))
         }
-        val star = 0xFFFFFFFF.toInt(); val gold = 0xFFFFE07A.toInt()
+    }
+
+    /** Little stars winking round the edge: gold and white when selected, aqua and white when queued. */
+    private fun sparkles(c: Canvas, l: Float, t: Float, r: Float, b: Float, time: Float, id: String, queued: Boolean) {
+        val star = 0xFFFFFFFF.toInt(); val gold = if (queued) QUEUED else 0xFFFFE07A.toInt()
         val per = 2f * ((r - l) + (b - t))
         for (k in 0 until 9) {
             val phase = (time * 1.3f + k * 0.37f + (id.hashCode() and 7) * 0.11f) % 1f
@@ -300,7 +304,9 @@ object ClipField {
             val pulse = if (b.playing && blink) 1f else 0f
             val edge = if (selected == b.id) WHITE else if (b.playing) PLAYING else if (b.queued) QUEUED else if (b.wave != null) Pal.alpha(b.accent, 0.7f) else EDGE
             c.save(); c.rotate(s.tilt, s.x + s.w / 2, s.y + s.h / 2)
-            if (selected == b.id) glow(c, s.x, s.y - pulse, s.x + s.w, s.y + s.h - pulse, time, b.id)
+            // selected: a breathing glow; selected or queued for the next scene: sparkles until deselected
+            if (selected == b.id) halo(c, s.x, s.y - pulse, s.x + s.w, s.y + s.h - pulse, time)
+            if (selected == b.id || b.queued) sparkles(c, s.x, s.y - pulse, s.x + s.w, s.y + s.h - pulse, time, b.id, selected != b.id)
             val ta = maxOf(alpha, 0.75f)
             val wv = b.wave
             if (wv != null) {

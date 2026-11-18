@@ -15,6 +15,10 @@ import skin
 import rig3
 
 S = 0.5
+_U = '/root/.claude/uploads/44fd42f6-4e4d-5864-a6fa-293c9604188d/'
+# face turned toward the viewer: (screenshot, crop box, face ellipse, x offset, outline zone)
+FACES = [(_U + '1fe6ed8e-image.jpg', (410, 836, 660, 1050), (525, 940, 130, 115), -10, (170, 28, 330)),   # ~60 deg from profile
+         (_U + '61dd97f2-image.jpg', (372, 835, 640, 1050), (495, 945, 135, 112), -12, (150, -60, 330))]  # ~45 deg
 def P(c, p): return (p[0] * S + c, p[1] * S + c)
 
 class Side:
@@ -85,6 +89,16 @@ class Side:
         bf = 1 - skin.ss((sy - hipline - overhang + 4) / 18.0)
         bd = body.copy(); bd[..., 3] = (bd[..., 3] * bf).astype(np.uint8)
         self.body = bd
+        # the same body with the face turned toward the viewer (two steps of the turn), built from
+        # the 3/4-front screenshots of the model (see faceswap.py)
+        import faceswap
+        self.bodies = [bd]
+        na = np.asarray(noarm).astype(np.float32)
+        for shot, box, ell, off, fr in FACES:
+            f = faceswap.make(na, Image.open(shot), 835, 701, box, ell, off, front=fr)
+            b2 = canvas(Image.fromarray(np.clip(f, 0, 255).astype(np.uint8)))
+            b2[..., 3] = (b2[..., 3] * bf).astype(np.uint8)
+            self.bodies.append(b2)
         # joint directions for the arm weights
         hx, hy = self.HAND; shx, shy = self.SHOULDER; L = math.hypot(hx - shx, hy - shy)
         self.adir = ((hx - shx) / L, (hy - shy) / L)
@@ -150,7 +164,7 @@ class Side:
         wh = skin.ss((up + 40) / 120.0) * (1 - skin.ss((sx - 250) / 120.0))
         return [1 - wh, wh]
 
-    def pose(self, torso=0, head=0, nsh=-8, nel=0, fsh=-4, fel=0, nth=0, nsn=0, fth=0, fsn=0, nft=0, fft=0):
+    def pose(self, torso=0, head=0, nsh=-8, nel=0, fsh=-4, fel=0, nth=0, nsn=0, fth=0, fsn=0, nft=0, fft=0, face=0):
         """Limbs move as solid pieces (they never crumple) and fade into the body at the shoulder
         and hip; the neck is skinned. Upper arm and forearm overlap at the elbow, thigh and shin at the knee."""
         c = self.PAD
@@ -179,7 +193,7 @@ class Side:
         over(fu); over(ff)
         a1, a2, a3 = leg(self.fthigh, self.fshin, self.ffoot, fth, fsn, fft, (38, -6)); over(a3); over(a2); over(a1)
         b1, b2, b3 = leg(self.thigh, self.shin, self.foot, nth, nsn, nft); over(b3); over(b2); over(b1)
-        over(skin.warp(self.body, [T, T @ skin.rot(head, *N_)], self.w_body))
+        over(skin.warp(self.bodies[int(round(face))], [T, T @ skin.rot(head, *N_)], self.w_body))
         nu, nf, nA, nF = arm(self.upper, self.fore, nsh, nel)
         over(nu); over(nf)
         hand = P(c, self.HAND)
@@ -286,7 +300,7 @@ class Back:
         # where a hanging arm rests against the body's side only a hairline of sky would show:
         # fill it with the fur around it in shadow (a crease, as on the model), never see-through
         al = out[..., 3] / 255; solid = (al > 0.5).astype(np.uint8)
-        closed = cv2.morphologyEx(solid, cv2.MORPH_CLOSE, np.ones((11, 11), np.uint8)) > 0
+        closed = cv2.morphologyEx(solid, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (9, 9))) > 0
         crotch_y = int(self.crotch[1])
         gap = closed & (al < 0.9); gap[crotch_y - 8:, :] = False          # leave the gap between the legs alone
         if gap.any():

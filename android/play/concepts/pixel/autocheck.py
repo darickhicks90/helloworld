@@ -9,7 +9,7 @@ t = 0.0
 while t < DUR:
     v = {c: chan(c, t) for c in CH}; view, face = view_at(t)
     if view == 'S':
-        im, _ = side.pose(**{k: v[k] for k in ('torso','head','nsh','nel','fsh','fel','nth','nsn','fth','fsn')})
+        im, _ = side.pose(**{k: v[k] for k in ('torso','head','nsh','nel','fsh','fel','nth','nsn','fth','fsn')}, face=int(round(v['face'])))
     else:
         im, _ = (b if view == 'B' else b34).pose(v['tuck'], (v['bl'], v['br']))
     a = np.asarray(im).astype(np.float32); al = a[..., 3] / 255

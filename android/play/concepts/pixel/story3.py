@@ -27,8 +27,8 @@ exec(src[:src.index("# ---------------- frames")].replace("import siderig\n", ""
 W, H, GRASS, rnd = ns['W'], ns['H'], ns['GRASS'], random.Random(21)
 
 # ---------------- keyframes
-CH = ['torso', 'head', 'nsh', 'nel', 'fsh', 'fel', 'nth', 'nsn', 'fth', 'fsn', 'hipx', 'lift', 'tuck', 'look', 'breath', 'bl', 'br']
-REST = dict(torso=0, head=0, nsh=-8, nel=0, fsh=-4, fel=0, nth=0, nsn=0, fth=0, fsn=0, hipx=392, lift=0, tuck=0, look=1, breath=1, bl=0, br=0)
+CH = ['torso', 'head', 'nsh', 'nel', 'fsh', 'fel', 'nth', 'nsn', 'fth', 'fsn', 'hipx', 'lift', 'tuck', 'look', 'breath', 'bl', 'br', 'face']
+REST = dict(torso=0, head=0, nsh=-8, nel=0, fsh=-4, fel=0, nth=0, nsn=0, fth=0, fsn=0, hipx=392, lift=0, tuck=0, look=1, breath=1, bl=0, br=0, face=0)
 keys = {c: [] for c in CH}
 views = []        # (time, view, face)
 def K(t, **kw):
@@ -83,22 +83,24 @@ K(6.95, head=15, torso=8)
 # turn around the way people do: weight shifts, then small alternating steps carry him round,
 # through his back (never toward the viewer). Each view gets a step: one foot lifts and plants.
 def turn(t0, from_face, to_face, free=False):
+    # quick, the way a person turns on the spot: about 0.9 s from first step to last
     K(t0, nth=0, nsn=0, fth=0, fsn=0, head=0, torso=1)
-    K(t0 + 0.12, nth=-12, nsn=28, torso=3)
-    if free: K(t0 + 0.12, nsh=0, nel=-4, fsh=-18, fel=-14)                    # first step: the near foot lifts as he starts to turn
-    V(t0 + 0.2, 'B34', from_face)
-    K(t0 + 0.2, nth=0, nsn=0, bl=1, br=0, tuck=0.3)
-    K(t0 + 0.34, bl=0); K(t0 + 0.42, br=1)
-    V(t0 + 0.48, 'B', from_face)
-    K(t0 + 0.56, br=0); K(t0 + 0.64, bl=1)
-    V(t0 + 0.76, 'B34', to_face)
-    K(t0 + 0.78, bl=0); K(t0 + 0.88, br=1)
-    V(t0 + 1.02, 'S', to_face)
-    K(t0 + 1.02, br=0, bl=0, fth=-12, fsn=28, tuck=0)           # last step brings the other foot round
-    if free: K(t0 + 1.02, nsh=-20, nel=-16, fsh=2, fel=-4)
-    K(t0 + 1.18, fth=0, fsn=0, torso=1)
-    if free: K(t0 + 1.45, nsh=-8, nel=0, fsh=-4, fel=0)
-turn(7.0, 'L', 'R')
+    K(t0 + 0.060, nth=-12, nsn=28, torso=3)
+    if free: K(t0 + 0.060, nsh=0, nel=-4, fsh=-18, fel=-14)                    # first step: the near foot lifts as he starts to turn
+    V(t0 + 0.100, 'B34', from_face)
+    K(t0 + 0.100, nth=0, nsn=0, bl=1, br=0, tuck=0.3)
+    K(t0 + 0.170, bl=0); K(t0 + 0.210, br=1)
+    V(t0 + 0.240, 'B', from_face)
+    K(t0 + 0.280, br=0); K(t0 + 0.320, bl=1)
+    V(t0 + 0.380, 'B34', to_face)
+    K(t0 + 0.390, bl=0); K(t0 + 0.440, br=1)
+    V(t0 + 0.510, 'S', to_face)
+    K(t0 + 0.510, br=0, bl=0, fth=-12, fsn=28, tuck=0)           # last step brings the other foot round
+    if free: K(t0 + 0.510, nsh=-20, nel=-16, fsh=2, fel=-4)
+    K(t0 + 0.590, fth=0, fsn=0, torso=1)
+    if free: K(t0 + 0.725, nsh=-8, nel=0, fsh=-4, fel=0)
+K(7.4, head=15, torso=8)
+turn(7.55, 'L', 'R')     # a moment longer looking at it in his hands, then a quick turn
 # two steps to a spot of his choosing (facing right now; hipx grows)
 walk(8.25, 0.45, [362, 376, 390], 'nf')
 K(9.15, torso=2)
@@ -124,19 +126,31 @@ for i, (sh, el) in enumerate((('nsh', 'nel'), ('fsh', 'fel'), ('nsh', 'nel'))):
 K(13.8, nsh=-30, nel=-26, fsh=-24, fel=-20); K(13.95, nsh=-22, nel=-4, fsh=-18, fel=-2)
 K(14.15, nsh=-30, nel=-26); K(14.3, nsh=-22, nel=-4)
 # a moment, looking at it
-K(14.9, head=18, torso=40, nsh=-16, nel=0, fsh=-10, fel=0, **KN)
-# stays down on the one knee a while longer, looking at the little mound
-K(15.4, head=22, torso=36); K(15.9, head=18, torso=38, **KN)
+K(14.6, head=18, torso=40, nsh=-16, nel=0, fsh=-10, fel=0, **KN, face=0)
+# he looks up and out at you (the eyes lead, then the head comes round, the back straightens)...
+K(14.85, head=8, torso=32)
+K(15.1, head=-2, torso=22, face=2)
+K(15.95, head=-3, torso=22, face=2)
+# ...back down at the little mound...
+K(16.2, head=20, torso=38, face=0)
+K(16.75, head=18, torso=38, face=0)
+# ...out at the mountains, sitting up a little, looking into the distance...
+K(17.1, head=-10, torso=16)
+K(17.95, head=-12, torso=15, face=0)
+# ...and back at you, for a little while
+K(18.2, head=-3, torso=21, face=2)
+K(19.25, head=-2, torso=22, face=2)
+K(19.45, head=8, torso=30, face=0)
 # get up: lean over the front foot, push, the back knee comes up, stand
-K(16.3, torso=34, head=10, nsh=-20, nel=-50, fsh=-14, fel=-10)                 # hand to the front knee
-K(16.5, torso=36, nsh=-22, nel=-46)                                              # weight onto it
-K(16.75, fth=-40, fsn=44, nth=4, nsn=46, torso=22, head=4, nsh=-4, nel=-26, fsh=-20, fel=-14)   # push off the thigh
-K(17.2, **STAND_LEGS, torso=2, head=0, nsh=4, nel=-4, fsh=-8, fel=-4)          # arm follows through
-turn(17.3, 'R', 'L', free=True)
+K(19.60, torso=34, head=10, nsh=-20, nel=-50, fsh=-14, fel=-10)                 # hand to the front knee
+K(19.80, torso=36, nsh=-22, nel=-46)                                              # weight onto it
+K(20.05, fth=-40, fsn=44, nth=4, nsn=46, torso=22, head=4, nsh=-4, nel=-26, fsh=-20, fel=-14)   # push off the thigh
+K(20.50, **STAND_LEGS, torso=2, head=0, nsh=4, nel=-4, fsh=-8, fel=-4)          # arm follows through
+turn(20.60, 'R', 'L', free=True)
 # idle while a new firefly drifts down; he looks up at it
-K(18.6, look=1, breath=1)
-K(19.6, hipx=390)
-DUR = 21.0 * SLOW
+K(21.90, look=1, breath=1)
+K(22.90, hipx=390)
+DUR = 23.9 * SLOW
 K(DUR, **REST)
 
 def ease(u): return u * u * (3 - 2 * u)
@@ -188,13 +202,14 @@ for n in range(N):
         if v['look'] > 0.01 and t < T_CLAP:
             _, info0 = side.pose(**{k: v[k] for k in ('torso', 'nsh', 'nel', 'fsh', 'fel', 'nth', 'nsn', 'fth', 'fsn')}) if False else (None, None)
         pose = {k: v[k] for k in ('torso', 'head', 'nsh', 'nel', 'fsh', 'fel', 'nth', 'nsn', 'fth', 'fsn')}
+        pose['face'] = int(round(v['face']))
         if v['look'] > 0.01 and t < T_CLAP:
             # approximate eye: above the hip by his height; angle to the firefly (left-facing frame)
             ex = v['hipx'] + (-1 if face == 'L' else 1) * 30; ey = FEET - 158 + (v['torso'] * 0.6)
             dx = (ex - fx) if face == 'L' else (fx - ex); dy = fy - ey
             look = max(-16, min(16, math.degrees(math.atan2(dy, max(8, abs(dx)))) * 0.7))
             pose['head'] = pose['head'] * (1 - v['look']) + look * v['look']
-        key_pose = ('S', face) + tuple(int(round(pose[k] / 2.0)) for k in pose)
+        key_pose = ('S', face) + tuple(int(round(pose[k] / 2.0)) if k != 'face' else pose[k] for k in pose)
     else:
         key_pose = (view, face, int(round(v['tuck'] * 10)), int(round(v['bl'] * 4)), int(round(v['br'] * 4)))
     if key_pose not in cache:
@@ -246,7 +261,7 @@ for n in range(N):
         if t > T_COVERED: a = 0.2 * max(0.0, 1 - (t - T_COVERED) / 3.0)
     fly.append([round(x, 1), round(y, 1), round(a, 2), state])
 # a new one drifts down from the sky toward where the next chase starts
-T_NEW = 18.6 * SLOW
+T_NEW = 21.90 * SLOW
 for n in range(int(T_NEW * FPS), N):
     u = ease((n / FPS - T_NEW) / (DUR - T_NEW)); x0, y0 = 300, 6; x1, y1 = free_fly(0.0)
     fly[n] = [round(x0 + (x1 - x0) * u, 1), round(y0 + (y1 - y0) * u, 1), round(min(1, u * 3), 2), 4]

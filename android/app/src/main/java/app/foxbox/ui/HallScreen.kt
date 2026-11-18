@@ -144,6 +144,11 @@ class HallScreen(c: Context) : PixelView(c) {
     private val shots = ArrayList<Shot>()
     private val walls = ArrayList<Wall>()
     private val arcs = ArrayList<Arc>()
+    private class Burst(val x: Float, val y: Float) { var life = 0.3f }
+    private val bursts = ArrayList<Burst>()
+    private val SPLASH = 14f
+    // when the XY pad lets go, the firefly bumbles along after the traveller
+    private var flyFreeT = 99f; private var bumA = 0f
     private var wallT = 0f; private var zapCd = 0f
     private val rnd = kotlin.random.Random(System.nanoTime())
 
@@ -166,7 +171,8 @@ class HallScreen(c: Context) : PixelView(c) {
         return rectHit(l, t, r, b)
     }
 
-    private fun wallAt(x: Float, y: Float, rm: Int) = walls.any { it.room == rm && x > it.x - 3 && x < it.x + 3 && y > it.y - 3 && y < it.y + 3 }
+    private fun wallAt(x: Float, y: Float, rm: Int) = walls.any { it.room == rm && x > it.x - WALL && x < it.x + WALL && y > it.y - WALL && y < it.y + WALL }
+    private val WALL = 5f   // half the width of a wall block
 
     private fun enterRoom(nx: Int, ny: Int, px: Float, py: Float) {
         rx = nx; ry = ny; hx = px; hy = py; bannerT = 1.8f
@@ -203,10 +209,22 @@ class HallScreen(c: Context) : PixelView(c) {
 
     private fun update(dt: Float) {
         // the firefly drifts after where the XY pad points, with a little wobble
-        flyX += (flyTX - flyX) * minOf(1f, dt * 4f); flyY += (flyTY - flyY) * minOf(1f, dt * 4f)
+        flyFreeT += dt
+        val following = xyPointer < 0 && flyFreeT > 1.2f
+        if (following) {
+            // a lazy wandering orbit round the traveller's head, never quite still
+            bumA += dt * 1.4f + (rnd.nextFloat() - 0.5f) * dt * 8f
+            val tm = (System.nanoTime() - t0) / 1e9f
+            val rad = 13f + 5f * kotlin.math.sin(tm * 0.8f)
+            flyTX = (hx + 8 + kotlin.math.cos(bumA) * rad + kotlin.math.sin(tm * 2.3f) * 3f).coerceIn(4f, W - 4f)
+            flyTY = (hy + 2 + kotlin.math.sin(bumA) * rad * 0.7f + kotlin.math.cos(tm * 1.9f) * 3f).coerceIn(12f, H - 4f)
+        }
+        val k = minOf(1f, dt * if (following) 2.2f else 4f)
+        flyX += (flyTX - flyX) * k; flyY += (flyTY - flyY) * k
         if (talking) shown += dt * 28f
         bannerT -= dt; msgT -= dt; scoreT -= dt; bossHurtT -= dt; zapCd -= dt
         arcs.removeAll { it.life -= dt; it.life <= 0f }
+        bursts.removeAll { it.life -= dt; it.life <= 0f }
         walls.removeAll { it.life -= dt; it.life <= 0f }
         val fighting = phase == Phase.FIGHT && !talking
         // moving (not while paralysed)
@@ -232,7 +250,7 @@ class HallScreen(c: Context) : PixelView(c) {
         if (poisonT > 0f) { poisonT -= dt; poisonTick -= dt; if (poisonTick <= 0f) { poisonTick = 1.5f; invulnT = 0f; hurt(1) } }
         val px = hx + 8; val py = hy + 9
         // L held: the firefly lays short-lived walls wherever it flies
-        if (selDown) { wallT -= dt; if (wallT <= 0f) { wallT = 0.05f; if (!wallAt(flyX, flyY, roomId) && walls.size < 70) walls += Wall(flyX, flyY, roomId) } }
+        if (selDown) { wallT -= dt; if (wallT <= 0f) { wallT = 0.05f; if (walls.none { it.room == roomId && kotlin.math.abs(it.x - flyX) < 3f && kotlin.math.abs(it.y - flyY) < 3f } && walls.size < 90) walls += Wall(flyX, flyY, roomId) } }
         // the creature: ranged attacks, summons and spells (from his throne room)
         if (throne) {
             if (castRune < 0) {
@@ -289,9 +307,15 @@ class HallScreen(c: Context) : PixelView(c) {
         if (phase != Phase.FIGHT || talking || zapCd > 0f) return
         zapCd = 0.45f
         var fromX = flyX; var fromY = flyY
-        val hit = minions.filter { it.room == roomId && kotlin.math.hypot(it.x - flyX, it.y - flyY) < 28f }.sortedBy { kotlin.math.hypot(it.x - flyX, it.y - flyY) }.take(3)
-        if (hit.isEmpty()) { arcs += Arc(flyX, flyY, flyX + rnd.nextFloat() * 10 - 5, flyY + rnd.nextFloat() * 10 - 5); return }
-        for (m in hit) { arcs += Arc(fromX, fromY, m.x, m.y); fromX = m.x; fromY = m.y; m.hp--; m.hurtT = 0.3f }
+        val hit = minions.filter { it.room == roomId && kotlin.math.hypot(it.x - flyX, it.y - flyY) < 32f }.sortedBy { kotlin.math.hypot(it.x - flyX, it.y - flyY) }.take(3)
+        val struck = HashSet<Minion>()
+        // every strike bursts: imps caught in the blast are hurt too
+        fun burst(x: Float, y: Float) {
+            bursts += Burst(x, y)
+            for (m in minions) if (m.room == roomId && kotlin.math.hypot(m.x - x, m.y - y) < SPLASH && struck.add(m)) { m.hp--; m.hurtT = 0.3f }
+        }
+        burst(flyX, flyY)
+        for (m in hit) { arcs += Arc(fromX, fromY, m.x, m.y); fromX = m.x; fromY = m.y; if (struck.add(m)) { m.hp--; m.hurtT = 0.3f }; burst(m.x, m.y) }
         minions.removeAll { it.hp <= 0 }
     }
 
@@ -550,7 +574,7 @@ class HallScreen(c: Context) : PixelView(c) {
         for (w in walls) {
             if (w.room != roomId) continue
             if (w.life < 0.5f && (time * 16).toInt() % 2 == 0) continue
-            box(w.x - 3, w.y - 3, w.x + 3, w.y + 3, 0xFFB09020.toInt()); box(w.x - 2, w.y - 2, w.x + 2, w.y + 2, 0xFFF8E070.toInt())
+            box(w.x - WALL, w.y - WALL, w.x + WALL, w.y + WALL, 0xFFB09020.toInt()); box(w.x - WALL + 1, w.y - WALL + 1, w.x + WALL - 1, w.y + WALL - 1, 0xFFF8E070.toInt())
         }
     }
 
@@ -566,6 +590,15 @@ class HallScreen(c: Context) : PixelView(c) {
                 sc.drawLine(x0, y0, x1, y1, line1); x0 = x1; y0 = y1
             }
             box(a.x2 - 2, a.y2 - 2, a.x2 + 2, a.y2 + 2, WHITE)
+        }
+        // the blasts: a ring of sparks opening out to the splash radius
+        for (b in bursts) {
+            val r = SPLASH * (1f - b.life / 0.3f).coerceIn(0.2f, 1f)
+            for (k in 0 until 10) {
+                val a = k * (Math.PI.toFloat() * 2f / 10f)
+                val x = b.x + kotlin.math.cos(a) * r; val y = b.y + kotlin.math.sin(a) * r
+                box(x - 1, y - 1, x + 1, y + 1, if (k % 2 == 0) 0xFFFFF27A.toInt() else WHITE)
+            }
         }
     }
 
@@ -793,6 +826,7 @@ class HallScreen(c: Context) : PixelView(c) {
             return
         }
         if (inverted) { fx = 1f - fx; fy = 1f - fy }
+        flyFreeT = 0f
         flyTX = 4f + fx * (W - 8f)
         flyTY = 4f + fy * (H - 8f)
     }

@@ -22,7 +22,7 @@ class Side:
     ARM = rig3.Side.ARM
     def __init__(self):
         raw = Image.open('side.png')
-        noarm = rig3.Side._inpaint_arm(rig3.Side, raw)
+        noarm = self._inpaint(raw)
         self.src = raw
         sz = (round(raw.width * S), round(raw.height * S))
         self.PAD = pad = 360
@@ -56,8 +56,10 @@ class Side:
         self.upper = part(a, upper_w); self.fore = part(a, fore_w)
         self.fupper = self.upper.copy(); self.fupper[..., :3] = (self.fupper[..., :3] * 0.82).astype(np.uint8)
         self.ffore = self.fore.copy(); self.ffore[..., :3] = (self.ffore[..., :3] * 0.82).astype(np.uint8)
+        # the hip line: front of the thigh (low) up through the hip joint to the buttocks (lower at the back)
+        hipline = np.interp(sx, [0, 110, 235, 330, 400], [575, 590, 612, 650, 660])
         # legs: everything below the hip line, faded in so the top tucks under the body
-        lf = skin.ss((sy - 585) / 50.0)
+        lf = skin.ss((sy - hipline + 45) / 40.0)
         l = body.copy(); l[..., 3] = (l[..., 3] * lf).astype(np.uint8)
         self.leg = l
         thw = 1 - skin.ss((sy - self.KNEE[1] - 8) / 30.0); snw = skin.ss((sy - self.KNEE[1] + 22) / 30.0)
@@ -67,13 +69,40 @@ class Side:
         dk = lambda im: np.concatenate([(im[..., :3] * 0.88).astype(np.uint8), im[..., 3:4]], 2)
         self.fthigh = dk(self.thigh); self.fshin = dk(self.shin)
         # body: everything above the legs (head included), fading out over the thighs
-        bf = 1 - skin.ss((sy - 640) / 40.0)
+        bf = 1 - skin.ss((sy - hipline + 4) / 18.0)
         bd = body.copy(); bd[..., 3] = (bd[..., 3] * bf).astype(np.uint8)
         self.body = bd
         # joint directions for the arm weights
         hx, hy = self.HAND; shx, shy = self.SHOULDER; L = math.hypot(hx - shx, hy - shy)
         self.adir = ((hx - shx) / L, (hy - shy) / L)
         self.s_el = (self.ELBOW[0] - shx) * self.adir[0] + (self.ELBOW[1] - shy) * self.adir[1]
+
+    FARFOOT = [(90, 984), (214, 984), (218, 1022), (205, 1041), (90, 1046)]
+
+    def _inpaint(self, raw):
+        """Paint the near arm out of the body: a smooth fill of the surrounding fur, with fur
+        texture borrowed from the body behind it blended in softly (no hard-edged patches).
+        Also removes the far foot, so each leg layer carries exactly one foot."""
+        a = np.asarray(raw).copy()
+        m = Image.new('L', raw.size, 0); d = ImageDraw.Draw(m); d.polygon(self.ARM, fill=255)
+        m = np.asarray(m.filter(ImageFilter.MaxFilter(7)))
+        inside = (a[..., 3] > 0).astype(np.uint8)
+        fill = cv2.inpaint(np.ascontiguousarray(a[..., :3]), ((m > 0) & (inside > 0)).astype(np.uint8) * 255, 9, cv2.INPAINT_TELEA)
+        # texture: the fur 100 px further back (or 110 px forward where that falls outside the body)
+        tex = np.roll(a[..., :3], -100, axis=1); ok = np.roll(inside, -100, axis=1)
+        tex2 = np.roll(a[..., :3], 110, axis=1); ok2 = np.roll(inside, 110, axis=1)
+        tex = np.where(ok[..., None] > 0, tex, np.where(ok2[..., None] > 0, tex2, fill))
+        detail = tex.astype(np.float32) - cv2.GaussianBlur(tex.astype(np.float32), (0, 0), 6)
+        painted = np.clip(fill.astype(np.float32) + detail * 0.9, 0, 255)
+        soft = cv2.GaussianBlur((m > 0).astype(np.float32), (0, 0), 4)[..., None]
+        out = a.astype(np.float32)
+        out[..., :3] = painted * soft + out[..., :3] * (1 - soft)
+        out = out.astype(np.uint8)
+        # drop the far foot: it is drawn again (darker) by the far-leg layer, from the near foot
+        ff = Image.new('L', raw.size, 0); ImageDraw.Draw(ff).polygon(self.FARFOOT, fill=255)
+        ff = np.asarray(ff.filter(ImageFilter.GaussianBlur(1.5))).astype(np.float32) / 255
+        out[..., 3] = (out[..., 3] * (1 - ff)).astype(np.uint8)
+        return Image.fromarray(out)
 
     # ---- weights (functions of canvas coordinates of the *source* pixel)
     def src_xy(self, x, y): return (x - self.PAD) / S, (y - self.PAD) / S
@@ -90,7 +119,7 @@ class Side:
         sx, sy = self.src_xy(x, y)
         # the head: above and in front of the neck
         up = (self.NECK[1] - sy) + 0.35 * (self.NECK[0] - sx)
-        wh = skin.ss((up + 10) / 55.0) * (1 - skin.ss((sx - 300) / 60.0))
+        wh = skin.ss((up + 40) / 120.0) * (1 - skin.ss((sx - 250) / 120.0))
         return [1 - wh, wh]
 
     def pose(self, torso=0, head=0, nsh=-8, nel=0, fsh=-4, fel=0, nth=0, nsn=0, fth=0, fsn=0):
@@ -130,7 +159,7 @@ class Side:
 
 class Back:
     """Back views: the arms come down from the T-pose, skinned at the shoulder (they stay attached)."""
-    def __init__(self, name, arms, lhang, rhang):
+    def __init__(self, name, arms, lhang, rhang, crotch):
         raw = Image.open(name); self.src = raw
         sz = (round(raw.width * S), round(raw.height * S)); self.PAD = pad = 300
         self.W, self.H = sz[0] + 2 * pad, sz[1] + 2 * pad
@@ -154,11 +183,39 @@ class Back:
         dome = al.filter(ImageFilter.GaussianBlur(14)).point(lambda v: 255 if v > 140 else 0)
         from PIL import ImageChops
         bi.putalpha(Image.composite(ImageChops.multiply(dome, al), al, top))
-        self.body = np.asarray(bi).copy()
+        b = np.asarray(bi).copy()
+        # legs, split at the crotch, so each foot can step during a turn
+        cx_, cy_ = crotch
+        legf = skin.ss((sy - cy_ + 70) / 40.0)
+        self.legs = []
+        for side in (0, 1):
+            m = (sx < cx_) if side == 0 else (sx >= cx_)
+            l = b.copy(); l[..., 3] = (b[..., 3] * legf * m).astype(np.uint8)
+            self.legs.append(l)
+        bodyf = 1 - skin.ss((sy - cy_ - 10) / 20.0)
+        b[..., 3] = (b[..., 3] * bodyf).astype(np.uint8)
+        self.body = b
+        self.crotch = (cx_ * S + pad, cy_ * S + pad)
         self.hipx = ((arms[0][1][0] + arms[1][1][0]) / 2) * S + pad
 
-    def pose(self, tuck=0.0):
-        out = self.body.copy().astype(np.float32)
+    def pose(self, tuck=0.0, lift=(0.0, 0.0)):
+        """tuck: hands in toward the chest; lift: how far each foot (left, right as seen) is raised in a step."""
+        out = np.zeros((self.H, self.W, 4), np.float32)
+        for side, l in enumerate(self.legs):
+            u = lift[side]
+            if u > 0.01:
+                # a stepping foot comes up and in a little, the knee bending toward the viewer's side
+                dx = (-1 if side == 0 else 1) * 3 * u; dy = -22 * u * S
+                ang = (5 if side == 0 else -5) * u
+                M = skin.rot(ang, *self.crotch); M[0, 2] += dx; M[1, 2] += dy
+                f = l.astype(np.float32); al = f[..., 3:4] / 255
+                pm = np.concatenate([f[..., :3] * al, f[..., 3:4]], 2)
+                r = cv2.warpAffine(pm, M[:2].astype(np.float32), (self.W, self.H), flags=cv2.INTER_LINEAR, borderValue=0)
+                alr = r[..., 3:4] / 255; l = np.zeros_like(l); l[..., :3] = np.clip(np.where(alr > 1e-3, r[..., :3] / np.maximum(alr, 1e-3), 0), 0, 255); l[..., 3] = np.clip(r[..., 3], 0, 255)
+            a = l[..., 3:4].astype(np.float32) / 255
+            out[..., :3] = l[..., :3] * a + out[..., :3] * (1 - a); out[..., 3] = np.maximum(out[..., 3], l[..., 3])
+        a = self.body[..., 3:4].astype(np.float32) / 255
+        out[..., :3] = self.body[..., :3] * a + out[..., :3] * (1 - a); out[..., 3] = np.maximum(out[..., 3], self.body[..., 3])
         for layer, sh, d, hang in self.arms:
             ang = hang + (12 * tuck if hang > 0 else -12 * tuck)
             piv = (sh[0] * S + self.PAD, sh[1] * S + self.PAD)
@@ -174,8 +231,8 @@ class Back:
 def back():
     L = [(300, 240), (330, 80), (-40, 380), (-40, 640), (90, 640), (110, 560)]
     R = [(906 - x, y) for x, y in L]
-    return Back('back.png', ((L, (300, 205), (40, 500)), (R, (606, 205), (866, 500))), 40, -40)
+    return Back('back.png', ((L, (300, 205), (40, 500)), (R, (606, 205), (866, 500))), 40, -40, (453, 600))
 def back34():
     L = [(330, 330), (372, 150), (-40, 330), (-40, 700), (90, 700), (140, 620)]
     R = [(690, 380), (640, 150), (1010, 300), (1010, 700), (900, 700), (860, 640)]
-    return Back('back34.png', ((L, (320, 235), (60, 580)), (R, (690, 268), (930, 590))), 35, -35)
+    return Back('back34.png', ((L, (320, 235), (60, 580)), (R, (690, 268), (930, 590))), 35, -35, (496, 690))

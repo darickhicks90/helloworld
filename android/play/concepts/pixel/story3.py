@@ -45,19 +45,30 @@ K(1.28, torso=-5, nsh=18, nel=-10, fsh=24, fel=-10, nth=-12, nsn=24, fth=-12, fs
 K(1.48, torso=13, nsh=-128, nel=-22, fsh=-118, fel=-32, nth=4, nsn=0, fth=4, fsn=0)
 K(1.6, nel=-8, fel=-14)
 K(2.05, torso=2, nsh=-12, nel=-6, fsh=-6, fel=-4, nth=0, fth=0, nsn=0, fsn=0)
-# two steps after it (alternating legs, a little bob)
-def step(t0, dur, x0, x1, lead):
-    a, b = ('nth', 'nsn'), ('fth', 'fsn')
-    sw, st = (a, b) if lead == 'n' else (b, a)
-    K(t0, hipx=x0, **{sw[0]: 0, sw[1]: 0, st[0]: 0, st[1]: 0}, lift=0)
-    K(t0 + dur * 0.5, **{sw[0]: -20, sw[1]: 34, st[0]: 8, st[1]: 4}, lift=2)
-    K(t0 + dur, hipx=x1, **{sw[0]: -16, sw[1]: 6, st[0]: 16, st[1]: 8}, lift=0)
-step(2.05, 0.42, 392, 378, 'n'); step(2.47, 0.42, 378, 364, 'f')
+# two steps after it (alternating legs, a little bob). One continuous walk cycle: the planted
+# leg rolls back under him while the other swings through (no snap between steps). Free arms
+# swing like a person's: each arm opposite its leg, peaking as the heel lands, the elbow a little
+# more bent on the forward swing.
+def walk(t0, dur, xs, leads, arms=None):
+    K(t0, hipx=xs[0], lift=0)
+    for i, lead in enumerate(leads):
+        sw, st = (('nth', 'nsn'), ('fth', 'fsn')) if lead == 'n' else (('fth', 'fsn'), ('nth', 'nsn'))
+        tm, te = t0 + dur * (i + 0.5), t0 + dur * (i + 1)
+        K(tm, **{sw[0]: -20, sw[1]: 34, st[0]: 8, st[1]: 4}, lift=2)
+        K(te, **{sw[0]: -16, sw[1]: 6, st[0]: 16, st[1]: 8}, lift=0, hipx=xs[i + 1])
+        if arms:
+            nb, fb = arms        # resting shoulder angles
+            if lead == 'n':      # near leg forward -> far arm forward, near arm back
+                K(te, nsh=nb + 16, nel=-4, fsh=fb - 20, fel=-18)
+            else:
+                K(te, nsh=nb - 20, nel=-18, fsh=fb + 16, fel=-4)
+walk(2.05, 0.42, [392, 378, 364], 'nf', arms=(-10, -6))
+K(2.95, nsh=-10, nel=-4, fsh=-6, fel=-4)
 K(2.95, **STAND_LEGS)
 # miss 2: lunge low with the near arm (front leg bends, back leg straight), it zips up over his head
 K(3.05, torso=3, nsh=-10, fsh=-6)
-K(3.4, torso=34, nsh=-72, nel=-4, fsh=-48, fel=-8, fth=-46, fsn=46, nth=18, nsn=6, hipx=356)
-K(3.55, torso=36, nsh=-80)
+K(3.4, torso=34, nsh=-72, nel=-4, fsh=26, fel=-14, fth=-46, fsn=46, nth=18, nsn=6, hipx=356)
+K(3.55, torso=36, nsh=-80, fsh=30)
 K(4.05, torso=4, nsh=-10, nel=0, fsh=-6, fel=0, fth=0, fsn=0, nth=0, nsn=0, hipx=362)
 # patient catch: slowly bring both hands up around it, then clap
 K(4.3, nsh=-12, fsh=-8)
@@ -71,9 +82,10 @@ K(6.45, lift=0)
 K(6.95, head=15, torso=8)
 # turn around the way people do: weight shifts, then small alternating steps carry him round,
 # through his back (never toward the viewer). Each view gets a step: one foot lifts and plants.
-def turn(t0, from_face, to_face):
+def turn(t0, from_face, to_face, free=False):
     K(t0, nth=0, nsn=0, fth=0, fsn=0, head=0, torso=1)
-    K(t0 + 0.12, nth=-12, nsn=28, torso=3)                    # first step: the near foot lifts as he starts to turn
+    K(t0 + 0.12, nth=-12, nsn=28, torso=3)
+    if free: K(t0 + 0.12, nsh=0, nel=-4, fsh=-18, fel=-14)                    # first step: the near foot lifts as he starts to turn
     V(t0 + 0.2, 'B34', from_face)
     K(t0 + 0.2, nth=0, nsn=0, bl=1, br=0, tuck=0.3)
     K(t0 + 0.34, bl=0); K(t0 + 0.42, br=1)
@@ -83,16 +95,19 @@ def turn(t0, from_face, to_face):
     K(t0 + 0.78, bl=0); K(t0 + 0.88, br=1)
     V(t0 + 1.02, 'S', to_face)
     K(t0 + 1.02, br=0, bl=0, fth=-12, fsn=28, tuck=0)           # last step brings the other foot round
+    if free: K(t0 + 1.02, nsh=-20, nel=-16, fsh=2, fel=-4)
     K(t0 + 1.18, fth=0, fsn=0, torso=1)
+    if free: K(t0 + 1.45, nsh=-8, nel=0, fsh=-4, fel=0)
 turn(7.0, 'L', 'R')
 # two steps to a spot of his choosing (facing right now; hipx grows)
-step(8.25, 0.45, 362, 376, 'n'); step(8.7, 0.45, 376, 390, 'f')
-K(9.15, **STAND_LEGS, torso=2)
+walk(8.25, 0.45, [362, 376, 390], 'nf')
+K(9.15, torso=2)
 # kneel like a person: the near foot steps back, that knee lowers to the ground, the front
 # foot stays planted; then he leans over the front knee to work
 KN = dict(nth=6, nsn=96, fth=-78, fsn=82)
-K(9.45, nth=16, nsn=22, fth=-14, fsn=16, torso=6, head=8)                     # step back
-K(9.95, **KN, torso=14, head=12)                                              # knee down
+K(9.15, nsh=-70, nel=-118)
+K(9.45, nth=16, nsn=22, fth=-14, fsn=16, torso=6, head=8, nsh=-44, nel=-26)    # step back; free hand out for balance
+K(9.95, **KN, torso=14, head=12, nsh=-20, nel=-50)                               # knee down, hand on the front knee
 K(10.3, torso=30, head=16, nsh=-30, nel=-4, fsh=-60, fel=-110)                # lean in, the far hand still holds it
 # scratch a little hole with the near hand
 for i in range(2):
@@ -113,10 +128,11 @@ K(14.9, head=18, torso=40, nsh=-16, nel=0, fsh=-10, fel=0, **KN)
 # stays down on the one knee a while longer, looking at the little mound
 K(15.4, head=22, torso=36); K(15.9, head=18, torso=38, **KN)
 # get up: lean over the front foot, push, the back knee comes up, stand
-K(16.3, torso=34, head=10, nsh=-12, fsh=-8)
-K(16.75, fth=-40, fsn=44, nth=4, nsn=46, torso=22, head=4)
-K(17.2, **STAND_LEGS, torso=2, head=0, nsh=-8, fsh=-4)
-turn(17.3, 'R', 'L')
+K(16.3, torso=34, head=10, nsh=-20, nel=-50, fsh=-14, fel=-10)                 # hand to the front knee
+K(16.5, torso=36, nsh=-22, nel=-46)                                              # weight onto it
+K(16.75, fth=-40, fsn=44, nth=4, nsn=46, torso=22, head=4, nsh=-4, nel=-26, fsh=-20, fel=-14)   # push off the thigh
+K(17.2, **STAND_LEGS, torso=2, head=0, nsh=4, nel=-4, fsh=-8, fel=-4)          # arm follows through
+turn(17.3, 'R', 'L', free=True)
 # idle while a new firefly drifts down; he looks up at it
 K(18.6, look=1, breath=1)
 K(19.6, hipx=390)

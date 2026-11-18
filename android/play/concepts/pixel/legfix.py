@@ -8,7 +8,7 @@ def single_leg(img, y0=560, y1=1000):
     a = np.asarray(img).astype(np.float32); al = a[..., 3] / 255; rgb = a[..., :3]
     H, W = al.shape
     low = cv2.GaussianBlur(rgb * al[..., None], (0, 0), 14) / np.maximum(cv2.GaussianBlur(al, (0, 0), 14), 1e-3)[..., None]
-    detail = rgb - cv2.GaussianBlur(rgb, (0, 0), 4)
+    detail = rgb - cv2.GaussianBlur(rgb, (0, 0), 7)      # same strand scale as the body's fur
     out = rgb.copy()
     # one base colour per row from the leg's front, smoothed down the leg (no dark band at the knee)
     bases = np.zeros((H, 3), np.float32); have = np.zeros(H, bool)
@@ -29,14 +29,14 @@ def single_leg(img, y0=560, y1=1000):
         base = bases[y]
         shade = 1.04 - 0.26 * np.clip(np.abs(u - 0.3) / 0.7, 0, 1) ** 1.5
         # fur: tile the front 56 px strip across the row (mirrored so the tiles meet without a seam)
-        n = 44; fur = 0
+        n = 64; fur = 0
         for ph in (0, n // 2):                            # two tile sets half a tile apart, cross-faded: no seams
             idx = np.arange(W) - x0 - ph; tile = idx // n; r = idx % n
             dy = ((tile * 37 + ph) % 23) - 11             # each tile borrows from a different height
-            sy_ = np.clip(y + dy, 0, H - 1); sx_ = np.clip(x0 + 14 + r, 0, W - 1)
+            sy_ = np.clip(y + dy, 0, H - 1); sx_ = np.clip(x0 + 8 + r, 0, W - 1)
             wt = 1 - np.abs(r / n - 0.5) * 2
             fur = fur + detail[sy_, sx_] * wt[:, None]
-        row = base[None] * shade[:, None] + fur * 1.25
+        row = base[None] * shade[:, None] + fur * 1.55
         w = ss((y - y0) / 40.0) * (1 - ss((y - y1) / 30.0))
         out[y] = row * w + rgb[y] * (1 - w)
     res = a.copy(); res[..., :3] = np.clip(out, 0, 255)
@@ -46,7 +46,14 @@ def single_leg(img, y0=560, y1=1000):
     bx = [345, 340, 310, 282, 268, 262, 262, 294, 314, 310, 292, 284]
     yy, xx = np.mgrid[0:H, 0:W]
     edge = np.interp(yy, by, bx)
-    keep = 1 - ss((xx - edge + 2) / 5.0)
+    # a furry edge, like the rest of his outline: strands that flick down and back
+    rng = np.random.default_rng(7)
+    sp = np.zeros(H, np.float32); y_ = 0
+    while y_ < H:
+        L = int(rng.integers(7, 16)); amp = float(rng.uniform(1.5, 6.5))
+        sp[y_:y_ + L] = amp * np.linspace(0, 1, len(sp[y_:y_ + L])) ** 1.5   # each strand grows toward its tip, then the next starts
+        y_ += L
+    keep = 1 - ss((xx - edge - sp[yy] + 2) / 4.0)
     on = (1 - ss((yy - 1014) / 14.0)) * ss((yy - 590) / 15.0)     # only between the hip and the ankle
     res[..., 3] = res[..., 3] * (1 - on * (1 - keep))
     return res.astype(np.uint8)

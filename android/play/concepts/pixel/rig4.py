@@ -103,7 +103,22 @@ class Side:
         tex2 = np.roll(a[..., :3], 110, axis=1); ok2 = np.roll(inside, 110, axis=1)
         tex = np.where(ok[..., None] > 0, tex, np.where(ok2[..., None] > 0, tex2, fill))
         detail = tex.astype(np.float32) - cv2.GaussianBlur(tex.astype(np.float32), (0, 0), 6)
-        painted = np.clip(fill.astype(np.float32) + detail * 0.9, 0, 255)
+        # light: per row, continue the body's own colour from just in front of the painted strip,
+        # turning darker toward the back edge (the body is round and the light is in front)
+        lowA = cv2.GaussianBlur(a[..., :3].astype(np.float32), (0, 0), 6)
+        H_, W_ = inside.shape; xs_ = np.arange(W_)
+        lowfill = fill.astype(np.float32).copy()
+        mm = (m > 0) & (inside > 0)
+        for y in range(H_):
+            xr = np.nonzero(inside[y])[0]; mr = np.nonzero(mm[y])[0]
+            if len(xr) < 8 or len(mr) == 0: continue
+            bx0, bx1 = xr.min(), xr.max(); m0 = mr.min()
+            ref = lowA[y, max(bx0, m0 - 14):max(bx0 + 1, m0 - 4)].mean(0) if m0 - 4 > bx0 else fill[y, m0].astype(np.float32)
+            u = (xs_ - bx0) / max(1, bx1 - bx0); u0 = (m0 - bx0) / max(1, bx1 - bx0)
+            sh = lambda v: 1 - 0.24 * np.clip((v - 0.4) / 0.6, 0, 1) ** 1.3
+            lowfill[y] = ref[None] * (sh(u) / sh(u0))[:, None]
+        lowfill = cv2.GaussianBlur(lowfill, (0, 0), 3)
+        painted = np.clip(lowfill + detail * 1.2, 0, 255)
         soft = cv2.GaussianBlur((m > 0).astype(np.float32), (0, 0), 4)[..., None]
         out = a.astype(np.float32)
         out[..., :3] = painted * soft + out[..., :3] * (1 - soft)

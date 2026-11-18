@@ -76,6 +76,8 @@ object Studio : Transport.Listener, MidiInput.Sink {
     val clipBars = HashMap<String, Int>()
     /** Biplanes armed for the next audio take. */
     val armed = BooleanArray(AudioClip.CHANNELS)
+    /** Tracks whose input is monitored live (heard through their strip and fader, clock running or not). */
+    val monitor = BooleanArray(AudioClip.CHANNELS)
 
     private val listeners = CopyOnWriteArrayList<() -> Unit>()
     var onMessage: ((String) -> Unit)? = null
@@ -113,7 +115,7 @@ object Studio : Transport.Listener, MidiInput.Sink {
         Blocks.types.forEach { b -> p.clips.filter { it.engine == b.id && it.inClibbins }.drop(MAX_CLIPS).forEach { it.inClibbins = false } }
         p.flowers.filter { it.inClibbins }.drop(MAX_PLANTED).forEach { it.inClibbins = false }
         flower = p.flowers.first()
-        armed.fill(false)
+        armed.fill(false); monitor.fill(false)
         // The three audio tracks always exist (like tracks in a DAW).
         p.planes.fill(true)
         applyKey()
@@ -328,10 +330,10 @@ object Studio : Transport.Listener, MidiInput.Sink {
      */
     fun refreshLive() {
         if (!isOpen) return
-        for (ch in 0 until 3) { Audio.liveArm[ch] = armed[ch]; Audio.liveInput[ch] = AudioPrefs.planeInput(ch) }
+        for (ch in 0 until 3) { Audio.liveArm[ch] = armed[ch]; Audio.liveMonitor[ch] = monitor[ch]; Audio.liveInput[ch] = AudioPrefs.planeInput(ch) }
         val take = t.audioIn as AudioIn?
         if (take != null) { monitorIn?.close(); monitorIn = null; Audio.liveIn = take; return }
-        val need = tape != null && armed.any { it }
+        val need = (tape != null && armed.any { it }) || monitor.any { it }
         if (need && monitorIn == null) {
             if (app.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 message("Allow the microphone (tap ● Rec once) so armed tracks can be mixed down"); return
@@ -457,6 +459,21 @@ object Studio : Transport.Listener, MidiInput.Sink {
 
     /** The master fader: the level of everything FoxBox plays. */
     fun setAudioMaster(v: Float) { project.audioMaster = v.coerceIn(0f, 1f); Audio.masterVolume = project.audioMaster }
+
+    /** Mon on a track: hear its input live through the track's strip and fader, with or without the clock. */
+    fun toggleMonitor(ch: Int) {
+        if (monitor[ch]) { monitor[ch] = false; refreshLive(); changed(); return }
+        val go = {
+            monitor[ch] = true; refreshLive()
+            if (Audio.onSpeaker) message("Monitoring ${CHANNEL_NAMES[ch]}: use headphones so the speaker doesn't feed back into the mic")
+            changed()
+        }
+        val ask = needMic
+        if (ask != null) ask(go) else go()
+    }
+
+    /** A track's fader. */
+    fun setTrackLevel(ch: Int, v: Float) { Audio.channelLevel[ch] = v.coerceIn(0f, 1f) }
 
     fun toggleArm(ch: Int) { if (project.planes[ch]) { armed[ch] = !armed[ch]; refreshLive(); changed() } }
 

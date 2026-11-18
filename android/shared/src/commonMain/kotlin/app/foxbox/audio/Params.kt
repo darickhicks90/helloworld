@@ -7,7 +7,7 @@ import kotlin.math.ln
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
-enum class Fmt { NUM, HZ, SEC, PCT, ST, CT, X, NOTE, CHOICE }
+enum class Fmt { NUM, HZ, SEC, PCT, ST, CT, X, NOTE, CHOICE, DB }
 
 /**
  * One tweakable sound-design parameter. The audio thread reads [value];
@@ -63,6 +63,7 @@ class Param(
         Fmt.X -> "%.2f×".format(value)
         Fmt.NOTE -> NOTE_NAMES[Math.floorMod(index, 12)] + (Math.floorDiv(index, 12) - 1)
         Fmt.NUM -> if (kotlin.math.abs(value) >= 10f) "${value.roundToInt()}" else "%.2f".format(value)
+        Fmt.DB -> (if (value > 0.05f) "+" else "") + "%.1f".format(value) + " dB"
     }
 }
 

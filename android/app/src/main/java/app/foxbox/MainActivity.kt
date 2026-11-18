@@ -150,7 +150,7 @@ class MainActivity : Activity(), Host {
         mic?.let { m -> mic = null; micFor = null; Thread { runCatching { m.stop() } }.start() }
         Studio.hush()
         screen = 3
-        setContentView(app.foxbox.ui.HallScreen(this))
+        setContentView(app.foxbox.ui.HallScreen(this).apply { onExit = { showClibbins() } })
     }
 
     @Deprecated("Back handling for Android 12 and older")
@@ -207,6 +207,27 @@ class MainActivity : Activity(), Host {
                 5 -> Studio.deleteClip(clip)
             }
         }
+    }
+
+    override fun stripFx(ch: Int) {
+        val fx = if (ch == 3) Audio.masterFx else Audio.stripFx[ch]
+        val name = if (ch == 3) "Master" else Studio.CHANNEL_NAMES[ch] + " track"
+        val d = app.foxbox.ui.SnesDialog(this, "$name · dynamics & effects", wide = 0.94f)
+        val strip = android.widget.LinearLayout(this).apply { orientation = android.widget.LinearLayout.HORIZONTAL }
+        var k = 0
+        fx.p.sections.forEach { (section, params) ->
+            val col = app.foxbox.ui.Snes.accent(k++)
+            val panel = app.foxbox.ui.Panel(this, section, accent = col)
+            val flow = app.foxbox.ui.Flow(this)
+            params.forEach { flow.addView(app.foxbox.ui.Knob(this, it, col)) }
+            panel.addView(flow, android.widget.LinearLayout.LayoutParams(Px.dp(74) * ((params.size + 1) / 2), android.view.ViewGroup.LayoutParams.WRAP_CONTENT))
+            strip.addView(panel, android.widget.LinearLayout.LayoutParams(android.view.ViewGroup.LayoutParams.WRAP_CONTENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT).apply { rightMargin = Px.dp(6) })
+        }
+        d.view(android.widget.HorizontalScrollView(this).apply { addView(strip) })
+        d.key("Reset", app.foxbox.ui.Snes.RED, close = false) { fx.reset(); Studio.save() }
+        d.key("Done", app.foxbox.ui.Snes.GREEN) { Studio.save() }
+        d.onDismiss { Studio.save() }
+        d.show()
     }
 
     override fun mainMenu() = choose("Menu", listOf("File…", "Audio settings…", "MIDI…")) { i ->

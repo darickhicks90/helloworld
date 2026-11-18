@@ -86,6 +86,11 @@ object Audio {
     @Volatile var liveIn: app.foxbox.data.AudioIn? = null
     /** Which tracks are armed, and which input each takes (0 in 1, 1 in 2, 2 both). */
     val liveArm = BooleanArray(3)
+    /** Tracks whose input is heard live through their strip and fader (the Mon switch in Clibbins). */
+    val liveMonitor = BooleanArray(3)
+    /** Each audio track's dynamics and effects, and the master's. */
+    val stripFx = Array(3) { StripFx(false) }
+    val masterFx = StripFx(true)
     val liveInput = IntArray(3)
     private val inL = FloatArray(BLOCK); private val inR = FloatArray(BLOCK)
     private val liveL = FloatArray(BLOCK); private val liveR = FloatArray(BLOCK)
@@ -120,14 +125,21 @@ object Audio {
                 revL[i] += eL[i] * s; revR[i] += eR[i] * s
             }
         }
-        // Audio channels (mono takes).
+        // Audio channels: their takes, plus live input on monitored tracks (clock running or not),
+        // through each track's dynamics and effects strip, then its fader.
         for (ch in 0 until 3) { audioBus[ch].fill(0f, 0, n); audioBusR[ch].fill(0f, 0, n) }
         transport.renderAudio(audioBus, audioBusR, n, transport.blockStartTick)
-        // The three audio tracks feed the master audio track (its level and meter);
-        // a track on a daisy chain reaches it through that chain's flower.
+        val li = liveIn
+        if (li != null) li.readMonitor(inL, inR, n) else { inL.fill(0f, 0, n); inR.fill(0f, 0, n) }
         for (ch in 0 until 3) {
+            val bl = audioBus[ch]; val br = audioBusR[ch]
+            if (li != null && liveMonitor[ch]) {
+                val src = liveInput[ch]
+                for (i in 0 until n) { val v = when (src) { 0 -> inL[i]; 1 -> inR[i]; else -> (inL[i] + inR[i]) * 0.5f }; bl[i] += v; br[i] += v }
+            }
+            stripFx[ch].process(bl, br, n, revL, revR)
             val c = rack.channelRoute[ch]
-            val g = channelLevel[ch]; val bl = audioBus[ch]; val br = audioBusR[ch]
+            val g = channelLevel[ch]
             val dl = if (c >= 0 && chains[c] != null) chL[c] else mixL
             val dr = if (c >= 0 && chains[c] != null) chR[c] else mixR
             var pk = channelPeak[ch] * 0.95f
@@ -141,21 +153,20 @@ object Audio {
         }
         reverbFx.process(revL, revR, mixL, mixR, n)
         rack.processAudition(mixL, mixR, n)
+        masterFx.process(mixL, mixR, n)
         transport.renderClick(mixL, mixR, n)
         if (testTone) for (i in 0 until n) { val v = kotlin.math.sin(TAU * tonePh) * 0.12f; tonePh = (tonePh + 440f / SRF) % 1f; mixL[i] += v; mixR[i] += v }
         limiter.process(mixL, mixR, n, masterVolume)
         var pk = peak * 0.97f
         for (i in 0 until n) pk = max(pk, abs(mixL[i]))
         peak = pk
-        // Live input on armed tracks: shown on their meters, and mixed into the tape
-        // (not the speakers, so a mic can't feed back).
-        val li = liveIn
+        // Armed tracks that aren't monitored still go onto the tape (not the speakers, so a mic can't
+        // feed back); monitored ones are already in the mix.
         val tp = tap
-        if (li != null) {
-            li.readMonitor(inL, inR, n)
+        if (li != null && tp != null) {
             var any = false
             for (i in 0 until n) { liveL[i] = 0f; liveR[i] = 0f }
-            for (ch in 0 until 3) if (liveArm[ch]) {
+            for (ch in 0 until 3) if (liveArm[ch] && !liveMonitor[ch]) {
                 any = true
                 val src = liveInput[ch]; val g = channelLevel[ch]
                 var pk = channelPeak[ch] * 0.95f
@@ -165,11 +176,11 @@ object Audio {
                 }
                 channelPeak[ch] = pk
             }
-            if (any && tp != null) {
+            if (any) {
                 val mv = masterVolume
                 for (i in 0 until n) { liveL[i] = softClip(mixL[i] + liveL[i] * mv); liveR[i] = softClip(mixR[i] + liveR[i] * mv) }
                 tp(liveL, liveR, n)
-            } else tp?.invoke(mixL, mixR, n)
+            } else tp(mixL, mixR, n)
         } else tp?.invoke(mixL, mixR, n)
     }
 

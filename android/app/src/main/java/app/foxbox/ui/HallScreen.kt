@@ -25,8 +25,11 @@ class HallScreen(c: Context) : PixelView(c) {
         // the hall: whites and pale greys only
         const val WHITE = 0xFFF8F8F8.toInt(); const val PALE = 0xFFE0E0E8.toInt(); const val MID = 0xFFB8B8C8.toInt(); const val DARK = 0xFF707088.toInt(); const val INK = 0xFF181820.toInt()
         // the handheld's shell and keys
-        const val SHELL = 0xFF2BA39B.toInt(); const val SHELL_D = 0xFF1C7A74.toInt(); const val SHELL_L = 0xFF5CC6BE.toInt()
-        const val BEZEL = 0xFF3A3A48.toInt(); const val KEY = 0xFF2A2A34.toInt(); const val AB = 0xFF8E2A4A.toInt(); const val AB_L = 0xFFB8466A.toInt()
+        // the handheld: the same grey console plastic and coloured keys as the app's parameter panels
+        val SHELL = Snes.FACE; val SHELL_D = Snes.SHADE; val SHELL_L = Snes.HI
+        const val BEZEL = 0xFF3A3A48.toInt(); const val KEY = 0xFF2A2A34.toInt()
+        /** SELECT steps through these tints of the hall (white, then pale blue, rose, mint). */
+        val TINTS = intArrayOf(0x00000000, 0x2A6A8CE0, 0x2AE07A8A, 0x2A5CC88A)
         val RANT = listOf(
             "#@%&!! WHO POKED MY EYE?!",
             "YOU! YEAH, YOU! I SAW THAT. WITH ALL FIVE OF THEM.",
@@ -72,6 +75,11 @@ class HallScreen(c: Context) : PixelView(c) {
     private var facing = 1; private var walkT = 0f
     private var dirX = 0; private var dirY = 0
     private var talking = true; private var line = 0; private var shown = 0f
+    /** START pauses; SELECT changes the hall's tint; the XY pad flies a firefly about the hall. */
+    private var paused = false; private var tint = 0
+    private var flyX = 120f; private var flyY = 60f; private var flyTX = 120f; private var flyTY = 60f
+    /** Back to the music (set by the activity: Clibbins). */
+    var onExit: (() -> Unit)? = null
     private var lastNs = System.nanoTime()
 
     init { animated = true; isFocusable = true }
@@ -87,6 +95,9 @@ class HallScreen(c: Context) : PixelView(c) {
     }
 
     private fun update(dt: Float) {
+        if (paused) return
+        // the firefly drifts after where the XY pad points, with a little wobble
+        flyX += (flyTX - flyX) * minOf(1f, dt * 4f); flyY += (flyTY - flyY) * minOf(1f, dt * 4f)
         if (dirX != 0 || dirY != 0) {
             facing = when { dirY > 0 -> 0; dirY < 0 -> 1; dirX < 0 -> 2; else -> 3 }
             val sp = 46f * dt
@@ -174,6 +185,19 @@ class HallScreen(c: Context) : PixelView(c) {
         else { dst.set(x, y, x + 16, y + 16); sc.drawBitmap(s.bmp, src, dst, p) }
     }
 
+    /** The firefly the XY pad flies about; he grumbles when it buzzes round his face. */
+    private fun drawFly(time: Float) {
+        val x = flyX + kotlin.math.sin(time * 9f) * 1.5f; val y = flyY + kotlin.math.cos(time * 7f) * 1.5f
+        val glow = (time * 6f).toInt() % 2 == 0
+        p.color = 0x55F0E060; sc.drawRect(x - 3, y - 3, x + 3, y + 3, p)
+        p.color = if (glow) 0xFFFFF27A.toInt() else 0xFFE8D040.toInt(); sc.drawRect(x - 1, y - 1, x + 1, y + 1, p)
+        if (!talking && x in 50f..110f && y in 8f..40f && (time % 1.4f) < 0.9f) {
+            val bx = 4f; val by = 4f
+            box(bx - 1, by - 1, bx + 75, by + 12, INK); box(bx, by, bx + 74, by + 11, WHITE)
+            sc.drawText("BUZZ OFF!", bx + 3, by + 9, font)
+        }
+    }
+
     /** The talk box along the bottom, typed out a letter at a time, word-wrapped to 18 columns. */
     private fun drawTalk(time: Float) {
         if (!talking) return
@@ -208,55 +232,106 @@ class HallScreen(c: Context) : PixelView(c) {
         drawHall(time); drawYeti(time)
         // whoever is lower on screen is drawn in front
         drawHero()
+        drawFly(time)
+        if (TINTS[tint] != 0) { p.color = TINTS[tint]; sc.drawRect(0f, 0f, W.toFloat(), H.toFloat(), p) }
         drawTalk(time)
+        if (paused) {
+            box(44f, 60f, 116f, 80f, INK); box(46f, 62f, 114f, 78f, WHITE)
+            sc.drawText("PAUSE", 60f, 74f, font)
+        }
 
         val w = width.toFloat(); val h = height.toFloat()
         c.drawColor(SHELL)
-        shellP.color = SHELL_L; c.drawRect(0f, 0f, w, Px.dp(6f), shellP)
-        shellP.color = SHELL_D; c.drawRect(0f, h - Px.dp(6f), w, h, shellP)
-        // the screen, as large as whole pixels allow, between the controls
-        val scale = maxOf(1f, kotlin.math.floor(minOf(w * 0.56f / W, h * 0.86f / H)))
+        shellP.color = SHELL_L; c.drawRect(0f, 0f, w, Px.dp(5f), shellP)
+        shellP.color = SHELL_D; c.drawRect(0f, h - Px.dp(5f), w, h, shellP)
+        // the four coloured lamps along the top, like the parameter panels
+        for (k in 0 until 4) { shellP.color = Snes.INK; c.drawRect(w / 2 - Px.dp(40f) + k * Px.dp(22f), Px.dp(9f), w / 2 - Px.dp(28f) + k * Px.dp(22f), Px.dp(21f), shellP); shellP.color = Snes.ACCENTS[k]; c.drawRect(w / 2 - Px.dp(38.5f) + k * Px.dp(22f), Px.dp(10.5f), w / 2 - Px.dp(29.5f) + k * Px.dp(22f), Px.dp(19.5f), shellP) }
+        // the screen, as large as whole pixels allow, with room for the XY pad underneath
+        val scale = maxOf(1f, kotlin.math.floor(minOf(w * 0.5f / W, h * 0.6f / H)))
         val sw = W * scale; val sh = H * scale
-        val sl = (w - sw) / 2; val st = (h - sh) / 2
-        shellP.color = BEZEL; c.drawRoundRect(sl - Px.dp(18f), st - Px.dp(16f), sl + sw + Px.dp(18f), st + sh + Px.dp(16f), Px.dp(12f), Px.dp(12f), shellP)
-        // power lamp
-        shellP.color = 0xFFE84848.toInt(); c.drawCircle(sl - Px.dp(9f), st + sh * 0.3f, Px.dp(3f), shellP)
+        val sl = (w - sw) / 2; val st = Px.dp(30f)
+        shellP.color = BEZEL; c.drawRoundRect(sl - Px.dp(16f), st - Px.dp(12f), sl + sw + Px.dp(16f), st + sh + Px.dp(12f), Px.dp(10f), Px.dp(10f), shellP)
+        shellP.color = Snes.RED; c.drawCircle(sl - Px.dp(8f), st + sh * 0.3f, Px.dp(3f), shellP)
         src.set(0, 0, W, H); dst.set(sl, st, sl + sw, st + sh)
         c.drawBitmap(screen, src, dst, p)
+        screenRect.set(sl, st, sl + sw, st + sh)
 
-        // D-pad, left
+        // XY pad, centred under the screen
+        val xt = st + sh + Px.dp(24f); val xb = h - Px.dp(14f)
+        val xw = minOf(sw * 0.62f, (xb - xt) * 1.8f)
+        xyRect.set(w / 2 - xw / 2, xt, w / 2 + xw / 2, xb)
+        if (xyRect.height() > Px.dp(30f)) {
+            shellP.color = Snes.INK; c.drawRect(xyRect.left - Px.dp(2f), xyRect.top - Px.dp(2f), xyRect.right + Px.dp(2f), xyRect.bottom + Px.dp(2f), shellP)
+            shellP.color = 0xFF2A2B40.toInt(); c.drawRect(xyRect, shellP)
+            shellP.color = 0x22FFFFFF
+            for (k in 1 until 6) { val fx = xyRect.left + xyRect.width() * k / 6f; c.drawRect(fx, xyRect.top, fx + 1, xyRect.bottom, shellP) }
+            for (k in 1 until 3) { val fy = xyRect.top + xyRect.height() * k / 3f; c.drawRect(xyRect.left, fy, xyRect.right, fy + 1, shellP) }
+            val dx = xyRect.left + xyRect.width() * ((flyTX - 4f) / (W - 8f)); val dy = xyRect.top + xyRect.height() * ((flyTY - 4f) / (H - 8f))
+            shellP.color = Snes.YELLOW; c.drawCircle(dx, dy, Px.dp(6f), shellP)
+            shellP.color = 0xFFFFFFFF.toInt(); c.drawCircle(dx - Px.dp(2f), dy - Px.dp(2f), Px.dp(2f), shellP)
+        }
+
+        // back to the music: top left
+        exitRect.set(Px.dp(10f), Px.dp(8f), Px.dp(116f), Px.dp(40f))
+        pill(c, exitRect, "◀ Music", Snes.GREEN, exitDown)
+
+        // D-pad, left, with SELECT above it
         val ds = minOf(Px.dp(150f), sl - Px.dp(40f)).coerceAtLeast(Px.dp(96f))
-        val dcx = sl / 2; val dcy = h * 0.58f
+        val dcx = sl / 2; val dcy = h * 0.62f
         pad.set(dcx - ds / 2, dcy - ds / 2, dcx + ds / 2, dcy + ds / 2)
+        selRect.set(dcx - Px.dp(46f), pad.top - Px.dp(58f), dcx + Px.dp(46f), pad.top - Px.dp(28f))
+        pill(c, selRect, "SELECT", Snes.PURPLE, selDown)
         val arm = ds / 3
         shellP.color = SHELL_D; c.drawCircle(dcx, dcy, ds * 0.62f, shellP)
         shellP.color = KEY
         c.drawRoundRect(dcx - arm / 2, dcy - ds / 2, dcx + arm / 2, dcy + ds / 2, Px.dp(5f), Px.dp(5f), shellP)
         c.drawRoundRect(dcx - ds / 2, dcy - arm / 2, dcx + ds / 2, dcy + arm / 2, Px.dp(5f), Px.dp(5f), shellP)
-        shellP.color = 0xFF44444F.toInt()
         val tri = arm * 0.22f
         for ((ax, ay) in listOf(0f to -1f, 0f to 1f, -1f to 0f, 1f to 0f)) {
             val lit = (ax.toInt() == dirX && ay.toInt() == dirY && (dirX != 0 || dirY != 0))
-            shellP.color = if (lit) 0xFF6A6A78.toInt() else 0xFF44444F.toInt()
+            shellP.color = if (lit) 0xFF8A8A98.toInt() else 0xFF4A4A56.toInt()
             c.drawCircle(dcx + ax * ds * 0.36f, dcy + ay * ds * 0.36f, tri, shellP)
         }
-        // A and B, right, on a slant
+        // A and B, right, on a slant, with START above them
         val r = minOf(Px.dp(34f), (w - sl - sw) / 6f).coerceAtLeast(Px.dp(24f))
         val rcx = sl + sw + (w - sl - sw) / 2
-        aKey.set(rcx + r * 0.3f, h * 0.48f - r, rcx + r * 2.3f, h * 0.48f + r)
-        bKey.set(rcx - r * 2.1f, h * 0.62f - r, rcx - r * 0.1f, h * 0.62f + r)
+        aKey.set(rcx + r * 0.3f, h * 0.55f - r, rcx + r * 2.3f, h * 0.55f + r)
+        bKey.set(rcx - r * 2.1f, h * 0.69f - r, rcx - r * 0.1f, h * 0.69f + r)
+        startRect.set(rcx - Px.dp(46f), aKey.top - Px.dp(58f), rcx + Px.dp(46f), aKey.top - Px.dp(28f))
+        pill(c, startRect, if (paused) "RESUME" else "START", Snes.YELLOW, startDown)
         shellP.color = SHELL_D; c.drawRoundRect(bKey.left - r * 0.4f, aKey.top - r * 0.3f, aKey.right + r * 0.4f, bKey.bottom + r * 0.3f, r, r, shellP)
         for ((k, s) in listOf(aKey to "A", bKey to "B")) {
-            shellP.color = 0xFF5A1A30.toInt(); c.drawCircle(k.centerX() + Px.dp(2f), k.centerY() + Px.dp(3f), r, shellP)
-            shellP.color = if ((s == "A" && aDown) || (s == "B" && bDown)) AB else AB_L; c.drawCircle(k.centerX(), k.centerY(), r, shellP)
-            shellP.color = AB; c.drawCircle(k.centerX() + r * 0.12f, k.centerY() + r * 0.15f, r * 0.82f, shellP)
-            label.textSize = Px.dp(13f)
+            val col = if (s == "A") Snes.RED else Snes.YELLOW
+            val down = (s == "A" && aDown) || (s == "B" && bDown)
+            shellP.color = Snes.INK; c.drawCircle(k.centerX() + Px.dp(2f), k.centerY() + Px.dp(3f), r, shellP)
+            shellP.color = Snes.INK; c.drawCircle(k.centerX(), k.centerY(), r, shellP)
+            shellP.color = if (down) darker(col) else col; c.drawCircle(k.centerX(), k.centerY(), r - Px.dp(2f), shellP)
+            shellP.color = 0x55FFFFFF; c.drawCircle(k.centerX() - r * 0.3f, k.centerY() - r * 0.3f, r * 0.28f, shellP)
+            label.textSize = Px.dp(13f); label.color = textOn(col)
             c.textCentered(s, k.centerX(), k.centerY(), label)
         }
     }
 
+    private val screenRect = RectF(); private val xyRect = RectF(); private val exitRect = RectF(); private val selRect = RectF(); private val startRect = RectF()
+    private var exitDown = false; private var selDown = false; private var startDown = false
+    private fun darker(c: Int): Int { val r = (c shr 16 and 255) * 3 / 4; val g = (c shr 8 and 255) * 3 / 4; val b = (c and 255) * 3 / 4; return (0xFF shl 24) or (r shl 16) or (g shl 8) or b }
+
+    /** A small console key with a coloured face and an ink outline. */
+    private fun pill(c: Canvas, r: RectF, text: String, col: Int, down: Boolean) {
+        val rad = r.height() / 2
+        shellP.color = Snes.INK; c.drawRoundRect(r.left, r.top, r.right, r.bottom + Px.dp(2f), rad, rad, shellP)
+        shellP.color = if (down) darker(col) else col; c.drawRoundRect(r.left + Px.dp(2f), r.top + Px.dp(2f), r.right - Px.dp(2f), r.bottom - Px.dp(1f), rad, rad, shellP)
+        label.textSize = Px.dp(10f); label.color = textOn(col)
+        c.textCentered(text, r.centerX(), r.centerY(), label)
+    }
+
     // ---- touch: the D-pad holds a direction; A and B are taps
     private var padPointer = -1
+    private var xyPointer = -1
+    private fun aimFly(x: Float, y: Float) {
+        flyTX = 4f + ((x - xyRect.left) / xyRect.width()).coerceIn(0f, 1f) * (W - 8f)
+        flyTY = 4f + ((y - xyRect.top) / xyRect.height()).coerceIn(0f, 1f) * (H - 8f)
+    }
     private var aDown = false; private var bDown = false
 
     private fun near(k: RectF, x: Float, y: Float) = abs(x - k.centerX()) < k.width() * 0.75f && abs(y - k.centerY()) < k.height() * 0.75f
@@ -268,6 +343,7 @@ class HallScreen(c: Context) : PixelView(c) {
     }
 
     private fun pressA() {
+        if (paused) return
         if (talking) {
             if (shown < RANT[line].length) shown = RANT[line].length.toFloat()
             else if (line < RANT.size - 1) { line++; shown = 0f } else { talking = false }
@@ -286,6 +362,10 @@ class HallScreen(c: Context) : PixelView(c) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
                 val x = e.getX(i); val y = e.getY(i)
                 when {
+                    exitRect.contains(x, y) -> { exitDown = true; performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP) }
+                    selRect.contains(x, y) -> { selDown = true; tint = (tint + 1) % TINTS.size; performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP) }
+                    startRect.contains(x, y) -> { startDown = true; paused = !paused; performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP) }
+                    xyRect.contains(x, y) -> { xyPointer = e.getPointerId(i); aimFly(x, y) }
                     x < pad.right + pad.width() * 0.3f && y > pad.top - pad.height() * 0.3f && y < pad.bottom + pad.height() * 0.3f -> { padPointer = e.getPointerId(i); steer(x, y) }
                     near(aKey, x, y) -> { aDown = true; pressA(); performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP) }
                     near(bKey, x, y) -> { bDown = true; pressB(); performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP) }
@@ -294,11 +374,18 @@ class HallScreen(c: Context) : PixelView(c) {
             MotionEvent.ACTION_MOVE -> {
                 val k = e.findPointerIndex(padPointer)
                 if (k >= 0) steer(e.getX(k), e.getY(k))
+                val q = e.findPointerIndex(xyPointer)
+                if (q >= 0) aimFly(e.getX(q), e.getY(q))
             }
             MotionEvent.ACTION_POINTER_UP -> {
-                if (e.getPointerId(i) == padPointer) { padPointer = -1; dirX = 0; dirY = 0 } else { aDown = false; bDown = false }
+                if (e.getPointerId(i) == padPointer) { padPointer = -1; dirX = 0; dirY = 0 }
+                else if (e.getPointerId(i) == xyPointer) xyPointer = -1
+                else { aDown = false; bDown = false; selDown = false; startDown = false }
             }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { padPointer = -1; dirX = 0; dirY = 0; aDown = false; bDown = false }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                if (exitDown && e.actionMasked == MotionEvent.ACTION_UP && exitRect.contains(e.x, e.y)) onExit?.invoke()
+                padPointer = -1; xyPointer = -1; dirX = 0; dirY = 0; aDown = false; bDown = false; exitDown = false; selDown = false; startDown = false
+            }
         }
         return true
     }

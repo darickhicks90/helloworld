@@ -47,6 +47,8 @@ interface Host {
     fun showHall()
     /** File, Audio and MIDI in one menu. */
     fun mainMenu()
+    /** Dynamics and effects for audio track `ch` (0–2) or the master (3). */
+    fun stripFx(ch: Int)
 }
 
 /**

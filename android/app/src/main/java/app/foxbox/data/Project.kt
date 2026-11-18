@@ -81,7 +81,12 @@ class Project(val dir: File) {
         put("chains", JSONArray().apply { chains.forEach { put(it.toJson()) } })
         put("flowers", JSONArray().apply { flowers.forEach { put(it.toJson()) } })
         put("engines", engineState); put("layoutSeed", layoutSeed); put("audioMaster", audioMaster.toDouble())
+        // the audio tracks' faders and their dynamics / effects, and the master's
+        put("trackLevels", JSONArray(Audio.channelLevel.map { it.toDouble() }))
+        put("trackFx", JSONArray().apply { Audio.stripFx.forEach { put(it.p.save()) } })
+        put("masterFx", Audio.masterFx.p.save())
     }
+    private var mixState: JSONObject? = null
 
     fun fromJson(o: JSONObject) {
         name = o.optString("name", name); bpm = o.optDouble("bpm", 110.0).toFloat()
@@ -102,6 +107,17 @@ class Project(val dir: File) {
         flowers.clear(); o.optJSONArray("flowers")?.let { a -> for (i in 0 until a.length()) flowers += Flower.fromJson(a.getJSONObject(i)) }
         engineState = o.optJSONObject("engines") ?: JSONObject()
         layoutSeed = o.optInt("layoutSeed"); audioMaster = o.optDouble("audioMaster", 0.75).toFloat()
+        mixState = JSONObject().apply { o.optJSONArray("trackLevels")?.let { put("levels", it) }; o.optJSONArray("trackFx")?.let { put("fx", it) }; o.optJSONObject("masterFx")?.let { put("master", it) } }
+    }
+
+    /** Put the saved track levels and strip settings onto the audio engine (neutral when there are none). */
+    fun applyMix() {
+        val st = mixState ?: JSONObject()
+        val lv = st.optJSONArray("levels")
+        for (ch in 0 until 3) Audio.channelLevel[ch] = lv?.optDouble(ch, 0.9)?.toFloat() ?: 0.9f
+        val fx = st.optJSONArray("fx")
+        Audio.stripFx.forEachIndexed { ch, f -> f.reset(); f.p.load(fx?.optJSONObject(ch)) }
+        Audio.masterFx.reset(); Audio.masterFx.p.load(st.optJSONObject("master"))
     }
 
     /** Capture every block's params + extra state. */
@@ -113,6 +129,7 @@ class Project(val dir: File) {
 
     /** Push this project's settings, samples and takes into the engines. */
     fun applyEngines() {
+        applyMix()
         Audio.engines.forEach { e ->
             val o = engineState.optJSONObject(e.id)
             e.p.load(o?.optJSONObject("params"))

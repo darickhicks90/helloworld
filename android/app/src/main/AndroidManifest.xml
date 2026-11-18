@@ -10,6 +10,7 @@
     <uses-feature android:name="android.hardware.screen.landscape" android:required="true" />
 
     <!-- Recording samples from the microphone -->
+    <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <!-- Bluetooth MIDI: Android 12 and newer -->

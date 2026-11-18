@@ -3,7 +3,6 @@ package app.foxbox
 import android.Manifest
 import android.app.Activity
 import android.app.AlarmManager
-import android.app.AlertDialog
 import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -44,11 +43,12 @@ import app.foxbox.ui.ProjectScreen
 import app.foxbox.ui.Px
 import app.foxbox.ui.StudioScreen
 import app.foxbox.ui.ClibbinsScreen
+import app.foxbox.ui.SnesDialog
 
 /** One activity, three screens: projects → studio ⇄ Clibbins. */
 class MainActivity : Activity(), Host {
     private lateinit var midi: MidiInput
-    private var screen = 0 // 0 projects, 1 studio, 2 Clibbins
+    private var screen = 0 // 0 projects, 1 studio, 2 Clibbins, 3 the great hall
     private var studio: StudioScreen? = null
     private var pickFor: String? = null
     private var mic: AudioFiles.Mic? = null
@@ -83,20 +83,18 @@ class MainActivity : Activity(), Host {
     /** If FoxBox crashed last time, offer to share the details (nothing is sent automatically). */
     private fun offerCrashReport() {
         val report = CrashLog.pending() ?: return
-        AlertDialog.Builder(this).setTitle("5 Eye Yeti closed unexpectedly")
-            .setMessage("Sorry about that. You can share the crash details with the developer to help fix it.")
-            .setPositiveButton("Share details") { _, _ ->
+        SnesDialog.ask(this, "5 Eye Yeti closed unexpectedly", "Sorry about that. You can share the crash details with the developer to help fix it.",
+            "Not now" to { CrashLog.clear() },
+            "Share details" to {
                 CrashLog.clear()
                 startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).apply {
                     type = "text/plain"; putExtra(Intent.EXTRA_SUBJECT, "5 Eye Yeti crash report"); putExtra(Intent.EXTRA_TEXT, report)
                 }, "Share crash details"))
-            }
-            .setNegativeButton("Not now") { _, _ -> CrashLog.clear() }
-            .show()
+            })
     }
 
     private fun goBack() {
-        when (screen) { 2 -> showStudio(); 1 -> showProjects(); else -> finish() }
+        when (screen) { 3 -> showClibbins(); 2 -> showStudio(); 1 -> showProjects(); else -> finish() }
     }
 
     override fun onStart() { super.onStart(); Audio.start(); immersive() }
@@ -147,25 +145,26 @@ class MainActivity : Activity(), Host {
         setContentView(ClibbinsScreen(this, this).apply { backToStudio = { showStudio() } })
     }
 
+    override fun showHall() {
+        // everything stops, without a word: the music, every recording, the mic
+        mic?.let { m -> mic = null; micFor = null; Thread { runCatching { m.stop() } }.start() }
+        Studio.hush()
+        screen = 3
+        setContentView(app.foxbox.ui.HallScreen(this))
+    }
+
     @Deprecated("Back handling for Android 12 and older")
     override fun onBackPressed() = goBack()
 
     private fun textDialog(title: String, initial: String, numeric: Boolean = false, done: (String) -> Unit) {
-        val input = EditText(this).apply {
-            setText(initial); setSelection(initial.length)
-            inputType = if (numeric) InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_SIGNED else InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS
-        }
-        AlertDialog.Builder(this).setTitle(title).setView(input)
-            .setPositiveButton("OK") { _, _ -> done(input.text.toString()) }
-            .setNegativeButton("Cancel", null).show()
+        SnesDialog.text(this, title, initial, numeric, done)
     }
 
     private fun choose(title: String, items: List<String>, checked: Int = -1, pick: (Int) -> Unit) {
-        val b = AlertDialog.Builder(this).setTitle(title)
-        if (checked >= 0) b.setSingleChoiceItems(items.toTypedArray(), checked) { d, i -> d.dismiss(); pick(i) }
-        else b.setItems(items.toTypedArray()) { _, i -> pick(i) }
-        b.setNegativeButton("Close", null).show()
+        SnesDialog.choose(this, title, items, checked, pick)
     }
+
+    private fun ask(title: String, msg: String, vararg keys: Pair<String, (() -> Unit)?>) = SnesDialog.ask(this, title, msg, *keys)
 
     private fun newProject() = textDialog("Name your project", "Song ${ProjectStore.list().size + 1}") { openProject(ProjectStore.create(it)) }
 
@@ -175,8 +174,8 @@ class MainActivity : Activity(), Host {
                 0 -> openProject(p)
                 1 -> textDialog("Rename project", p.name) { ProjectStore.rename(p, it); showProjects() }
                 2 -> textDialog("Name the copy", p.name + " copy") { ProjectStore.duplicate(p, it); showProjects() }
-                3 -> AlertDialog.Builder(this).setTitle("Delete ${p.name}?").setMessage("Its clips, takes and samples in the app will be removed. Exported files stay.")
-                    .setPositiveButton("Delete") { _, _ -> ProjectStore.delete(p); showProjects() }.setNegativeButton("Cancel", null).show()
+                3 -> ask("Delete ${p.name}?", "Its clips, takes and samples in the app will be removed. Exported files stay.",
+                    "Cancel" to null, "Delete" to { ProjectStore.delete(p); showProjects() })
             }
         }
     }
@@ -189,19 +188,29 @@ class MainActivity : Activity(), Host {
 
     override fun clipMenu(clip: Clip) {
         val playing = Studio.isPlaying(clip)
-        val items = listOf(if (playing) "Stop" else "Play", "Clip length…", "Rename", "Save MIDI file again", "Delete")
+        val lengths = listOf(1, 2, 3, 4, 6, 8, 12, 16)
+        fun length() = choose("Length (now ${clip.lengthTicks / Ticks.BAR} bars)", lengths.map { "$it bar" + if (it > 1) "s" else "" }) { i -> Studio.setClipBars(clip, lengths[i]) }
+        if (clip.jam) {
+            choose(clip.name, listOf(if (playing) "Stop" else "Play", "Keep it as a clip for Clibbins", "Loop length…", "Delete")) { which ->
+                when (which) { 0 -> Studio.toggleClip(clip); 1 -> Studio.keepLoop(clip); 2 -> length(); 3 -> Studio.deleteClip(clip) }
+            }
+            return
+        }
+        val items = listOf(if (playing) "Stop" else "Play", if (clip.inClibbins) "Take out of Clibbins" else "Send to Clibbins", "Clip length…", "Rename", "Save MIDI file again", "Delete")
         choose(clip.name, items) { which ->
             when (which) {
                 0 -> Studio.toggleClip(clip)
-                1 -> {
-                    val opts = listOf(1, 2, 3, 4, 6, 8, 12, 16)
-                    choose("Length (now ${clip.lengthTicks / Ticks.BAR} bars)", opts.map { "$it bar" + if (it > 1) "s" else "" }) { i -> Studio.setClipBars(clip, opts[i]) }
-                }
-                2 -> textDialog("Rename clip", clip.name) { Studio.renameClip(clip, it) }
-                3 -> { ProjectStore.saveClipMidi(Studio.project, clip); Studio.message("Saved ${clip.name}.mid to ${ProjectStore.location.label}") }
-                4 -> Studio.deleteClip(clip)
+                1 -> Studio.toggleInClibbins(clip)
+                2 -> length()
+                3 -> textDialog("Rename clip", clip.name) { Studio.renameClip(clip, it) }
+                4 -> { ProjectStore.saveClipMidi(Studio.project, clip); Studio.message("Saved ${clip.name}.mid to ${ProjectStore.location.label}") }
+                5 -> Studio.deleteClip(clip)
             }
         }
+    }
+
+    override fun mainMenu() = choose("Menu", listOf("File…", "Audio settings…", "MIDI…")) { i ->
+        when (i) { 0 -> fileMenu(); 1 -> audioSettings(); 2 -> midiMenu() }
     }
 
     override fun chooseXyTarget(xy: XyState, isX: Boolean) {
@@ -387,15 +396,7 @@ class MainActivity : Activity(), Host {
         }.start()
     }
 
-    override fun chopMenu(pad: Int) {
-        val name = Audio.pickup.names[pad]
-        val items = listOf("4 equal slices", "8 equal slices", "16 equal slices", "At each hit (transients)", "Every beat (${Studio.project.bpm.toInt()} BPM)", "Every half beat", "Every bar") +
-            (if (Studio.canUndoChop) listOf("Undo the last chop") else emptyList())
-        val modes = listOf("equal4", "equal8", "equal16", "hits", "beat", "halfbeat", "bar")
-        choose("Chop pad ${pad + 1} ($name) onto pads ${pad + 1}–16", items) { i ->
-            if (i < modes.size) Studio.chopPad(pad, modes[i]) else Studio.undoChop()
-        }
-    }
+    override fun chopMenu(pad: Int) = app.foxbox.ui.ChopPopup.show(this, this, pad)
 
     private fun openDocuments(req: Int, type: String) {
         val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply { addCategory(Intent.CATEGORY_OPENABLE); this.type = type; putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true) }
@@ -460,8 +461,7 @@ class MainActivity : Activity(), Host {
         choose("Map which control?", fixed.map { targetName(it) } + params.map { "${e.title}: ${it.name}" }) { i ->
             val target = if (i < fixed.size) fixed[i] else "param:${e.id}.${params[i - fixed.size].id}"
             MidiMap.learning = target
-            val d = AlertDialog.Builder(this).setTitle("MIDI learn").setMessage("Move a knob, fader or button on your controller for “${targetName(target)}”…")
-                .setNegativeButton("Cancel") { _, _ -> MidiMap.learning = null }.show()
+            val d = ask("MIDI learn", "Move a knob, fader or button on your controller for “${targetName(target)}”…", "Cancel" to { MidiMap.learning = null })
             val poll = object : Runnable { override fun run() { if (MidiMap.learning == null) d.dismiss() else if (d.isShowing) main.postDelayed(this, 150) } }
             main.postDelayed(poll, 150)
         }
@@ -516,8 +516,7 @@ class MainActivity : Activity(), Host {
     }
 
     private fun askRestart() {
-        AlertDialog.Builder(this).setTitle("Restart 5 Eye Yeti?").setMessage("The new sample rate takes effect when 5 Eye Yeti restarts. Your project is saved first.")
-            .setPositiveButton("Restart now") { _, _ -> restartApp() }.setNegativeButton("Later", null).show()
+        ask("Restart 5 Eye Yeti?", "The new sample rate takes effect when 5 Eye Yeti restarts. Your project is saved first.", "Later" to null, "Restart now" to { restartApp() })
     }
 
     private fun restartApp() {
@@ -530,15 +529,15 @@ class MainActivity : Activity(), Host {
     }
 
     private fun runAudioTest() {
-        val d = AlertDialog.Builder(this).setTitle("Audio test").setMessage("You'll hear a quiet tone for about 12 seconds while 5 Eye Yeti tries each buffer size…").setCancelable(false).show()
+        val d = SnesDialog(this, "Audio test").message("You'll hear a quiet tone for about 12 seconds while 5 Eye Yeti tries each buffer size…").cancelable(false).show()
         Thread {
-            val report = AudioTest.run { msg -> runOnUiThread { d.setMessage(msg) } }
+            val report = AudioTest.run { msg -> runOnUiThread { d.message(msg) } }
             runOnUiThread {
                 d.dismiss()
-                AlertDialog.Builder(this).setTitle("Audio test results").setMessage(report.text)
-                    .setPositiveButton("Use ${report.recommended} frames") { _, _ -> AudioPrefs.bufferFrames = report.recommended; Audio.restart(); Studio.message("Buffer set to ${report.recommended} frames") }
-                    .setNeutralButton("Automatic") { _, _ -> AudioPrefs.bufferFrames = 0; Audio.restart() }
-                    .setNegativeButton("Keep mine", null).show()
+                ask("Audio test results", report.text,
+                    "Keep mine" to null,
+                    "Automatic" to { AudioPrefs.bufferFrames = 0; Audio.restart() },
+                    "Use ${report.recommended} frames" to { AudioPrefs.bufferFrames = report.recommended; Audio.restart(); Studio.message("Buffer set to ${report.recommended} frames") })
             }
         }.start()
     }
@@ -546,7 +545,7 @@ class MainActivity : Activity(), Host {
     /** A few yes/no questions that walk through the usual audio problems. */
     private fun wizard(step: Int) {
         fun ask(title: String, msg: String, yes: String, no: String, onYes: () -> Unit, onNo: () -> Unit) =
-            AlertDialog.Builder(this).setTitle(title).setMessage(msg).setPositiveButton(yes) { _, _ -> onYes() }.setNegativeButton(no) { _, _ -> onNo() }.setNeutralButton("Stop", null).show()
+            ask(title, msg, "Stop" to null, no to onNo, yes to onYes)
         when (step) {
             0 -> { Audio.testTone = true; ask("1 · Can you hear a tone?", "5 Eye Yeti is playing a quiet 440 Hz tone now.", "Yes", "No", { Audio.testTone = false; wizard(2) }, { Audio.testTone = false; wizard(1) }) }
             1 -> ask("No sound", "• Turn the media volume up (use the volume keys while 5 Eye Yeti is open).\n• If you use a USB interface, check its monitor / headphone level and that it is class-compliant (it should work without drivers).\n• Bluetooth headphones work but add a long delay; wired or USB is best.\n\n5 Eye Yeti will now switch output back to the system default.",
@@ -556,13 +555,13 @@ class MainActivity : Activity(), Host {
             }, { wizard(3) })
             3 -> ask("3 · Too much delay?", "Does sound come noticeably late after you touch a pad or key?", "Yes", "No", {
                 AudioPrefs.bufferFrames = 128; Audio.restart()
-                AlertDialog.Builder(this).setTitle("Lower latency").setMessage("Buffer set to 128 frames. Also:\n• Use wired or USB headphones (Bluetooth adds 100–200 ms).\n• Close other audio apps.\n• If it now crackles, run the audio test.").setPositiveButton("Next") { _, _ -> wizard(4) }.show()
+                ask("Lower latency", "Buffer set to 128 frames. Also:\n• Use wired or USB headphones (Bluetooth adds 100–200 ms).\n• Close other audio apps.\n• If it now crackles, run the audio test.", "Next" to { wizard(4) })
             }, { wizard(4) })
             4 -> ask("4 · Recordings out of time?", "Do audio takes land a little late or early against the beat?", "Yes", "No", {
                 textDialog("Recording offset in ms (try 20–60 if takes land late)", AudioPrefs.offsetMs.toString(), numeric = true) { s -> s.toIntOrNull()?.let { AudioPrefs.offsetMs = it.coerceIn(-500, 500) }; wizard(5) }
             }, { wizard(5) })
             5 -> ask("5 · Interface not showing up?", "Is your USB audio interface or MIDI controller missing from the lists?", "Yes", "No", {
-                AlertDialog.Builder(this).setTitle("Connecting USB gear").setMessage("• Use a USB-C OTG adapter or hub; bus-powered interfaces may need a powered hub.\n• Class-compliant devices need no drivers. Some have a \"class compliant\" or \"iOS\" mode switch.\n• Unplug and replug after 5 Eye Yeti is open; it picks devices up live.\n• Choose it under Audio → Output / Input, and MIDI devices appear under MIDI.").setPositiveButton("Done", null).show()
+                ask("Connecting USB gear", "• Use a USB-C OTG adapter or hub; bus-powered interfaces may need a powered hub.\n• Class-compliant devices need no drivers. Some have a \"class compliant\" or \"iOS\" mode switch.\n• Unplug and replug after 5 Eye Yeti is open; it picks devices up live.\n• Choose it under Audio → Output / Input, and MIDI devices appear under MIDI.", "Done" to null)
             }, { Studio.message("All good. Happy music making!") })
         }
     }

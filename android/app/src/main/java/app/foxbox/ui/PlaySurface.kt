@@ -25,10 +25,11 @@ class ChordPanel(c: Context) : LinearLayout(c) {
         // Key, octave and scale share one slim row and the 7th sits in the footer,
         // so the chord buttons get most of the column.
         val key = Stepper(c, "Key", 60, { Theory.NOTE_NAMES[Studio.project.root] }) { Studio.setKey(root = Studio.project.root + it) }
-        val oct = Stepper(c, "Oct", 60, { (Studio.project.octave + 3).toString() }) { Studio.setKey(octave = Studio.project.octave + it) }
+        // the octave shows as the key's note in that octave (C3, D4…)
+        val oct = Stepper(c, "Octave", 74, { Theory.noteNameOct(48 + Studio.project.octave * 12 + Studio.project.root) }) { Studio.setKey(octave = Studio.project.octave + it) }
         val scale = Stepper(c, "Scale", 100, { Studio.scale.name }) { Studio.setKey(scale = Studio.project.scale + it) }
         addView(row(c, key, oct, scale).apply {
-            key.layoutParams = lp(0, Px.dp(ROW), 1f); oct.layoutParams = lp(0, Px.dp(ROW), 1f); scale.layoutParams = lp(0, Px.dp(ROW), 2.1f)
+            key.layoutParams = lp(0, Px.dp(ROW), 1f); oct.layoutParams = lp(0, Px.dp(ROW), 1.25f); scale.layoutParams = lp(0, Px.dp(ROW), 1.9f)
         }, lp(MATCH, WRAP))
         addView(chords, lp(MATCH, 0, 1f).apply { topMargin = Px.dp(2); bottomMargin = Px.dp(2) })
         foot.addView(sev, lp(Px.dp(56), Px.dp(ROW)))

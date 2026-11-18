@@ -11,6 +11,7 @@ import app.foxbox.audio.AudioPrefs
 import app.foxbox.seq.AudioClip
 import app.foxbox.seq.Ticks
 import app.foxbox.seq.Transport
+import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.log10
 
@@ -424,7 +425,7 @@ class ClibbinsScreen(c: Context, private val host: Host) : PixelView(c) {
             } else eyeNext = now + 5_000L
         }
         if (eyeUntil == 0L) return
-        if (now >= eyeUntil + 400) { eyeUntil = 0L; eyeNext = now + 15_000L + rnd.nextLong(30_000L); return }
+        if (now >= eyeUntil + 400) { eyeUntil = 0L; eyeSore = false; eyeNext = now + 15_000L + rnd.nextLong(30_000L); return }
         // opening, closing, and blinks
         var open = when {
             now < eyeFrom + 400 -> (now - eyeFrom) / 400f
@@ -441,7 +442,33 @@ class ClibbinsScreen(c: Context, private val host: Host) : PixelView(c) {
             lookX = if (stare) 0f else rnd.nextFloat() * 1.2f - 0.6f; lookY = if (stare) 0f else rnd.nextFloat() * 0.8f - 0.4f
             lookNext = now + 700L + rnd.nextLong(1_800L)
         }
-        Eyeball.draw(c, eyeX, eyeY, eyeW, open, lookX, lookY, eyeVariant)
+        eyeOpen = open
+        // a poked eye glares straight at you
+        Eyeball.draw(c, eyeX, eyeY, eyeW, open, if (eyeSore) 0f else lookX, if (eyeSore) 0f else lookY, eyeVariant, eyeSore)
+    }
+
+    private var eyeSore = false
+    private var eyeOpen = 0f
+    private fun onEye(x: Float, y: Float): Boolean {
+        if (eyeUntil == 0L || eyeOpen < 0.2f) return false
+        val dx = (x - eyeX) / (eyeW * 0.75f); val dy = (y - eyeY) / (eyeW * 0.5f)
+        return dx * dx + dy * dy <= 1f
+    }
+
+    /** Poked: the phone buzzes and the eye goes bloodshot (and stays open a while, glaring). */
+    private fun pokeEye() {
+        eyeSore = true
+        eyeUntil = maxOf(eyeUntil, System.currentTimeMillis() + 4_000L)
+        blinkAt = System.currentTimeMillis() + 2_500L
+        buzz()
+    }
+
+    private fun buzz() {
+        val v = if (android.os.Build.VERSION.SDK_INT >= 31) context.getSystemService(android.os.VibratorManager::class.java)?.defaultVibrator
+        else @Suppress("DEPRECATION") context.getSystemService(android.os.Vibrator::class.java)
+        if (v == null || !v.hasVibrator()) { performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS); return }
+        if (android.os.Build.VERSION.SDK_INT >= 26) v.vibrate(android.os.VibrationEffect.createWaveform(longArrayOf(0, 90, 60, 160), -1))
+        else @Suppress("DEPRECATION") v.vibrate(250)
     }
 
     /** Find a spot clear of every clip, box, button and the poetry banner. */
@@ -511,6 +538,7 @@ class ClibbinsScreen(c: Context, private val host: Host) : PixelView(c) {
     // ------------------------------------------------------------------ touch
 
     private var downHit: ClipField.Hit? = null
+    private var eyeTouch = false
     private var downX = 0f; private var downY = 0f; private var curX = 0f; private var curY = 0f
     private var moved = false
     private var burying: String? = null
@@ -541,6 +569,8 @@ class ClibbinsScreen(c: Context, private val host: Host) : PixelView(c) {
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 downX = x; downY = y; curX = x; curY = y; moved = false; drag = 0
+                eyeTouch = onEye(x, y)
+                if (eyeTouch) return true
                 if (selected != null && inside(renameBox, x, y)) { selected?.let { host.renameItem(it) }; return true }
                 if (selected != null && inside(fader, x, y)) { drag = 1; setFader(y); return true }
                 if (selected != null && inside(panBox, x, y)) { drag = 2; setPan(x); return true }
@@ -551,6 +581,7 @@ class ClibbinsScreen(c: Context, private val host: Host) : PixelView(c) {
             }
             MotionEvent.ACTION_MOVE -> {
                 curX = x; curY = y
+                if (eyeTouch) return true
                 when (drag) { 1 -> { setFader(y); return true }; 2 -> { setPan(x); return true }; 3 -> { setMaster(y); return true } }
                 if (!moved && hypot(x - downX, y - downY) > Px.dp(10f)) {
                     moved = true
@@ -569,6 +600,16 @@ class ClibbinsScreen(c: Context, private val host: Host) : PixelView(c) {
             }
             MotionEvent.ACTION_UP -> {
                 removeCallbacks(longPress)
+                if (eyeTouch) {
+                    eyeTouch = false
+                    val dx = x - downX; val dy = y - downY
+                    when {
+                        // swiped away to the right: everything stops, and off you go to answer for it
+                        dx > Px.dp(60f) && abs(dy) < dx * 0.8f -> { eyeUntil = 0L; eyeSore = false; host.showHall() }
+                        hypot(dx, dy) < Px.dp(14f) -> pokeEye()
+                    }
+                    return true
+                }
                 val b = burying
                 when {
                     drag != 0 -> { drag = 0; Studio.save() }
@@ -582,7 +623,7 @@ class ClibbinsScreen(c: Context, private val host: Host) : PixelView(c) {
                 }
                 downHit = null
             }
-            MotionEvent.ACTION_CANCEL -> { removeCallbacks(longPress); burying = null; chainFlower = null; chainPath.clear(); drag = 0; downHit = null }
+            MotionEvent.ACTION_CANCEL -> { eyeTouch = false; removeCallbacks(longPress); burying = null; chainFlower = null; chainPath.clear(); drag = 0; downHit = null }
         }
         return true
     }

@@ -84,7 +84,19 @@ object Studio : Transport.Listener, MidiInput.Sink {
     fun listen(fn: () -> Unit) = listeners.add(fn)
     fun unlisten(fn: () -> Unit) = listeners.remove(fn)
     fun changed() { main.post { listeners.forEach { it() } } }
-    override fun message(text: String) { main.post { onMessage?.invoke(text) } }
+    /** Messages are held back until then (stopping everything from the eye says nothing). */
+    @Volatile private var quietUntil = 0L
+    override fun message(text: String) { if (System.currentTimeMillis() < quietUntil) return; main.post { if (System.currentTimeMillis() >= quietUntil) onMessage?.invoke(text) } }
+
+    /** Stop all music and every recording at once, saying nothing about it. */
+    fun hush() {
+        quietUntil = System.currentTimeMillis() + 5_000L
+        masterArmed = false
+        armed.fill(false)
+        Audio.post { t.stop() }
+        refreshLive()
+        changed()
+    }
 
     init { t.listener = this }
 
@@ -255,11 +267,36 @@ object Studio : Transport.Listener, MidiInput.Sink {
     fun stop() = Audio.post { t.stop() }
     fun togglePlay() = Audio.post { if (t.playing) t.stop() else t.play() }
 
-    /** MIDI record: records the block in front for its clip length. Again to finish early. */
+    /**
+     * The Studio's two ways of working:
+     *  - JAM: ● Loop records the block in front for the loop length; it keeps
+     *    looping right away, so you can switch blocks and layer more loops on top.
+     *    Jam loops stay out of Clibbins (keep one to send it there).
+     *  - CLIPS: ● Record clip records a clip to prepare for Clibbins: preview it,
+     *    set its length, rename it, then send it to Clibbins.
+     */
+    enum class Mode { JAM, CLIPS }
+    var mode = Mode.JAM
+        private set
+    fun setMode(m: Mode) { mode = m; changed() }
+    /** The mode the take in progress was started in. */
+    private var recMode = Mode.JAM
+    const val MAX_JAM = 8
+    const val MAX_TRAY = 8
+    /** The clip most recently recorded or tapped in Clips mode (what "Send to Clibbins" sends). */
+    var selectedClip: Clip? = null
+        private set
+    fun selectClip(c: Clip?) { selectedClip = c; changed() }
+
+    /** ● in the Studio: records the block in front (Jam loop or clip, by mode). Again to finish early. */
     fun recordMidi() {
         val e = if (page == FLOWERS) melodic else current
         val recording = t.rec != Transport.Rec.OFF
-        if (!recording && clipsFor(e).size >= MAX_CLIPS) return message("${e.title} already has $MAX_CLIPS clips. Lay one to rest (hold it, drag to R.I.P.) to record another.")
+        if (!recording) {
+            if (mode == Mode.JAM && jamLoops.size >= MAX_JAM) return message("The jam holds $MAX_JAM loops. Clear it, or keep or delete a loop first.")
+            if (mode == Mode.CLIPS && clipsFor(e).size >= MAX_TRAY) return message("${e.title} holds $MAX_TRAY clips. Delete one (hold it) to record another.")
+            recMode = mode
+        }
         Audio.post { t.record(e, barsFor(e) * Ticks.BAR) }
     }
     fun barsFor(e: Engine) = clipBars[e.id] ?: 2
@@ -338,22 +375,62 @@ object Studio : Transport.Listener, MidiInput.Sink {
 
     override fun onRecorded(clips: List<Clip>) {
         main.post {
-            val full = clips.filter { c -> project.clips.count { it.engine == c.engine } >= MAX_CLIPS }
-            if (full.isNotEmpty()) {
-                Audio.post { full.forEach { t.stopClip(it.id) } }
-                message(full.joinToString { engine(it.engine).title } + " already full ($MAX_CLIPS clips each), so those parts weren't kept")
-            }
-            val kept = clips - full.toSet()
-            kept.forEach { c ->
+            val jam = recMode == Mode.JAM
+            clips.forEach { c ->
                 val e = engine(c.engine)
-                val n = project.clips.count { it.engine == c.engine } + 1
-                c.name = "${e.title} $n"; c.variant = n - 1; c.inClibbins = true
+                c.jam = jam; c.inClibbins = false
+                if (jam) {
+                    c.name = "${e.title} loop ${jamLoops.count { it.engine == c.engine } + 1}"
+                } else {
+                    val n = clipsFor(e).size + 1
+                    c.name = "${e.title} $n"; c.variant = n - 1
+                    selectedClip = c
+                    ProjectStore.saveClipMidi(project, c)
+                }
                 project.clips += c
-                ProjectStore.saveClipMidi(project, c)
             }
-            if (kept.isNotEmpty()) message("Recorded " + kept.joinToString { it.name })
+            if (clips.isNotEmpty()) message(if (jam) "Looping " + clips.joinToString { it.name } + ": switch blocks and ● Loop again to layer"
+                else "Recorded " + clips.joinToString { it.name } + ": tap ➜ Clibbins to send it")
             save(); changed()
         }
+    }
+
+    // ---- jam loops
+
+    val jamLoops get() = project.clips.filter { it.jam && it.engine in project.blocks }
+
+    /** Turn a jam loop into a clip for Clibbins. */
+    fun keepLoop(c: Clip) {
+        val e = engine(c.engine)
+        if (clipsFor(e).size >= MAX_TRAY) return message("${e.title} already holds $MAX_TRAY clips")
+        if (inClibbinsFor(e) >= MAX_CLIPS) return message("${e.title} already has $MAX_CLIPS clips in Clibbins. Take one out first (Clips mode).")
+        val n = clipsFor(e).size + 1
+        c.jam = false; c.inClibbins = true; c.name = "${e.title} $n"; c.variant = n - 1
+        ProjectStore.saveClipMidi(project, c)
+        message("${c.name} is in Clibbins"); save(); changed()
+    }
+
+    /** Stop and delete every jam loop. */
+    fun clearJam() {
+        val loops = jamLoops
+        if (loops.isEmpty()) return
+        Audio.post { loops.forEach { t.stopClip(it.id) } }
+        project.clips.removeAll(loops.toSet())
+        message("Jam cleared"); save(); changed()
+    }
+
+    // ---- clips for Clibbins
+
+    fun inClibbinsFor(e: Engine) = project.clips.count { it.engine == e.id && !it.jam && it.inClibbins }
+
+    /** Send a prepared clip to Clibbins, or take it back out. */
+    fun toggleInClibbins(c: Clip) {
+        if (!c.inClibbins && inClibbinsFor(engine(c.engine)) >= MAX_CLIPS)
+            return message("${engine(c.engine).title} already has $MAX_CLIPS clips in Clibbins. Take one out first.")
+        c.inClibbins = !c.inClibbins
+        if (!c.inClibbins) dropFromClibbins(c.id)
+        message(if (c.inClibbins) "${c.name} sent to Clibbins" else "${c.name} taken out of Clibbins")
+        save(); changed()
     }
 
     // ------------------------------------------------------------------ audio takes (the biplanes)
@@ -451,7 +528,8 @@ object Studio : Transport.Listener, MidiInput.Sink {
     // ------------------------------------------------------------------ clips
 
     fun engine(id: String): Engine = Audio.engine(id)
-    fun clipsFor(e: Engine) = project.clips.filter { it.engine == e.id }
+    /** The clips prepared on a block (jam loops are listed separately). */
+    fun clipsFor(e: Engine) = project.clips.filter { it.engine == e.id && !it.jam }
     fun isPlaying(id: String) = id in t.playing_ids
     fun isPlaying(c: Clip) = isPlaying(c.id)
 
@@ -469,6 +547,7 @@ object Studio : Transport.Listener, MidiInput.Sink {
     fun deleteClip(c: Clip) {
         Audio.post { t.stopClip(c.id) }
         project.clips.remove(c); dropFromClibbins(c.id)
+        if (selectedClip === c) selectedClip = null
         save(); changed()
     }
 
@@ -481,9 +560,7 @@ object Studio : Transport.Listener, MidiInput.Sink {
 
     fun renameClip(c: Clip, name: String) { c.name = name.ifBlank { c.name }; save(); changed() }
 
-    fun sendToClibbins(c: Clip) {
-        c.inClibbins = true; save(); changed()
-    }
+
 
     // ------------------------------------------------------------------ flowers
 
@@ -527,7 +604,7 @@ object Studio : Transport.Listener, MidiInput.Sink {
 
     // ------------------------------------------------------------------ Clibbins
 
-    val clibbinsClips get() = project.clips.filter { it.engine in project.blocks }
+    val clibbinsClips get() = project.clips.filter { it.engine in project.blocks && !it.jam && it.inClibbins }
     val clibbinsFlowers get() = project.flowers.filter { it.inClibbins }
     val clibbinsTakes get() = project.audioClips.filter { project.planes[it.channel] }
 
@@ -657,10 +734,10 @@ object Studio : Transport.Listener, MidiInput.Sink {
     private var samplerIn: AudioIn? = null
 
     /**
-     * The Mic button on Reflections / Leaves. From stop: a 4-beat count-in, then
-     * record until pressed again. While the clock runs, Reflections records as a
-     * looper (starts on a quarter note, ends on whole bars, comes back as a
-     * tempo-synced loop); Leaves records from the press. Press again to stop.
+     * The Mic button on Reflections / Leaves: a sampler recording. From stop: a
+     * count-in, then record until pressed again. While other parts are playing,
+     * Reflections records in whole bars (from the next bar line to a bar line), so
+     * the take fits the music. Leaves records from the press. Press again to stop.
      */
     fun samplerMic(e: SampleEngine) {
         val cur = samplerTarget
@@ -670,17 +747,17 @@ object Studio : Transport.Listener, MidiInput.Sink {
         }
         val input = try { AudioIn(app, AudioPrefs.inputDevice) } catch (ex: Exception) { return message(ex.message ?: "Couldn't open the microphone") }
         samplerIn = input; samplerTarget = e
-        val looper = e === Audio.reflections
+        val bars = e === Audio.reflections
         val latency = Audio.latencyMs + 12f + AudioPrefs.offsetMs
         val running = t.playing
         Audio.post {
             t.sampIn = input
             t.latencyFrames = (latency * SR / 1000f).toInt().coerceAtLeast(0)
-            t.recordSampler(looper)
+            t.recordSampler(bars)
         }
         message(when {
-            !running -> "Count-in… recording into ${e.title} from bar 1. Tap Mic to stop."
-            looper -> "Recording a loop from the next beat. Tap Mic to stop: it ends on a whole bar."
+            !running -> "Count-in… recording into ${e.title}. Tap Mic to stop."
+            bars -> "Recording into ${e.title} from the next bar. Tap Mic to stop: it ends on a whole bar."
             else -> "Recording into ${e.title}. Tap Mic to stop."
         })
         changed()
@@ -690,42 +767,25 @@ object Studio : Transport.Listener, MidiInput.Sink {
         val input = samplerIn ?: return
         val e = samplerTarget ?: return
         samplerIn = null; t.sampIn = null
-        val looper = t.sampQuantize && e === Audio.reflections
+        val inBars = t.sampQuantize && e === Audio.reflections
         val bpm = t.bpm
         Thread {
             val raw = try { input.finish()[2] } catch (_: Exception) { FloatArray(0) }
             main.post { samplerTarget = null; changed() }
             if (startTick < 0 || endTick < 0) return@Thread message("Mic take cancelled")
             if (raw.size < SR / 10) return@Thread message("No audio came in. Check the input in Audio settings.")
-            val data = if (looper) raw.copyOf(((endTick - startTick) * SR * 60.0 / (bpm * Ticks.PPQ)).toInt().coerceAtLeast(1)) else raw
-            // 3 ms fades at the edges so the start and the loop point don't click
+            val data = if (inBars) raw.copyOf(((endTick - startTick) * SR * 60.0 / (bpm * Ticks.PPQ)).toInt().coerceAtLeast(1)) else raw
+            // 3 ms fades at the edges so the start and end don't click
             val fade = minOf(data.size / 2, (SR * 0.003f).toInt())
             for (i in 0 until fade) { val g = i / fade.toFloat(); data[i] *= g; data[data.size - 1 - i] *= g }
             AudioFiles.normalize(data)
-            main.post { if (looper) applyLoopTake(data, bpm, startTick, endTick) else setSample(e, data, "Mic take") }
+            val bars = ((endTick - startTick) / Ticks.BAR).toInt().coerceAtLeast(1)
+            main.post {
+                setSample(e, data, if (inBars) "Mic take ($bars bar" + (if (bars > 1) "s" else "") + ")" else "Mic take")
+                // a whole-bar take remembers its tempo, so turning Stretch on keeps it in time
+                if (inBars) Audio.reflections.sampleBpm = bpm
+            }
         }.start()
-    }
-
-    /** A Reflections looper take: tempo-synced time stretch, looping, played back right away by a new clip. */
-    private fun applyLoopTake(data: FloatArray, bpm: Float, startTick: Double, endTick: Double) {
-        val r = Audio.reflections
-        val len = (endTick - startTick).toInt()
-        val bars = (len / Ticks.BAR).coerceAtLeast(1)
-        setSample(r, data, "Loop $bars bar" + if (bars > 1) "s" else "")
-        r.sampleBpm = bpm
-        val root = scaleNote(0)
-        mapOf("stretch" to 1f, "loop" to 1f, "speed" to 1f, "start" to 0f, "end" to 1f, "reverse" to 0f, "root" to root.toFloat(), "tune" to 0f)
-            .forEach { (k, v) -> r.p.all[k]?.set(v) }
-        if (clipsFor(r).size >= MAX_CLIPS) { message("Loop ready on ${Theory.noteNameOct(root)}. Reflections already has $MAX_CLIPS clips, so it isn't playing on its own."); return }
-        val clip = Clip(engine = r.id, name = "", lengthTicks = len, notes = mutableListOf(Clip.Note(0, len, root, 0.9f)))
-        val n = clipsFor(r).size + 1
-        clip.name = "Loop $n"; clip.variant = n - 1; clip.inClibbins = true
-        project.clips += clip
-        ProjectStore.saveClipMidi(project, clip)
-        // Keep the loop in phase with where it was recorded.
-        Audio.post { if (t.playing) t.launch(clip, r, startTick + ceil((t.tick - startTick) / len) * len) }
-        message("Loop recorded: ${clip.name} plays it in time (note ${Theory.noteNameOct(root)} plays the original)")
-        save(); changed()
     }
 
     // ------------------------------------------------------------------ Pickup pads

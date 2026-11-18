@@ -17,7 +17,7 @@ class MindsPage(c: Context) : LinearLayout(c) {
     private val minds = Audio.minds
     private var selected = 0
     private val grid = StepGrid(c)
-    private val drumPanel = Panel(c, "Drum", accent = Pal.ORANGE)
+    private val drumPanel = Panel(c, "Drum", accent = Snes.RED)
     private val onBtn = Btn(c, "Sequencer", Pal.ORANGE, 120)
     private val latchBtn = Btn(c, "Latch", Pal.SUN)
 
@@ -32,7 +32,7 @@ class MindsPage(c: Context) : LinearLayout(c) {
         val btns = LinearLayout(c).apply { orientation = VERTICAL; addView(gen, lp(MATCH, Px.dp(40))); addView(row(c, keep, clear).apply { keep.layoutParams = lp(0, Px.dp(40), 1f); clear.layoutParams = lp(0, Px.dp(40), 1f) }, lp(MATCH, WRAP)) }
         latchBtn.onClick = { minds.latch.set(if (minds.latch.on) 0f else 1f); Studio.save(); refresh() }
         side.addView(row(c, onBtn, latchBtn).apply { onBtn.layoutParams = lp(0, Px.dp(44), 1f); latchBtn.layoutParams = lp(Px.dp(76), Px.dp(44)) }, lp(MATCH, WRAP))
-        side.addView(row(c, Knob(c, minds.generative, Pal.ORANGE), btns).apply { btns.layoutParams = lp(0, WRAP, 1f) }, lp(MATCH, WRAP))
+        side.addView(row(c, Knob(c, minds.generative, Snes.PURPLE), btns).apply { btns.layoutParams = lp(0, WRAP, 1f) }, lp(MATCH, WRAP))
         side.addView(drumPanel, lp(MATCH, 0, 1f))
         addView(side, lp(Px.dp(250), MATCH))
         onStudio { refresh() }
@@ -54,7 +54,7 @@ class MindsPage(c: Context) : LinearLayout(c) {
         drumPanel.removeAllViews()
         val dp = minds.drumParams[selected]
         val flow = Flow(context)
-        listOf(dp.tune, dp.decay, dp.tone, dp.level).forEach { flow.addView(Knob(context, it, Pal.ORANGE)) }
+        listOf(dp.tune, dp.decay, dp.tone, dp.level).forEachIndexed { k, p -> flow.addView(Knob(context, p, Snes.accent(k))) }
         drumPanel.addView(Btn(context, Minds.DRUMS[selected], Pal.ORANGE).apply { on = true; onClick = { hit(selected) } }, lp(MATCH, Px.dp(38)))
         drumPanel.addView(flow, lp(MATCH, WRAP))
     }

@@ -3,7 +3,6 @@ package app.foxbox.midi
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
-import android.app.AlertDialog
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.ScanCallback
@@ -21,7 +20,6 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelUuid
-import android.widget.ArrayAdapter
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
@@ -161,28 +159,29 @@ class MidiInput(private val activity: Activity, private val sink: Sink) {
         if (!adapter.isEnabled) return sink.message("Turn Bluetooth on first")
         val scanner = adapter.bluetoothLeScanner ?: return sink.message("Bluetooth LE is not available")
         val found = LinkedHashMap<String, BluetoothDevice>()
-        val names = ArrayAdapter<String>(activity, android.R.layout.simple_list_item_1)
         val stopScan = { scanCb?.let { runCatching { scanner.stopScan(it) } }; scanCb = null }
-        AlertDialog.Builder(activity)
-            .setTitle("Searching for Bluetooth MIDI…")
-            .setAdapter(names) { _, which ->
-                stopScan()
-                val dev = found.values.elementAt(which)
-                pendingBt += dev.address
-                sink.message("Connecting to ${dev.name ?: dev.address}…")
-                m.openBluetoothDevice(dev, { d ->
-                    if (d == null) sink.message("Couldn't connect. Is it connected to another app?") else attach(d)
-                    pendingBt -= dev.address
-                }, main)
-            }
-            .setNegativeButton("Cancel", null)
-            .setOnDismissListener { stopScan() }
+        val dlg = app.foxbox.ui.SnesDialog(activity, "Searching for Bluetooth MIDI…")
+            .message("Controllers appear here as they're found.")
+            .key("Cancel", app.foxbox.ui.Snes.RED, then = null)
+            .onDismiss { stopScan() }
             .show()
         val cb = object : ScanCallback() {
             override fun onScanResult(type: Int, r: ScanResult) {
                 if (found.containsKey(r.device.address)) return
-                found[r.device.address] = r.device
-                names.add(r.device.name ?: r.scanRecord?.deviceName ?: r.device.address)
+                val dev = r.device
+                found[dev.address] = dev
+                val name = dev.name ?: r.scanRecord?.deviceName ?: dev.address
+                main.post {
+                    dlg.item(name, app.foxbox.ui.Snes.accent(found.size - 1)) {
+                        stopScan()
+                        pendingBt += dev.address
+                        sink.message("Connecting to $name…")
+                        m.openBluetoothDevice(dev, { d ->
+                            if (d == null) sink.message("Couldn't connect. Is it connected to another app?") else attach(d)
+                            pendingBt -= dev.address
+                        }, main)
+                    }
+                }
             }
         }
         scanCb = cb

@@ -97,8 +97,6 @@ class Btn(c: Context, var text: String, var accent: Int = Pal.ORANGE, private va
 /** Rotary knob bound to a [Param]: drag up/down, double-tap to reset; choices step on tap. */
 @SuppressLint("ViewConstructor")
 class Knob(c: Context, val param: Param, var accent: Int) : PixelView(c) {
-    private val label = Px.text(11f, Pal.BROWN)
-    private val value = Px.text(12f, Pal.BROWN_D)
     private var startY = 0f; private var startN = 0f; private var lastTap = 0L; private var moved = false
     private val listener: () -> Unit = { postInvalidate() }
 
@@ -106,44 +104,10 @@ class Knob(c: Context, val param: Param, var accent: Int) : PixelView(c) {
     override fun onDetachedFromWindow() { param.listeners.remove(listener); super.onDetachedFromWindow() }
     override fun onMeasure(w: Int, h: Int) = setMeasuredDimension(Px.dp(70), Px.dp(84))
 
+    private val face = KnobFace()
     override fun paint(c: Canvas) {
-        val cx = width / 2f; val cy = Px.dp(28f); val r = Px.dp(20f)
-        val n = param.norm
-        // Ring of pixel lamps.
-        val segs = 11
-        val lit = (n * (segs - 1)).roundToInt()
-        for (i in 0 until segs) {
-            val a = Math.toRadians(-225.0 + 270.0 * i / (segs - 1))
-            val col = if (i <= lit && (n > 0.001f || i == 0)) accent else Pal.PAPER
-            c.dot(cx + (cos(a) * r).toFloat() - u, cy + (sin(a) * r).toFloat() - u, col, 2)
-        }
-        // Body: a small pixel disc with a pointer.
-        val br = Px.dp(12f)
-        var y = -br
-        while (y <= br) {
-            var x = -br
-            while (x <= br) {
-                val d = kotlin.math.hypot(x, y)
-                if (d <= br) c.dot(cx + x, cy + y, if (d > br - u) Pal.BROWN_D else Pal.CREAM)
-                x += u
-            }
-            y += u
-        }
-        val a = Math.toRadians(-225.0 + 270.0 * n)
-        c.dot(cx + (cos(a) * br * 0.55f).toFloat() - u / 2, cy + (sin(a) * br * 0.55f).toFloat() - u / 2, Pal.BROWN_D, 2)
-        value.textSize = Px.dp(12f); label.textSize = Px.dp(11f)
-        c.textFit(param.text(), cx, Px.dp(60f), width - Px.dp(4f), value)
         // "Pad 3 Tune" -> "Tune": the pad editor already says which pad
-        val name = param.name.replace(Regex("^Pad \\d+ "), "")
-        val words = name.split(' ')
-        if (label.measureText(name) <= width - Px.dp(4f) || words.size < 2) c.textFit(name, cx, Px.dp(75f), width - Px.dp(4f), label)
-        else {
-            // two short lines read better than one tiny one
-            val half = (1 until words.size).minByOrNull { k -> kotlin.math.abs(label.measureText(words.take(k).joinToString(" ")) - label.measureText(words.drop(k).joinToString(" "))) } ?: 1
-            label.textSize = Px.dp(10f)
-            c.textFit(words.take(half).joinToString(" "), cx, Px.dp(71f), width - Px.dp(4f), label)
-            c.textFit(words.drop(half).joinToString(" "), cx, Px.dp(81f), width - Px.dp(4f), label)
-        }
+        face.draw(c, width.toFloat(), param.norm, accent, param.text(), param.name.replace(Regex("^Pad \\d+ "), ""))
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -173,15 +137,16 @@ class Knob(c: Context, val param: Param, var accent: Int) : PixelView(c) {
 class Stepper(c: Context, private val label: String, private val minW: Int = 120, private val text: () -> String, private val step: (Int) -> Unit) : PixelView(c) {
     /** Optional action when the middle (the value) is tapped. */
     var onMiddle: (() -> Unit)? = null
-    private val tp = Px.text(14f); private val lp = Px.text(9f, Pal.BROWN, align = android.graphics.Paint.Align.CENTER)
+    private val tp = Px.text(14f); private val lp = Px.text(10f, Pal.BROWN_D, headFont = false, align = android.graphics.Paint.Align.CENTER)
     override fun onMeasure(w: Int, h: Int) = setMeasuredDimension(resolveSize(Px.dp(minW), w), resolveSize(Px.dp(40), h))
     override fun paint(c: Canvas) {
         c.pixelBox(u, u, width - u, height - u, Pal.CREAM)
         c.textCentered("◀", Px.dp(14f), height / 2f, tp); c.textCentered("▶", width - Px.dp(14f), height / 2f, tp)
         // the value sits between the two arrows and shrinks to fit there
         val room = width - Px.dp(56f)
-        tp.textSize = Px.dp(14f); lp.textSize = Px.dp(9f)
-        if (label.isNotEmpty()) { c.textFit(label, width / 2f, Px.dp(11f), room, lp, 7.5f); c.textFit(text(), width / 2f, height / 2f + Px.dp(5f), room, tp) }
+        tp.textSize = Px.dp(14f); lp.textSize = Px.dp(10f)
+        // the label sits above the arrows, so it can use nearly the whole width
+        if (label.isNotEmpty()) { c.textFit(label, width / 2f, Px.dp(10f), width - Px.dp(12f), lp, 8f); c.textFit(text(), width / 2f, height / 2f + Px.dp(5f), room, tp) }
         else c.textFit(text(), width / 2f, height / 2f, room, tp)
     }
     @SuppressLint("ClickableViewAccessibility")
@@ -219,21 +184,30 @@ class Flow(c: Context) : ViewGroup(c) {
     }
 }
 
-/** A labelled pixel panel that holds other views. */
+/** A labelled parameter panel: grey console plastic with a coloured title stripe. */
 @SuppressLint("ViewConstructor")
-class Panel(c: Context, private val title: String, private val bg: Int = Pal.CREAM, private val accent: Int = Pal.ORANGE) : LinearLayout(c) {
-    private val tp = Px.text(8f, Pal.BROWN_D, headFont = true, align = android.graphics.Paint.Align.LEFT)
+class Panel(c: Context, private val title: String, private val accent: Int = Snes.PURPLE) : LinearLayout(c) {
+    private val tp = Px.text(9f, Snes.INK, headFont = true, align = android.graphics.Paint.Align.LEFT)
     init {
         orientation = VERTICAL
         setWillNotDraw(false)
-        val pad = Px.dp(8)
-        setPadding(pad, if (title.isEmpty()) pad else Px.dp(22), pad, pad)
+        val pad = Px.dp(9)
+        setPadding(pad, if (title.isEmpty()) pad else Px.dp(30), pad, pad)
     }
     override fun onDraw(c: Canvas) {
-        c.pixelBox(0f, 0f, width.toFloat(), height.toFloat(), bg, shade = false)
-        if (title.isNotEmpty()) {
-            c.fill(Px.dp(9f), Px.dp(9f), Px.dp(15f), Px.dp(15f), accent)
-            c.drawText(title, Px.dp(20f), Px.dp(16f), tp)
+        with(Snes) {
+            val u = Px.u
+            c.plate(0f, 0f, width.toFloat(), height.toFloat())
+            if (title.isNotEmpty()) {
+                val bar = Px.dp(24f)
+                c.fill(u * 3, u * 3, width - u * 3, bar, Snes.FACE_D)
+                c.fill(u * 3, bar, width - u * 3, bar + u, accent)
+                val s = Px.dp(8f)
+                c.fill(Px.dp(9f), (u * 3 + bar) / 2 - s / 2, Px.dp(9f) + s, (u * 3 + bar) / 2 + s / 2, Snes.INK)
+                c.fill(Px.dp(9f) + u * 0.6f, (u * 3 + bar) / 2 - s / 2 + u * 0.6f, Px.dp(9f) + s - u * 0.6f, (u * 3 + bar) / 2 + s / 2 - u * 0.6f, accent)
+                tp.color = if (accent == Snes.YELLOW) Snes.INK else accent
+                c.drawText(fitText(title, width - Px.dp(30f), tp, 7f), Px.dp(22f), (u * 3 + bar) / 2 - (tp.descent() + tp.ascent()) / 2, tp)
+            }
         }
     }
 }

@@ -26,7 +26,7 @@ object Eyeball {
      * Draw an eye `w` wide centred at (cx, cy). `open` 0 = shut, 1 = wide open;
      * (lookX, lookY) in -1..1 nudge the iris; `variant` picks the iris colour.
      */
-    fun draw(c: Canvas, cx: Float, cy: Float, w: Float, open: Float, lookX: Float, lookY: Float, variant: Int) {
+    fun draw(c: Canvas, cx: Float, cy: Float, w: Float, open: Float, lookX: Float, lookY: Float, variant: Int, bloodshot: Boolean = false) {
         val h = w * 0.62f
         val hw = w / 2
         val o = open.coerceIn(0f, 1f)
@@ -36,7 +36,9 @@ object Eyeball {
         skin.quadTo(cx, cy - h * 1.25f, cx + hw * 1.28f, cy)
         skin.quadTo(cx, cy + h * 1.0f, cx - hw * 1.28f, cy)
         skin.close()
-        fill.shader = RadialGradient(cx, cy - h * 0.1f, hw * 1.3f, intArrayOf(0xFFE2B49A.toInt(), 0xFFC98F74.toInt(), 0x00B57F68), floatArrayOf(0f, 0.75f, 1f), Shader.TileMode.CLAMP)
+        // a poked eye: the skin round it is sore and red
+        val skinIn = if (bloodshot) 0xFFE89A8A.toInt() else 0xFFE2B49A.toInt(); val skinOut = if (bloodshot) 0xFFC8604E.toInt() else 0xFFC98F74.toInt()
+        fill.shader = RadialGradient(cx, cy - h * 0.1f, hw * 1.3f, intArrayOf(skinIn, skinOut, 0x00B57F68), floatArrayOf(0f, 0.75f, 1f), Shader.TileMode.CLAMP)
         c.drawPath(skin, fill)
         fill.shader = null
         line.color = 0x66704030; line.strokeWidth = maxOf(1f, w * 0.02f)
@@ -55,11 +57,23 @@ object Eyeball {
             c.save()
             c.clipPath(eye)
             // sclera, shaded towards the corners
-            fill.shader = RadialGradient(cx, cy, hw, intArrayOf(0xFFFBF7F2.toInt(), 0xFFEFE2DA.toInt(), 0xFFC9A8A0.toInt()), floatArrayOf(0f, 0.6f, 1f), Shader.TileMode.CLAMP)
+            val sclera = if (bloodshot) intArrayOf(0xFFF6D6D0.toInt(), 0xFFEBA49C.toInt(), 0xFFB8443E.toInt()) else intArrayOf(0xFFFBF7F2.toInt(), 0xFFEFE2DA.toInt(), 0xFFC9A8A0.toInt())
+            fill.shader = RadialGradient(cx, cy, hw, sclera, floatArrayOf(0f, 0.6f, 1f), Shader.TileMode.CLAMP)
             oval.set(cx - hw, cy - h, cx + hw, cy + h); c.drawOval(oval, fill)
             fill.shader = null
             // a few veins creeping in from the corners
-            line.color = 0x88C0404A.toInt(); line.strokeWidth = maxOf(0.8f, w * 0.008f)
+            line.color = if (bloodshot) 0xDDB01822.toInt() else 0x88C0404A.toInt(); line.strokeWidth = maxOf(0.8f, w * if (bloodshot) 0.014f else 0.008f)
+            if (bloodshot) {
+                // a red web of veins crawling in from every side, forking as they go
+                for (k in 0 until 22) {
+                    val a = k * 0.2856f + 0.3f
+                    val sx = cx + cos(a) * hw * 1.02f; val sy = cy + sin(a) * h * 0.62f
+                    val mx = cx + cos(a + 0.12f) * hw * 0.72f; val my = cy + sin(a + 0.12f) * h * 0.44f
+                    val ex = cx + cos(a - 0.08f) * hw * (0.5f + (k % 4) * 0.04f); val ey = cy + sin(a - 0.08f) * h * 0.3f
+                    lid.reset(); lid.moveTo(sx, sy); lid.quadTo(mx, my + (if (k % 2 == 0) -1 else 1) * h * 0.06f, ex, ey); c.drawPath(lid, line)
+                    lid.reset(); lid.moveTo(mx, my); lid.lineTo(mx + cos(a + 1.1f) * hw * 0.12f, my + sin(a + 1.1f) * h * 0.1f); c.drawPath(lid, line)
+                }
+            }
             for (k in 0 until 6) {
                 val side = if (k % 2 == 0) -1f else 1f
                 val sy = cy + (k - 2.5f) * h * 0.08f

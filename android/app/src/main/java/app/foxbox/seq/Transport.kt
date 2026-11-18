@@ -312,9 +312,9 @@ class Transport {
 
     /**
      * Start or stop a sampler take. From stop: one bar of count-in, then record
-     * from bar 1. While playing: `quantize` starts on the next quarter note (at
-     * least 150 ms away, so the input is warmed up) and ends on a whole number
-     * of bars; otherwise it records from now until pressed again.
+     * from bar 1 until pressed again. While playing: `quantize` starts on the next
+     * bar line (at least 150 ms away, so the input is warmed up) and ends on a
+     * whole number of bars; otherwise it records from now until pressed again.
      */
     fun recordSampler(quantize: Boolean) {
         when (sampRec) {
@@ -334,7 +334,7 @@ class Transport {
         if (!playing) { tick = -Ticks.BAR.toDouble(); playing = true; sampStart = 0.0 }
         else if (quantize) {
             val lead = 0.15 * bpm / 60.0 * Ticks.PPQ
-            sampStart = Math.ceil((tick + lead) / Ticks.PPQ) * Ticks.PPQ
+            sampStart = Math.ceil((tick + lead) / Ticks.BAR) * Ticks.BAR
         } else sampStart = tick
         sampRec = Rec.ARMED
         changed()

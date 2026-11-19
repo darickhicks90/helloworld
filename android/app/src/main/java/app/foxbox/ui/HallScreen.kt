@@ -1308,10 +1308,14 @@ class HallScreen(c: Context) : PixelView(c) {
         return out
     }
 
+    /** A message box, word-wrapped to fit the little screen (at most 27 letters a line). */
     private fun banner(text: String, y: Float) {
-        val bw = text.length * 8f + 8; val bxx = (W - bw) / 2
-        box(bxx - 1, y - 1, bxx + bw + 1, y + 13, INK); box(bxx, y, bxx + bw, y + 12, WHITE)
-        sc.drawText(text, bxx + 4, y + 10, font)
+        val lines = wrap(text, 27).ifEmpty { return }
+        val bw = lines.maxOf { it.length } * 8f + 8; val bxx = (W - bw) / 2
+        val bh = lines.size * 11f + 2
+        val top = y.coerceAtMost(H - 4f - bh)
+        box(bxx - 1, top - 1, bxx + bw + 1, top + bh + 1, INK); box(bxx, top, bxx + bw, top + bh, WHITE)
+        lines.forEachIndexed { i, l -> sc.drawText(l, bxx + 4, top + 10 + i * 11f, font) }
     }
 
     private fun drawOverlays(time: Float) {
@@ -1427,14 +1431,17 @@ class HallScreen(c: Context) : PixelView(c) {
             // left column: L, then the D-pad
             val dcx = colW / 2 + Px.dp(4f)
             val pwl = minOf(pw, colW - Px.dp(8f))
-            selRect.set(dcx - pwl / 2, Px.dp(50f), dcx + pwl / 2, Px.dp(80f))
+            selRect.set(dcx - pwl / 2, Px.dp(92f), dcx + pwl / 2, Px.dp(122f))
             val ds = minOf(Px.dp(150f), colW - Px.dp(24f), h - Px.dp(130f)).coerceAtLeast(Px.dp(80f))
             val dcy = (Px.dp(80f) + h) / 2
+            // L sits just above the D-pad
+            val padTop = dcy - minOf(Px.dp(150f), colW - Px.dp(24f), h - Px.dp(130f)).coerceAtLeast(Px.dp(80f)) / 2
+            if (selRect.bottom > padTop - Px.dp(14f)) selRect.offset(0f, padTop - Px.dp(14f) - selRect.bottom)
             pad.set(dcx - ds / 2, dcy - ds / 2, dcx + ds / 2, dcy + ds / 2)
             // right column: R, A and B, then the XY pad
             val rcx = sl + sw + Px.dp(10f) + colW / 2
             // R sits higher, leaving more room between it and A / B (which keep their slant)
-            startRect.set(rcx - pwl / 2, Px.dp(10f), rcx + pwl / 2, Px.dp(40f))
+            startRect.set(rcx - pwl / 2, Px.dp(56f), rcx + pwl / 2, Px.dp(86f))
             val r = minOf(Px.dp(22f), colW / 6f).coerceAtLeast(Px.dp(14f))
             val aby = startRect.bottom + Px.dp(38f) + r
             aKey.set(rcx + r * 0.3f, aby - r - Px.dp(3f), rcx + r * 2.3f, aby + r - Px.dp(3f))
@@ -1463,7 +1470,7 @@ class HallScreen(c: Context) : PixelView(c) {
         }
         bagRect.set(exitRect.right + Px.dp(8f), exitRect.top, minOf(exitRect.right + Px.dp(80f), sl - Px.dp(14f)).coerceAtLeast(exitRect.right + Px.dp(40f)), exitRect.bottom)
         pill(c, exitRect, "◀ Music", Snes.GREEN, exitDown)
-        pill(c, bagRect, "BAG", Snes.YELLOW, bagOpen)
+        pill(c, bagRect, "START", Snes.YELLOW, bagOpen)
         pill(c, selRect, "L CONSECRATE", Snes.PURPLE, selDown)
         pill(c, startRect, "R VITAL SPARK", Snes.GREEN, startDown)
 

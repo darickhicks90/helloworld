@@ -64,6 +64,18 @@ class HallScreen(c: Context) : PixelView(c) {
             "INSIDE: GOLD, GEMS, AND A FOLDED NOTE...",
             "IT SAYS: 'STOP POKING MY EYE.'",
         )
+        /** The water spirit in the treasury: the first meeting, and what it says after. */
+        val SPIRIT_FIRST = listOf(
+            "...AH. THE ONE WHO TOOK HIS EYES OFF ME.",
+            "HE KEPT ME IN THIS BASIN FOR A HUNDRED WINTERS, POLISHING HIS GOLD.",
+            "TAKE THIS, WITH MY THANKS. AND DRINK: THE WATER REMEMBERS YOU NOW.",
+        )
+        val SPIRIT_AGAIN = listOf(
+            "THE WATER HEALS YOU. COME BACK WHENEVER YOU LIKE.",
+            "LISTEN... THE IMPS ARE STILL OUT THERE. THEY MISS HIM. I DO NOT.",
+            "TRACE YOUR RUNES SLOWLY. WATER IS PATIENT; SO SHOULD YOU BE.",
+            "HIS AXE SUITS YOU. IT NEVER SUITED HIM.",
+        )
         val MUTTER = listOf("#@%&!", "\$%@#!", "&*#@!!", "@#\$%...", "HMPH.")
         // props: [kind] → how tall it stands above its footprint (shots hit the whole height)
         const val PILLAR = 0; const val ROCK = 1; const val SHRUB = 2; const val STATUE = 3; const val FOUNTAIN = 4
@@ -132,7 +144,7 @@ class HallScreen(c: Context) : PixelView(c) {
 
     /** Keyed (row + 1) * 3 + column: the treasury sits above the throne room, behind the crack. */
     private val rooms = mapOf(
-        1 to Room("TREASURY", 6, "S", listOf(pr(PILLAR, 44, 72, 60, 80), pr(PILLAR, 180, 72, 196, 80), pr(CHEST, 108, 62, 132, 72)), emptyList()),
+        1 to Room("TREASURY", 6, "S", listOf(pr(PILLAR, 44, 72, 60, 80), pr(PILLAR, 180, 72, 196, 80), pr(CHEST, 108, 62, 132, 72)), listOf(pool(160, 116, 200, 132))),
         3 to Room("WEST GALLERY", 1, "ES",
             listOf(pr(STATUE, 36, 60, 52, 70), pr(STATUE, 84, 60, 100, 70), pr(STATUE, 140, 60, 156, 70), pr(STATUE, 188, 60, 204, 70),
                 pr(SHRUB, 40, 132, 56, 140), pr(SHRUB, 184, 132, 200, 140), pr(ROCK, 60, 152, 74, 160)),
@@ -197,6 +209,18 @@ class HallScreen(c: Context) : PixelView(c) {
     private var chestOpen = false
     /** When he falls he perishes (fades to ash) and leaves his axe. */
     private var perishT = 0f; private var bossGone = false
+    private val spiritX = 180f; private val spiritY = 112f
+    private var spiritGift = false; private var spiritTalks = 0
+    private fun nearSpirit() = roomId == 1 && hypot(hx + 8 - spiritX, hy + 12 - (spiritY + 8)) < 30f
+    /** A: speak with the spirit. It heals and cleanses each time; the first time it gives a gift. */
+    private fun speakToSpirit() {
+        hp = maxHp; poisonT = 0f; paraT = 0f; invertT = 0f
+        bursts += Burst(spiritX, spiritY - 6); bursts += Burst(hx + 8, hy + 8)
+        talking = true; line = 0; shown = 0f
+        if (!spiritGift) { spiritGift = true; talkLines = SPIRIT_FIRST; msg = bag.add(rollLoot(0f)); msgT = 3f }
+        else { talkLines = listOf(SPIRIT_AGAIN[spiritTalks % SPIRIT_AGAIN.size]); spiritTalks++ }
+        performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+    }
     private val PERISH = 2.6f
     private val dais = RectF(84f, 34f, 156f, 86f)
 
@@ -437,7 +461,7 @@ class HallScreen(c: Context) : PixelView(c) {
 
     private fun restart() {
         hp = maxHp; invulnT = 0f; paraT = 0f; poisonT = 0f; invertT = 0f
-        perishT = 0f; bossGone = false
+        perishT = 0f; bossGone = false; spiritGift = false; spiritTalks = 0
         bossHp = BOSS_MAX; stage = Stage.DAIS; bx = 120f; by = 64f; bossPara = 0f; bossWeak = 0f; bossConf = 0f
         bossShotT = 3f; spellT = 6f; summonT = 4f; castRune = -1; crackOpen = false; chestOpen = false
         minions.clear(); shots.clear(); wards.clear(); drawing.clear(); arcs.clear(); bursts.clear(); orbs.clear(); stroke.clear(); drops.clear(); battle = null; bagOpen = false
@@ -1034,6 +1058,53 @@ class HallScreen(c: Context) : PixelView(c) {
         if (m.stun > 0f && (time * 8).toInt() % 2 == 0) { box(x + 2, y - 4, x + 4, y - 2, WHITE); box(x + 8, y - 4, x + 10, y - 2, WHITE) }
     }
 
+    /**
+     * The water spirit: a figure of clear water rising out of its basin (head, glowing eyes, arms of
+     * falling water), swaying, its edges rippling, droplets drifting up and rings spreading below.
+     */
+    private fun drawSpirit(time: Float) {
+        val cx = spiritX; val base = spiritY + 14
+        val bob = sin(time * 1.8f) * 1.5f
+        val deep = 0xFF3A78C8.toInt(); val mid = 0xFF6AA8E8.toInt(); val light = 0xFFB8E0FF.toInt(); val foam = 0xFFF0FAFF.toInt()
+        // rings spreading on the pool beneath
+        for (k in 0 until 3) {
+            val ph = ((time * 0.6f + k / 3f) % 1f); val rw = 6f + ph * 14f
+            p.color = (((1f - ph) * 200).toInt() shl 24) or 0xE0F4FF
+            sc.drawRect(cx - rw, base + 2, cx + rw, base + 3, p)
+        }
+        // the body: wider at the base, narrowing to the shoulders, each row swaying a little
+        for (row in 0 until 30) {
+            val y = base - row + bob * (row / 30f)
+            val half = when { row < 8 -> 9f - row * 0.4f; row < 20 -> 6f - (row - 8) * 0.12f; else -> 4.5f + kotlin.math.sqrt(maxOf(0f, 25f - (row - 25f) * (row - 25f))) * 0.6f }
+            val sway = sin(time * 2.4f + row * 0.35f) * 1.2f
+            val l = cx - half + sway; val r = cx + half + sway
+            box(l, y, r, y + 1, if (row % 5 == 0) mid else deep)
+            box(l + 1, y, l + half * 0.8f, y + 1, mid)
+            if ((row + (time * 8).toInt()) % 7 == 0) box(l + 1, y, l + 3, y + 1, light)
+        }
+        // arms of falling water
+        for (side in -1..1 step 2) {
+            for (k in 0 until 10) {
+                val ax = cx + side * (6f + k * 0.9f) + sin(time * 2f + k) * 0.6f
+                val ay = base - 20 + bob + k * 1.2f
+                box(ax - 1, ay, ax + 1, ay + 1, if (k % 3 == 0) light else mid)
+            }
+        }
+        // the face: two glowing eyes and a calm mouth
+        val fy = base - 26 + bob
+        box(cx - 4, fy, cx - 2, fy + 2, foam); box(cx + 2, fy, cx + 4, fy + 2, foam)
+        if ((time * 1.3f).toInt() % 5 != 0) { box(cx - 4, fy + 1, cx - 3, fy + 2, deep); box(cx + 3, fy + 1, cx + 4, fy + 2, deep) }
+        box(cx - 2, fy + 5, cx + 2, fy + 6, light)
+        // droplets drifting up off it
+        for (i in 0 until 6) {
+            val ph = (time * 0.5f + i * 0.17f) % 1f
+            val dx = cx + sin(i * 2.1f + time) * 8f; val dy = base - 8 - ph * 34f
+            p.color = (((1f - ph) * 255).toInt() shl 24) or 0xB8E0FF
+            sc.drawRect(dx, dy, dx + 1, dy + 2, p)
+        }
+        p.alpha = 255
+    }
+
     /** Loot where an imp fell: a little sack with a glint. */
     private fun drawDrop(d: Drop, time: Float) {
         if (d.life < 4f && (time * 10).toInt() % 2 == 0) return
@@ -1086,6 +1157,7 @@ class HallScreen(c: Context) : PixelView(c) {
         if (throne) addEnt(by, 3, 0)
         orbs.forEachIndexed { i, o -> if (o.room == roomId) addEnt(o.y + 4, 4, i) }
         drops.forEachIndexed { i, d -> if (d.room == roomId) addEnt(d.y + 4, 5, i) }
+        if (roomId == 1) addEnt(spiritY + 14, 6, 0)
         java.util.Arrays.sort(ents, 0, entN, entOrder)
         for (k in 0 until entN) {
             val e = ents[k]
@@ -1095,6 +1167,7 @@ class HallScreen(c: Context) : PixelView(c) {
                 2 -> drawMinion(minions[e.idx], time)
                 3 -> drawBoss(time)
                 4 -> drawOrb(orbs[e.idx], time)
+                6 -> drawSpirit(time)
                 else -> drawDrop(drops[e.idx], time)
             }
         }
@@ -1246,8 +1319,9 @@ class HallScreen(c: Context) : PixelView(c) {
         if (msgT > 0f && msg.isNotEmpty() && !talking) banner(msg, H - 58f)
         if (talking) return
         if (phase == Phase.LOST) { banner("YOU FELL...", 70f); if ((time * 2).toInt() % 2 == 0) banner("A: TRY AGAIN", 86f) }
-        if (phase == Phase.WON && chestOpen && (time * 2).toInt() % 2 == 0) banner("A: PLAY AGAIN", 86f)
-        if (phase == Phase.WON && roomId == 1 && !chestOpen && nearChest()) banner("A: OPEN", 90f)
+        if (phase == Phase.WON && chestOpen && nearChest() && (time * 2).toInt() % 2 == 0) banner("A: PLAY AGAIN", 86f)
+        if (nearSpirit()) banner("A: SPEAK", 90f)
+        if (phase == Phase.WON && roomId == 1 && !chestOpen && nearChest() && !nearSpirit()) banner("A: OPEN", 90f)
         else if ((phase == Phase.FIGHT || phase == Phase.WON) && msgT <= 0f) reachable().takeIf { it >= 0 }?.let { banner("A: " + actLabel(room.props[it].kind), H - 58f) }
     }
     private fun nearChest() = hypot(hx + 8 - 120f, hy + 12 - 74f) < 26f
@@ -1497,11 +1571,12 @@ class HallScreen(c: Context) : PixelView(c) {
             else if (line < talkLines.size - 1) { line++; shown = 0f } else endTalk()
         } else if (phase == Phase.LOST) restart()
         else if (phase == Phase.WON) {
-            if (roomId == 1 && !chestOpen && nearChest()) {
+            if (nearSpirit()) speakToSpirit()
+            else if (roomId == 1 && !chestOpen && nearChest()) {
                 chestOpen = true; hp = maxHp; bursts += Burst(120f, 58f); bag.add(rollLoot(0f)); bag.add(rollLoot(0f))
                 talking = true; talkLines = CHEST_LINES; line = 0; shown = 0f
                 performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-            } else if (chestOpen) restart()
+            } else if (chestOpen && nearChest()) restart()
             else actOrSprint()
         } else if (phase == Phase.FIGHT) actOrSprint()
     }

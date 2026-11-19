@@ -69,7 +69,7 @@ object Notes {
             fun from(o: JSONObject): Book {
                 val ps = ArrayList<Page>()
                 val arr = o.getJSONArray("pages")
-                for (k in 0 until arr.length()) ps += split(arr.getJSONObject(k))
+                for (k in 0 until arr.length()) ps += Page.split(arr.getJSONObject(k))
                 if (ps.isEmpty()) ps += Page()
                 val bm = o.optJSONArray("bookmarks")?.let { a -> (0 until a.length()).map { a.getString(it) }.toMutableList() } ?: ArrayList()
                 return Book(o.getString("id"), o.optString("name", "Memo"), o.optInt("cover", COVERS[0]), ps, bm, o.optInt("current", 0))

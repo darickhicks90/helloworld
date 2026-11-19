@@ -1094,8 +1094,10 @@ class HallScreen(c: Context) : PixelView(c) {
             aKey.set(rcx + r * 0.3f, aby - r - Px.dp(3f), rcx + r * 2.3f, aby + r - Px.dp(3f))
             bKey.set(rcx - r * 2.3f, aby - r + Px.dp(3f), rcx - r * 0.3f, aby + r + Px.dp(3f))
             val xt = aby + r + Px.dp(18f); val xb = h - Px.dp(14f)
-            val xw = minOf(colW - Px.dp(8f), (xb - xt) * 1.3f)
-            xyRect.set(rcx - xw / 2, xt, rcx + xw / 2, xb)
+            // the pad has the game screen's shape, so the firefly goes where your finger points
+            val xw = minOf(colW - Px.dp(8f), (xb - xt) * W / H)
+            val xh = xw * H / W; val xtop = xt + (xb - xt - xh) / 2
+            xyRect.set(rcx - xw / 2, xtop, rcx + xw / 2, xtop + xh)
         } else {
             // tall screens: the controls in a row under the screen
             val top = st + sh + Px.dp(20f)
@@ -1110,7 +1112,8 @@ class HallScreen(c: Context) : PixelView(c) {
             aKey.set(rcx + r * 0.3f, dcy - r * 2f, rcx + r * 2.3f, dcy)
             bKey.set(rcx - r * 2.3f, dcy - r * 0.6f, rcx - r * 0.3f, dcy + r * 1.4f)
             val xt = top; val xb = h - Px.dp(14f)
-            xyRect.set(third + Px.dp(6f), xt, 2 * third - Px.dp(6f), xb)
+            val xw = minOf(third - Px.dp(12f), (xb - xt) * W / H); val xh = xw * H / W
+            xyRect.set(w / 2 - xw / 2, xt, w / 2 + xw / 2, xt + xh)
         }
         pill(c, exitRect, "◀ Music", Snes.GREEN, exitDown)
         pill(c, selRect, "L CONSECRATE", Snes.PURPLE, selDown)

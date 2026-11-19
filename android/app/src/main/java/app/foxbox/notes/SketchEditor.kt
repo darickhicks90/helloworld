@@ -207,11 +207,13 @@ class SketchEditor(private val a: Activity, private val sketch: Notes.Sketch, pr
             opBar.set(w * 0.5f + 8 * d, panel.top + 100 * d, w - 12 * d, panel.top + 126 * d)
             smoothBar.set(col, panel.top + 30 * d, w - 12 * d, panel.top + 56 * d)
         }
-        val bw = minOf(96 * d, w / 6.5f)
+        val bw = minOf(96 * d, (w - app.foxbox.ui.TopKeys.WIDTH) / 7.2f)
         bDone.set(6 * d, 6 * d, 6 * d + bw, topBar.bottom - 6 * d)
         bUndo.set(bDone.right + 8 * d, bDone.top, bDone.right + 8 * d + bw * 0.8f, bDone.bottom)
         bRedo.set(bUndo.right + 6 * d, bDone.top, bUndo.right + 6 * d + bw * 0.8f, bDone.bottom)
-        bShare.set(w - 6 * d - bw, bDone.top, w - 6 * d, bDone.bottom)
+        // the top right corner is left for the radio and notebook keys
+        val right = w - app.foxbox.ui.TopKeys.WIDTH - 4 * d
+        bShare.set(right - bw, bDone.top, right, bDone.bottom)
         bLayers.set(bShare.left - 8 * d - bw, bDone.top, bShare.left - 8 * d, bDone.bottom)
         bZoom.set(bLayers.left - 8 * d - bw * 0.8f, bDone.top, bLayers.left - 8 * d, bDone.bottom)
         fitView()

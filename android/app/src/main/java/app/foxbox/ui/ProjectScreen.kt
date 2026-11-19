@@ -32,7 +32,7 @@ class ProjectScreen(c: Context, private val onOpen: (Project) -> Unit, private v
         post { (scroll.layoutParams as LayoutParams).width = (width * 0.62f).toInt(); scroll.requestLayout() }
         // once the great hall has been found, a way straight back in
         if (onHall != null) addView(Btn(c, "Great hall", Snes.PURPLE, 120).apply { on = true; onClick = onHall },
-            LayoutParams(LayoutParams.WRAP_CONTENT, Px.dp(44), android.view.Gravity.TOP or android.view.Gravity.END).apply { topMargin = Px.dp(14); rightMargin = Px.dp(70) })
+            LayoutParams(LayoutParams.WRAP_CONTENT, Px.dp(44), android.view.Gravity.TOP or android.view.Gravity.END).apply { topMargin = Px.dp(14); rightMargin = (TopKeys.WIDTH + Px.dp(16f)).toInt() })
     }
 
     private val headP = Px.text(34f, Pal.ORANGE, headFont = true)

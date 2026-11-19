@@ -11,7 +11,7 @@
 
     <!-- Recording samples from the microphone -->
     <uses-permission android:name="android.permission.VIBRATE" />
-    <!-- only to fetch the notebook's handwriting model once -->
+    <!-- internet radio, and fetching the notebook's handwriting model once -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
@@ -30,6 +30,7 @@
         android:allowBackup="true"
         android:appCategory="audio"
         android:largeHeap="true"
+        android:usesCleartextTraffic="true"
         android:enableOnBackInvokedCallback="true"
         android:hardwareAccelerated="true"
         android:icon="@mipmap/ic_launcher"

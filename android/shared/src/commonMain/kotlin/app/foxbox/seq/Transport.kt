@@ -106,10 +106,14 @@ class Transport {
         }
         recTarget = target; recLen = lenTicks
         if (!playing) {
-            // Start with a one-bar count-in when the metronome is on.
-            tick = if (metronome) -Ticks.BAR.toDouble() else 0.0
+            // Always a one-bar count-in (it clicks whether or not the metronome is on), in Jam and Clips alike.
+            tick = -Ticks.BAR.toDouble()
             playing = true; recStart = 0.0
-        } else recStart = nextBar(tick)
+        } else {
+            // Already playing: start on a bar line with at least three beats of clicks first.
+            val next = nextBar(tick)
+            recStart = if (next - tick < Ticks.BAR * 0.75) next + Ticks.BAR else next
+        }
         rec = Rec.ARMED
         changed()
     }

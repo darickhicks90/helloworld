@@ -154,6 +154,8 @@ class StudioScreen(c: Context, private val host: Host) : FrameLayout(c) {
             orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL
             addView(HorizontalScrollView(c).apply { isHorizontalScrollBarEnabled = false; addView(left) }, lp(0, Px.dp(48), 1f))
             addView(menu, lp(WRAP, Px.dp(44)))
+            // the corner where the radio and notebook keys live
+            setPadding(0, 0, TopKeys.WIDTH.toInt(), 0)
         }
     }
 

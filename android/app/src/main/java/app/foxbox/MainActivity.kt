@@ -46,7 +46,7 @@ import app.foxbox.ui.ClibbinsScreen
 import app.foxbox.ui.SnesDialog
 
 /** One activity, three screens: projects → studio ⇄ Clibbins. */
-class MainActivity : Activity(), Host {
+class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost {
     private lateinit var midi: MidiInput
     private var screen = 0 // 0 projects, 1 studio, 2 Clibbins, 3 the great hall
     private var studio: StudioScreen? = null
@@ -70,6 +70,7 @@ class MainActivity : Activity(), Host {
         MidiMap.init(this)
         Studio.init(this)
         app.foxbox.notes.Notes.init(this)
+        app.foxbox.radio.Radio.init(this)
         Studio.onMessage = { Toast.makeText(this, it, Toast.LENGTH_SHORT).show() }
         Studio.needMic = { then -> withMic(then) }
         midi = MidiInput(this, Studio)
@@ -127,7 +128,7 @@ class MainActivity : Activity(), Host {
         if (projectOpen) { Studio.save(true); Audio.post { Audio.transport.stop() } }
         screen = 0; studio = null
         setContentView(ProjectScreen(this, ::openProject, ::newProject, ::manageProject, if (hallFound) ({ showHall() }) else null))
-        addNoteTab()
+        addTopKeys()
     }
 
     private fun openProject(p: Project) {
@@ -139,7 +140,7 @@ class MainActivity : Activity(), Host {
     private fun showStudio() {
         screen = 1
         setContentView(studio ?: StudioScreen(this, this).also { studio = it })
-        addNoteTab()
+        addTopKeys()
     }
 
     override fun showClibbins() {
@@ -147,7 +148,7 @@ class MainActivity : Activity(), Host {
         screen = 2
         (studio?.parent as? android.view.ViewGroup)?.removeView(studio)
         setContentView(ClibbinsScreen(this, this).apply { backToStudio = { showStudio() } })
-        addNoteTab()
+        addTopKeys()
     }
 
     override fun showHall() {
@@ -159,6 +160,7 @@ class MainActivity : Activity(), Host {
         val from = screen
         screen = 3; hallFrom = from
         setContentView(app.foxbox.ui.HallScreen(this).apply { onExit = { leaveHall() } })
+        addTopKeys()
     }
     private var hallFrom = 2
     /** A project is open everywhere but the title screen (and the hall when it was entered from there). */
@@ -188,10 +190,15 @@ class MainActivity : Activity(), Host {
     private var sketchView: app.foxbox.notes.SketchEditor? = null
     private val content get() = findViewById<android.widget.FrameLayout>(android.R.id.content)
 
-    /** The notebook's tab floats over the screen just shown (setContentView takes everything else away). */
-    private fun addNoteTab() {
+    /** The radio and notebook keys, in the top right corner of the screen just shown (setContentView took the last ones away). */
+    private var topKeys: app.foxbox.ui.TopKeys? = null
+    private fun addTopKeys() {
         notebook = null; sketchView = null; hiddenViews = emptyList(); restorePending = false
-        addContentView(app.foxbox.notes.NoteTab(this) { openNotebook() }, android.widget.FrameLayout.LayoutParams(Px.dp(46), Px.dp(52)))
+        val k = app.foxbox.ui.TopKeys(this, { app.foxbox.radio.RadioPanel.show(this, this) }) { if (notebook != null) closeNotebook() else openNotebook() }
+        k.radioOn = app.foxbox.radio.Radio.playing; k.radioRec = app.foxbox.radio.Radio.recording
+        app.foxbox.radio.Radio.onChange = { runOnUiThread { topKeys?.radioOn = app.foxbox.radio.Radio.playing; topKeys?.radioRec = app.foxbox.radio.Radio.recording } }
+        topKeys = k
+        addContentView(k, android.widget.FrameLayout.LayoutParams(app.foxbox.ui.TopKeys.WIDTH.toInt(), app.foxbox.ui.TopKeys.HEIGHT.toInt(), android.view.Gravity.TOP or android.view.Gravity.END).apply { topMargin = Px.dp(4); rightMargin = Px.dp(4) })
     }
 
     private fun openNotebook() {
@@ -199,12 +206,13 @@ class MainActivity : Activity(), Host {
         val nb = app.foxbox.notes.NotebookView(this, { closeNotebook() }) { s -> openSketch(s) }
         notebook = nb
         // the screen underneath steps aside (so it isn't laid out upright while the notebook is open)
-        hiddenViews = (0 until content.childCount).map { content.getChildAt(it) }.filter { it.visibility == View.VISIBLE }
+        hiddenViews = (0 until content.childCount).map { content.getChildAt(it) }.filter { it.visibility == View.VISIBLE && it !== topKeys }
         hiddenViews.forEach { it.visibility = View.GONE }
         // held upright, like a memo pad in the hand
         orientationBefore = requestedOrientation
         requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
         addContentView(nb, android.widget.FrameLayout.LayoutParams(-1, -1))
+        topKeys?.let { it.visibility = View.VISIBLE; it.bringToFront(); it.notebookOpen = true }
     }
 
     private fun openSketch(s: app.foxbox.notes.Notes.Sketch) {
@@ -220,6 +228,7 @@ class MainActivity : Activity(), Host {
         // the drawing board turns with the phone, whichever way suits the picture
         requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_FULL_USER
         addContentView(v, android.widget.FrameLayout.LayoutParams(-1, -1))
+        topKeys?.bringToFront()
     }
 
     /** Back (or Close): the sketch first, then the notebook. True if something closed. */
@@ -229,6 +238,7 @@ class MainActivity : Activity(), Host {
         (getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).hideSoftInputFromWindow(nb.windowToken, 0)
         content.removeView(nb)
         notebook = null
+        topKeys?.notebookOpen = false
         requestedOrientation = orientationBefore
         // bring the screen back once the phone has turned back (or straight away if it won't turn)
         restorePending = true
@@ -684,6 +694,16 @@ class MainActivity : Activity(), Host {
     private fun displayName(uri: Uri) = contentResolver.query(uri, null, null, null, null)?.use { c ->
         if (c.moveToFirst()) c.getString(c.getColumnIndexOrThrow(android.provider.OpenableColumns.DISPLAY_NAME)) else null
     }
+
+    // ---- the radio's recordings go to the open project's samplers
+    override fun sampleTargets(): List<Pair<String, String>> {
+        if (!projectOpen) return emptyList()
+        val out = ArrayList<Pair<String, String>>()
+        Audio.active.filterIsInstance<SampleEngine>().forEach { out += it.id to "Load into ${it.title}" }
+        if (Audio.active.any { it.id == "pickup" }) out += "pad${Studio.selectedPad}" to "Load onto Pickup pad ${Studio.selectedPad + 1}"
+        return out
+    }
+    override fun deliverSample(target: String, data: FloatArray, name: String) = deliver(target, data, name)
 
     private fun deliver(target: String, data: FloatArray, name: String) {
         when {

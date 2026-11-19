@@ -32,7 +32,7 @@ class PageGeo(val paper: RectF) {
 
 /** Draws a memo page: cream paper, blue rules, the red margin, typeset handwriting and sketch windows. */
 class PageArt(c: Context) {
-    val hand: Typeface = runCatching { Typeface.createFromAsset(c.assets, "fonts/PatrickHand-Regular.ttf") }.getOrDefault(Typeface.SERIF)
+    val hand: Typeface = runCatching { Typeface.createFromAsset(c.assets, "fonts/CoveredByYourGrace.ttf") }.getOrDefault(Typeface.SERIF)
     val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = hand; color = INK }
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
     private val img = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
@@ -46,8 +46,8 @@ class PageArt(c: Context) {
         const val MARK = 0x66F4D35E
     }
 
-    /** The type is sized to the line's width (about eight words a line), never taller than the line allows. */
-    fun sizeText(g: PageGeo) { text.textSize = minOf(g.textW * 0.062f, g.lineH * 0.78f) }
+    /** Big, easy handwriting sized to the line's width (four or five words a line), never taller than the line allows. */
+    fun sizeText(g: PageGeo) { text.textSize = minOf(g.textW * 0.124f, g.lineH * 0.8f) }
 
     /** Width of the first [n] characters of a line as typeset. */
     fun width(s: String, n: Int = s.length) = if (n <= 0) 0f else text.measureText(s, 0, n.coerceAtMost(s.length))

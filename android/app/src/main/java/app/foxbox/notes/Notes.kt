@@ -18,9 +18,11 @@ object Notes {
      * Ruled lines on a page: tall enough to write several words across with a finger. The type
      * is sized to the page's width, so a line holds the same words on every screen shape.
      */
-    const val LINES = 14
+    const val LINES = 10
+    /** Bumped when the text size or line count changes, so older books get re-wrapped once. */
+    const val LAYOUT = 3
     /** Width ÷ height of a page in the PDF export (on screen the pad fills the upright phone). */
-    const val ASPECT = 0.6f
+    const val ASPECT = 0.63f
     /** Cover colours, in order for new books: oxblood, navy, forest, mustard, black. */
     val COVERS = intArrayOf(0xFF7A2630.toInt(), 0xFF27355E.toInt(), 0xFF2E5240.toInt(), 0xFFB8862C.toInt(), 0xFF26242A.toInt())
 
@@ -61,10 +63,10 @@ object Notes {
         }
     }
 
-    class Book(val id: String, var name: String, var cover: Int, val pages: MutableList<Page>, val bookmarks: MutableList<String>, var current: Int) {
+    class Book(val id: String, var name: String, var cover: Int, val pages: MutableList<Page>, val bookmarks: MutableList<String>, var current: Int, var layout: Int = LAYOUT) {
         val page get() = pages[current.coerceIn(0, pages.size - 1)]
         fun toJson() = JSONObject().put("id", id).put("name", name).put("cover", cover).put("current", current)
-            .put("pages", JSONArray(pages.map { it.toJson() })).put("bookmarks", JSONArray(bookmarks))
+            .put("pages", JSONArray(pages.map { it.toJson() })).put("bookmarks", JSONArray(bookmarks)).put("layout", layout)
         companion object {
             fun from(o: JSONObject): Book {
                 val ps = ArrayList<Page>()
@@ -72,7 +74,7 @@ object Notes {
                 for (k in 0 until arr.length()) ps += Page.split(arr.getJSONObject(k))
                 if (ps.isEmpty()) ps += Page()
                 val bm = o.optJSONArray("bookmarks")?.let { a -> (0 until a.length()).map { a.getString(it) }.toMutableList() } ?: ArrayList()
-                return Book(o.getString("id"), o.optString("name", "Memo"), o.optInt("cover", COVERS[0]), ps, bm, o.optInt("current", 0))
+                return Book(o.getString("id"), o.optString("name", "Memo"), o.optInt("cover", COVERS[0]), ps, bm, o.optInt("current", 0), o.optInt("layout", 0))
             }
         }
     }

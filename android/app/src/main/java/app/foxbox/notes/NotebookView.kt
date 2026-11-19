@@ -82,12 +82,14 @@ class NotebookView(private val a: Activity, private val close: () -> Unit, priva
     override fun onDetachedFromWindow() { Handwriting.onReady = null; removeCallbacks(recognize); super.onDetachedFromWindow() }
 
     override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) {
-        // close up: the pad fills the upright screen, with just an edge of the desk around it
+        // close up on a classic pocket memo pad (taller than wide, about 3.5 by 5.5), leaving the
+        // top strip clear for the notebook and radio keys
         val m = maxOf(Px.dp(6f), minOf(w, h) * 0.025f)
-        var pw = w - m * 2; var ph = h - m * 2
-        if (pw / ph > 0.78f) pw = ph * 0.78f          // never wider than a memo pad (on a sideways screen)
-        if (pw / ph < 0.42f) ph = pw / 0.42f
-        pad.set((w - pw) / 2, (h - ph) / 2, (w + pw) / 2, (h + ph) / 2)
+        val top = Px.dp(54f)
+        var pw = w - m * 2; var ph = pw / Notes.ASPECT
+        if (ph > h - top - m) { ph = h - top - m; pw = ph * Notes.ASPECT }
+        val y0 = top + (h - top - m - ph) / 2
+        pad.set((w - pw) / 2, y0, (w + pw) / 2, y0 + ph)
         header.set(pad.left, pad.top, pad.right, pad.top + minOf(ph * 0.06f, pw * 0.13f))
         g = PageGeo(RectF(pad.left, header.bottom, pad.right, pad.bottom))
         val hh = header.height()
@@ -97,6 +99,18 @@ class NotebookView(private val a: Activity, private val close: () -> Unit, priva
         val slot = pw / tools.size
         for (i in tools.indices) tools[i].set(pad.left + i * slot, g.toolTop, pad.left + (i + 1) * slot, pad.bottom)
         art.sizeText(g)
+        rewrapOld()
+    }
+
+    /** Books written with smaller type (or more lines a page) are re-wrapped once to the current size. */
+    private fun rewrapOld() {
+        for (b in Notes.books) {
+            if (b.layout >= Notes.LAYOUT) continue
+            var pi = 0
+            while (pi < b.pages.size) { for (li in 0 until Notes.LINES) reflow(pi, li, b); pi++ }
+            b.layout = Notes.LAYOUT
+            Notes.save(b)
+        }
     }
 
     // =====================================================================================
@@ -127,6 +141,7 @@ class NotebookView(private val a: Activity, private val close: () -> Unit, priva
             postInvalidateOnAnimation()
         } else drawSheet(c, pageNo, live = true)
         drawHeader(c)
+        drawRail(c)
         drawTools(c)
         if (caretPage == pageNo && caretLine >= 0) postInvalidateDelayed(500)
     }
@@ -190,16 +205,27 @@ class NotebookView(private val a: Activity, private val close: () -> Unit, priva
         val fx = findBtn.centerX() + findBtn.width() * 0.1f; val fy = header.centerY() - hh * 0.05f; val fr = hh * 0.22f
         p.style = Paint.Style.STROKE; p.strokeWidth = Px.dp(2.5f); p.color = 0xFFF2E6CC.toInt()
         c.drawCircle(fx, fy, fr, p); c.drawLine(fx + fr * 0.7f, fy + fr * 0.7f, fx + fr * 1.6f, fy + fr * 1.6f, p); p.style = Paint.Style.FILL
-        // the spiral binding
-        val n = (pad.width() / Px.dp(14f)).toInt().coerceAtLeast(8)
-        val step = pad.width() / n
-        for (k in 0 until n) {
-            val cx = pad.left + step * (k + 0.5f)
-            p.color = 0xFF2A2420.toInt(); c.drawCircle(cx, header.bottom + hh * 0.18f, hh * 0.09f, p)
-            p.style = Paint.Style.STROKE; p.strokeWidth = Px.dp(2.2f); p.color = 0xFFB8B8C0.toInt()
-            c.drawArc(cx - hh * 0.12f, header.bottom - hh * 0.32f, cx + hh * 0.12f, header.bottom + hh * 0.22f, 200f, 250f, false, p)
-            p.style = Paint.Style.FILL
-        }
+        // a glued pad: the sheets' edges caught in a strip of glue under the cover band
+        p.color = 0xFFD8CDB4.toInt(); c.drawRect(pad.left, header.bottom, pad.right, header.bottom + hh * 0.16f, p)
+        p.color = 0x33000000
+        for (k in 1..3) c.drawRect(pad.left, header.bottom + hh * 0.04f * k, pad.right, header.bottom + hh * 0.04f * k + Px.dp(0.7f), p)
+        p.color = 0x22000000; c.drawRect(pad.left, header.bottom, pad.right, header.bottom + Px.dp(2f), p)
+    }
+
+    /** The page rail in the left margin: a groove with grip ridges and arrows, to swipe pages up or down. */
+    private fun drawRail(c: Canvas) {
+        val l = g.paper.left + g.pw * 0.02f; val r = g.marginX - g.pw * 0.02f
+        val t = g.firstRule + g.lineH * 0.2f; val b = g.toolTop - g.lineH * 0.2f
+        val held = mode == Mode.SWIPE && downX < g.marginX
+        p.color = if (held) 0x30E39A9A else 0x1423306E; c.drawRoundRect(l, t, r, b, (r - l) / 2, (r - l) / 2, p)
+        p.color = 0x2A23306E
+        var y = t + (r - l)
+        while (y < b - (r - l)) { c.drawRect(l + (r - l) * 0.3f, y, r - (r - l) * 0.3f, y + Px.dp(1f), p); y += Px.dp(7f) }
+        // ▲ next page, ▼ the one before
+        val cx = (l + r) / 2; val a = (r - l) * 0.28f
+        p.color = 0x6623306E
+        path.reset(); path.moveTo(cx, t + a * 0.6f); path.lineTo(cx + a, t + a * 1.9f); path.lineTo(cx - a, t + a * 1.9f); path.close(); c.drawPath(path, p)
+        path.reset(); path.moveTo(cx, b - a * 0.6f); path.lineTo(cx + a, b - a * 1.9f); path.lineTo(cx - a, b - a * 1.9f); path.close(); c.drawPath(path, p)
     }
 
     private fun drawTools(c: Canvas) {
@@ -250,6 +276,8 @@ class NotebookView(private val a: Activity, private val close: () -> Unit, priva
                     header.contains(x, y) -> { button = listOf(bookBtn, markBtn, findBtn).firstOrNull { it.contains(x, y) }; Mode.BUTTON }
                     y >= g.toolTop -> Mode.EDGE
                     y < g.firstRule && y >= header.bottom - header.height() * 0.4f -> Mode.SWIPE
+                    // the page rail down the left margin: swipe up for the next page, down for the last
+                    x < g.marginX && y > g.paper.top && y < g.toolTop -> Mode.SWIPE
                     !pad.contains(x, y) -> Mode.SWIPE
                     else -> {
                         val sk = sketchAt(x, y)
@@ -288,7 +316,7 @@ class NotebookView(private val a: Activity, private val close: () -> Unit, priva
                 when (mode) {
                     Mode.BUTTON -> if (tap) when (button) { bookBtn -> booksMenu(); markBtn -> bookmarksMenu(); findBtn -> search(); else -> {} }
                     Mode.EDGE -> if (abs(dy) > pad.height() * 0.06f) turn(if (dy < 0) 1 else -1) else if (tap) tool(tools.indexOfFirst { it.contains(downX, downY) })
-                    Mode.SWIPE -> if (abs(dy) > pad.height() * 0.06f) turn(if (dy < 0) 1 else -1)
+                    Mode.SWIPE -> if (abs(dy) > pad.height() * 0.04f) turn(if (dy < 0) 1 else -1)
                     Mode.SKETCH -> if (tap && !longFired) touchSketch?.let { openSketch(it) }
                     Mode.INK -> { if (e.actionMasked == MotionEvent.ACTION_UP) finishStroke() else cur = null }
                     Mode.ERASE -> Notes.save()
@@ -458,26 +486,26 @@ class NotebookView(private val a: Activity, private val close: () -> Unit, priva
     }
 
     /** Words that run past the edge move down to the next free line (and on to the next page). */
-    private fun reflow(pageIdx: Int, line0: Int) {
+    private fun reflow(pageIdx: Int, line0: Int, b: Notes.Book = book) {
         var pi = pageIdx; var li = line0
         repeat(400) {
-            val pg = book.pages[pi]; val s = pg.lines[li]
+            val pg = b.pages[pi]; val s = pg.lines[li]
             if (art.width(s) <= g.textW) return
             var cut = s.length
             while (cut > 0 && art.width(s, cut) > g.textW) cut = s.lastIndexOf(' ', cut - 1).let { if (it <= 0) 0 else it }
             if (cut <= 0 || s.substring(0, cut).isBlank()) { cut = s.length; while (cut > 1 && art.width(s, cut) > g.textW) cut-- }
             val head = s.substring(0, cut).trimEnd(); val tail = s.substring(cut).trimStart()
             pg.lines[li] = head
-            val moveCaret = caretPage == pi && caretLine == li && caretIdx > head.length
+            val moveCaret = b === book && caretPage == pi && caretLine == li && caretIdx > head.length
             val shift = cut + (s.length - cut - s.substring(cut).trimStart().length)
             var np = pi; var nl = li + 1
             while (true) {
-                if (nl >= Notes.LINES) { np++; nl = 0; if (np >= book.pages.size) book.pages += Notes.Page() }
-                if (book.pages[np].sketches.none { it.covers(nl) }) break
+                if (nl >= Notes.LINES) { np++; nl = 0; if (np >= b.pages.size) b.pages += Notes.Page() }
+                if (b.pages[np].sketches.none { it.covers(nl) }) break
                 nl++
             }
-            val nxt = book.pages[np].lines[nl]
-            book.pages[np].lines[nl] = if (nxt.isBlank()) tail else "$tail ${nxt.trimStart()}"
+            val nxt = b.pages[np].lines[nl]
+            b.pages[np].lines[nl] = if (nxt.isBlank()) tail else "$tail ${nxt.trimStart()}"
             if (moveCaret) { caretPage = np; caretLine = nl; caretIdx = (caretIdx - shift).coerceIn(0, tail.length) }
             pi = np; li = nl
         }

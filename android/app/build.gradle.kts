@@ -69,4 +69,8 @@ dependencies {
     implementation(project(":shared"))
     // The notebook: on-device handwriting recognition (the language model downloads once, then works offline).
     implementation("com.google.mlkit:digital-ink-recognition:18.1.0")
+    // The radio: streams (Icecast/Shoutcast and HLS) with a tap on the decoded sound for sampling.
+    implementation("androidx.media3:media3-exoplayer:1.4.1")
+    implementation("androidx.media3:media3-exoplayer-hls:1.4.1")
+    implementation("androidx.annotation:annotation-experimental:1.4.1")
 }

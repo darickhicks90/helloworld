@@ -48,7 +48,7 @@ class InstrumentPage(c: Context, id: String, host: Host) : LinearLayout(c) {
         chords.chords.accent = accent
         addView(SquareBox(c, XyPad(c, id) { xy, isX -> host.chooseXyTarget(xy, isX) }), lp(WRAP, MATCH))
         // the block's level, on an old radio's edgewise meter
-        addView(VuMeter(c, id), lp(Px.dp(44), MATCH).apply { leftMargin = Px.dp(4) })
+        addView(VuMeter(c, id), lp(Px.dp(30), MATCH).apply { leftMargin = Px.dp(4) })
         val col = LinearLayout(c).apply { orientation = VERTICAL }
         col.addView(chords, lp(MATCH, 0, 1f))
         if (seq != null) {
@@ -57,7 +57,8 @@ class InstrumentPage(c: Context, id: String, host: Host) : LinearLayout(c) {
             latchBtn.onClick = { seq.latch.set(if (seq.latch.on) 0f else 1f); Studio.save(); refresh() }
             chords.footer(seqBtn, latchBtn, viewBtn)
         }
-        addView(col, lp(Px.dp(264), MATCH).apply { leftMargin = Px.dp(6) })
+        // a little narrower than before, so the strum pad gets the room
+        addView(col, lp(Px.dp(226), MATCH).apply { leftMargin = Px.dp(6) })
         val right = FrameLayout(c)
         strum = StrumPad(c, chords.chords).apply { this.accent = accent }
         right.addView(strum, FrameLayout.LayoutParams(MATCH, MATCH))
@@ -175,7 +176,7 @@ class PickupPage(c: Context, private val host: Host) : LinearLayout(c) {
         orientation = HORIZONTAL
         setPadding(Px.dp(4), Px.dp(4), Px.dp(4), Px.dp(4))
         addView(SquareBox(c, XyPad(c, "pickup") { xy, isX -> host.chooseXyTarget(xy, isX) }), lp(WRAP, MATCH))
-        addView(VuMeter(c, "pickup"), lp(Px.dp(44), MATCH).apply { leftMargin = Px.dp(4) })
+        addView(VuMeter(c, "pickup"), lp(Px.dp(30), MATCH).apply { leftMargin = Px.dp(4) })
         addView(SquareBox(c, pads), lp(WRAP, MATCH).apply { leftMargin = Px.dp(4) })
         val col = LinearLayout(c).apply { orientation = VERTICAL }
         soundTab.onClick = { showMode(0) }; patternTab.onClick = { showMode(1) }

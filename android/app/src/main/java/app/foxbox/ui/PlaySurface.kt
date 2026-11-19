@@ -12,7 +12,9 @@ import kotlin.math.sin
 
 /**
  * Middle column: key/scale settings plus one button per diatonic chord.
- * Tap a chord to play it; hold it and swipe the strum pad to strum it.
+ * Tap a chord to play it; hold it and swipe the strum pad to strum it. Each button's
+ * left end (the strings tab) brings up the strum pad for that chord without sounding it,
+ * for strumming or picking it out by hand.
  */
 @SuppressLint("ViewConstructor")
 class ChordPanel(c: Context) : LinearLayout(c) {
@@ -57,16 +59,25 @@ class ChordButtons(c: Context) : PixelView(c) {
     private val count get() = Studio.scale.steps.size
     private fun keyBase(d: Int) = 0x10000000 + d * 8
 
+    /** The strings tab at each button's left end: shows the strum pad for the chord, silently. */
+    private val tabW get() = maxOf(Px.dp(38f), width * 0.2f)
+
     override fun paint(c: Canvas) {
         val rh = height.toFloat() / count
         val gap = Px.dp(2f)
         for (d in 0 until count) {
             val ch = Studio.chord(d)
             val on = d in pressed.values
+            val quiet = on && d in muted
             val t = d * rh
-            c.pixelBox(u, t + gap, width - u, t + rh - gap, if (on) accent else if (d % 2 == 0) Pal.CREAM else Pal.PAPER)
-            roman.color = if (on) Pal.CREAM else Pal.BROWN; name.color = if (on) Pal.CREAM else Pal.BROWN_D
-            c.drawText(ch.roman, Px.dp(12f), t + rh / 2 + Px.dp(4f), roman)
+            c.pixelBox(u, t + gap, width - u, t + rh - gap, if (on && !quiet) accent else if (d % 2 == 0) Pal.CREAM else Pal.PAPER)
+            // the strings tab: three little strings on a darker panel (lit while it holds the strum pad)
+            val tl = u * 2; val tr = tabW; val tt = t + gap + u; val tb = t + rh - gap - u * 2
+            c.fill(tl, tt, tr, tb, if (quiet) accent else Pal.alpha(Pal.BROWN_D, 0.14f))
+            c.fill(tr, tt, tr + u, tb, Pal.alpha(Pal.BROWN_D, 0.35f))
+            for (k in 0 until 3) { val sx = tl + (tr - tl) * (k + 1) / 4f; c.fill(sx, tt + Px.dp(5f), sx + maxOf(1f, u * 0.5f), tb - Px.dp(5f), if (quiet) Pal.CREAM else Pal.BROWN) }
+            roman.color = if (on && !quiet) Pal.CREAM else Pal.BROWN; name.color = if (on && !quiet) Pal.CREAM else Pal.BROWN_D
+            c.drawText(ch.roman, tabW + Px.dp(8f), t + rh / 2 + Px.dp(4f), roman)
             c.drawText(ch.name, width - Px.dp(12f), t + rh / 2 + Px.dp(6f), name)
         }
     }
@@ -78,8 +89,8 @@ class ChordButtons(c: Context) : PixelView(c) {
             MotionEvent.ACTION_DOWN, MotionEvent.ACTION_POINTER_DOWN -> {
                 val d = (e.getY(i) / height * count).toInt().coerceIn(0, count - 1)
                 pressed[e.getPointerId(i)] = d
-                muted.remove(d)
-                Studio.chordOn(d, keyBase(d), 0.55f + 0.4f * (e.getX(i) / width))
+                if (e.getX(i) < tabW) muted.add(d)   // the strings tab: strum pad up, chord silent
+                else { muted.remove(d); Studio.chordOn(d, keyBase(d), 0.55f + 0.4f * (e.getX(i) / width)) }
                 onHeld?.invoke(); invalidate()
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_CANCEL -> {
@@ -170,17 +181,24 @@ class StrumPad(c: Context, private val chords: ChordButtons) : PixelView(c) {
             val age = now - plucked[i]
             val amp = if (age < 0.6f) (1 - age / 0.6f) * Px.dp(6f) else 0f
             val root = Studio.isRoot(s[i])
+            val col = noteColor(s[i])
             var y = Px.dp(30f)
             while (y < h - Px.dp(20f)) {
                 val dx = sin(y * 0.05f + now * 60f) * amp * sin(Math.PI.toFloat() * (y / h))
-                c.dot(x + dx - u / 2, y, if (amp > 0) Pal.AQUA_L else if (root) Pal.ORANGE_L else Pal.CREAM, if (root) 2 else 1)
+                c.dot(x + dx - u / 2, y, if (amp > 0) Pal.CREAM else col, if (root) 2 else 1)
                 y += u
             }
-            small.color = Pal.PAPER
+            small.color = col
             c.textCentered(Theory.noteName(s[i]), x, h - Px.dp(8f), small)
         }
         small.color = Pal.BROWN
     }
+
+    /** Each note name its own soft colour (round the circle of twelve), so the strings read at a glance. */
+    private val noteColors = IntArray(12) { pc ->
+        android.graphics.Color.HSVToColor(floatArrayOf((pc * 7 % 12) * 30f, 0.42f, 0.98f))
+    }
+    private fun noteColor(n: Int) = noteColors[Math.floorMod(n, 12)]
 
     private fun noteAt(x: Float, y: Float): Int {
         val cols = Studio.scale.steps.size

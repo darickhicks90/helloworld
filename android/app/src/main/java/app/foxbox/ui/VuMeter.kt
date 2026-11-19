@@ -33,8 +33,8 @@ class VuMeter(c: Context, private val blockId: String) : View(c) {
 
     override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) {
         val d = Px.dp(1f)
-        bezel.set(3 * d, 3 * d, w - 3 * d, h - 3 * d)
-        win.set(bezel.left + 6 * d, bezel.top + 22 * d, bezel.right - 6 * d, bezel.bottom - 24 * d)
+        bezel.set(1.5f * d, 3 * d, w - 1.5f * d, h - 3 * d)
+        win.set(bezel.left + 4 * d, bezel.top + 22 * d, bezel.right - 4 * d, bezel.bottom - 24 * d)
         faceShader = LinearGradient(win.left, 0f, win.right, 0f, intArrayOf(0xFFE9C77A.toInt(), 0xFFFFE9B0.toInt(), 0xFFE9C77A.toInt()), floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP)
     }
 
@@ -58,20 +58,20 @@ class VuMeter(c: Context, private val blockId: String) : View(c) {
         val lx = bezel.centerX()
         p.color = if (now < peakUntil) 0xFFFF4A3A.toInt() else 0xFF4A2220.toInt(); c.drawCircle(lx, bezel.top + 12 * d, 4 * d, p)
         p.color = 0x55FFFFFF; c.drawCircle(lx - 1.2f * d, bezel.top + 10.8f * d, 1.3f * d, p)
-        t.textSize = 8 * d; t.color = 0xFFE9C77A.toInt()
+        t.textSize = minOf(8 * d, bezel.width() * 0.3f); t.color = 0xFFE9C77A.toInt()
         c.drawText("VU", lx, bezel.bottom - 9 * d, t)
         // the lit scale
         p.shader = faceShader; c.drawRect(win, p); p.shader = null
         val redTop = yFor(0f)
         p.color = 0x55C8342C; c.drawRect(win.left, win.top, win.right, redTop, p)
-        t.textSize = minOf(7 * d, win.width() * 0.24f)
+        t.textSize = minOf(7 * d, win.width() * 0.36f)
         for (m in MARKS) {
             val y = yFor(m.toFloat())
             val red = m > 0
             p.color = if (red) 0xFFB02A22.toInt() else 0xFF3A2A18.toInt()
             val major = m == -20 || m == -10 || m == -5 || m == 0 || m == 3
             c.drawRect(win.left, y - 0.6f * d, win.left + win.width() * (if (major) 0.32f else 0.2f), y + 0.6f * d, p)
-            if (major) { t.color = p.color; c.drawText(if (m > 0) "+$m" else "$m", win.centerX() + win.width() * 0.14f, y + t.textSize * 0.38f, t) }
+            if (major) { t.color = p.color; c.drawText(if (m > 0) "+$m" else "$m", win.centerX() + win.width() * 0.18f, y + t.textSize * 0.38f, t) }
         }
         // the needle: a thin black blade across the window with its shadow
         val ny = yFor(shown)

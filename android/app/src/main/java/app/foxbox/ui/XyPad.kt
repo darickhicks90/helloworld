@@ -64,8 +64,8 @@ class XyPad(c: Context, private val themeId: String, private val pickAxis: (XySt
             val hx = pad.homeX.value * w; val hy = (1 - pad.homeY.value) * h
             c.fill(hx - u * 2, hy, hx + u * 3, hy + u, Pal.alpha(Pal.CREAM, 0.7f)); c.fill(hx, hy - u * 2, hx + u, hy + u * 3, Pal.alpha(Pal.CREAM, 0.7f))
         }
-        tag(c, "Y ▾ ${pad.yParam.name}  ${pad.yParam.text()}", u * 3, u * 3, yTag)
-        tag(c, "X ▾ ${pad.xParam.name}  ${pad.xParam.text()}", u * 3, h - u * 3 - Px.dp(20f), xTag)
+        tag(c, "Y ▾ ${pad.yParam.name}  ${Glyph.waves(pad.yParam.text())}", u * 3, u * 3, yTag)
+        tag(c, "X ▾ ${pad.xParam.name}  ${Glyph.waves(pad.xParam.text())}", u * 3, h - u * 3 - Px.dp(20f), xTag)
         val m = if (pad.stay.on) "STAY" else "HOME"
         tag(c, m, w - u * 3 - label.measureText(m) - Px.dp(12f), u * 3, modeTag)
     }

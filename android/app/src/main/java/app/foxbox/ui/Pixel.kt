@@ -43,6 +43,21 @@ object Pal {
     fun alpha(c: Int, a: Float) = (c and 0x00FFFFFF) or ((a.coerceIn(0f, 1f) * 255).toInt() shl 24)
 }
 
+/**
+ * Symbols added to the app's two pixel fonts (5IY-Head / 5IY-Body, renamed OFL
+ * builds of Press Start 2P and Pixelify Sans), in the private-use area.
+ */
+object Glyph {
+    const val NOTEBOOK = "\uE000"
+    const val SAW = "\uE001"
+    const val SQUARE = "\uE002"
+    const val TRIANGLE = "\uE003"
+    const val SINE = "\uE004"
+    private val waves = Regex("\\b(Saw|Square|Triangle|Sine)\\b")
+    /** "Saw" → the saw symbol, and so on, wherever a waveform is written out. */
+    fun waves(s: String): String = waves.replace(s) { when (it.value) { "Saw" -> SAW; "Square" -> SQUARE; "Triangle" -> TRIANGLE; else -> SINE } }
+}
+
 object Px {
     var density = 1f; private set
     /** One "art pixel" in screen pixels. */
@@ -53,8 +68,8 @@ object Px {
     fun init(c: Context) {
         density = c.resources.displayMetrics.density
         u = (3 * density).coerceAtLeast(2f)
-        head = runCatching { Typeface.createFromAsset(c.assets, "fonts/PressStart2P-Regular.ttf") }.getOrDefault(Typeface.MONOSPACE)
-        body = runCatching { Typeface.createFromAsset(c.assets, "fonts/PixelifySans.ttf") }.getOrDefault(Typeface.MONOSPACE)
+        head = runCatching { Typeface.createFromAsset(c.assets, "fonts/5IY-Head.ttf") }.getOrDefault(Typeface.MONOSPACE)
+        body = runCatching { Typeface.createFromAsset(c.assets, "fonts/5IY-Body.ttf") }.getOrDefault(Typeface.MONOSPACE)
     }
 
     fun dp(v: Float) = v * density

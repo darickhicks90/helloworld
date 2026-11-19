@@ -314,7 +314,7 @@ class KnobFace(classic: Boolean = false) {
         c.fill(cx - vw / 2, vt, cx + vw / 2, vb, cInk)
         c.fill(cx - vw / 2 + Px.dp(1f), vt + Px.dp(1f), cx + vw / 2 - Px.dp(1f), vb - Px.dp(1f), cWindow)
         value.color = brighten(accent); value.textSize = Px.dp(11f)
-        c.textFit(valueText, cx, (vt + vb) / 2, vw - Px.dp(6f), value, 7f)
+        c.textFit(Glyph.waves(valueText), cx, (vt + vb) / 2, vw - Px.dp(6f), value, 7f)
         // name, on two lines if that reads better
         label.textSize = Px.dp(11f)
         val words = name.split(' ')

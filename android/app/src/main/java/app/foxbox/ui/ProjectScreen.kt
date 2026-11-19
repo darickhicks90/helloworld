@@ -16,7 +16,7 @@ import java.util.Date
 
 /** First screen: pick a project or start a new one. */
 @SuppressLint("ViewConstructor")
-class ProjectScreen(c: Context, private val onOpen: (Project) -> Unit, private val onNew: () -> Unit, private val onManage: (Project) -> Unit) : FrameLayout(c) {
+class ProjectScreen(c: Context, private val onOpen: (Project) -> Unit, private val onNew: () -> Unit, private val onManage: (Project) -> Unit, onHall: (() -> Unit)? = null) : FrameLayout(c) {
     private val titleP = Px.text(26f, Pal.ORANGE, headFont = true)
     private val tagP = Px.text(14f, Pal.AQUA_D)
 
@@ -30,6 +30,9 @@ class ProjectScreen(c: Context, private val onOpen: (Project) -> Unit, private v
         // The cards sit over the meadow on the left; the yeti stands on the right.
         addView(scroll, LayoutParams(MATCH, CARD_H + Px.dp(8), android.view.Gravity.BOTTOM or android.view.Gravity.START).apply { bottomMargin = Px.dp(24) })
         post { (scroll.layoutParams as LayoutParams).width = (width * 0.62f).toInt(); scroll.requestLayout() }
+        // once the great hall has been found, a way straight back in
+        if (onHall != null) addView(Btn(c, "Great hall", Snes.PURPLE, 120).apply { on = true; onClick = onHall },
+            LayoutParams(LayoutParams.WRAP_CONTENT, Px.dp(44), android.view.Gravity.TOP or android.view.Gravity.END).apply { topMargin = Px.dp(14); rightMargin = Px.dp(70) })
     }
 
     private val headP = Px.text(34f, Pal.ORANGE, headFont = true)

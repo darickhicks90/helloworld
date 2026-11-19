@@ -67,4 +67,6 @@ android {
 dependencies {
     // The sound core (engines, sequencer, flowers) shared with the iOS app.
     implementation(project(":shared"))
+    // The notebook: on-device handwriting recognition (the language model downloads once, then works offline).
+    implementation("com.google.mlkit:digital-ink-recognition:18.1.0")
 }

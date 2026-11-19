@@ -11,6 +11,8 @@
 
     <!-- Recording samples from the microphone -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- only to fetch the notebook's handwriting model once -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <!-- Bluetooth MIDI: Android 12 and newer -->
@@ -27,6 +29,7 @@
     <application
         android:allowBackup="true"
         android:appCategory="audio"
+        android:largeHeap="true"
         android:enableOnBackInvokedCallback="true"
         android:hardwareAccelerated="true"
         android:icon="@mipmap/ic_launcher"

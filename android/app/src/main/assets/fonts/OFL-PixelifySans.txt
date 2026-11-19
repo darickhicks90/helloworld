@@ -1,5 +1,7 @@
 Copyright 2021 The Pixelify Sans Project Authors (https://github.com/eifetx/Pixelify-Sans)
 
+5IY-Body.ttf is a modified version (renamed; symbols added at U+E000-U+E004).
+
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 https://scripts.sil.org/OFL

@@ -69,6 +69,7 @@ class MainActivity : Activity(), Host {
         Store.init(this)
         MidiMap.init(this)
         Studio.init(this)
+        app.foxbox.notes.Notes.init(this)
         Studio.onMessage = { Toast.makeText(this, it, Toast.LENGTH_SHORT).show() }
         Studio.needMic = { then -> withMic(then) }
         midi = MidiInput(this, Studio)
@@ -94,12 +95,13 @@ class MainActivity : Activity(), Host {
     }
 
     private fun goBack() {
-        when (screen) { 3 -> showClibbins(); 2 -> showStudio(); 1 -> showProjects(); else -> finish() }
+        if (closeNotebook()) return
+        when (screen) { 3 -> leaveHall(); 2 -> showStudio(); 1 -> showProjects(); else -> finish() }
     }
 
     override fun onStart() { super.onStart(); Audio.start(); immersive() }
     override fun onStop() {
-        if (screen != 0) Studio.save(true)
+        if (projectOpen) Studio.save(true)
         if (!Studio.taping && !Studio.audioRecording) Audio.stop()
         super.onStop()
     }
@@ -122,9 +124,10 @@ class MainActivity : Activity(), Host {
     // ------------------------------------------------------------------ navigation
 
     override fun showProjects() {
-        if (screen != 0) { Studio.save(true); Audio.post { Audio.transport.stop() } }
+        if (projectOpen) { Studio.save(true); Audio.post { Audio.transport.stop() } }
         screen = 0; studio = null
-        setContentView(ProjectScreen(this, ::openProject, ::newProject, ::manageProject))
+        setContentView(ProjectScreen(this, ::openProject, ::newProject, ::manageProject, if (hallFound) ({ showHall() }) else null))
+        addNoteTab()
     }
 
     private fun openProject(p: Project) {
@@ -136,6 +139,7 @@ class MainActivity : Activity(), Host {
     private fun showStudio() {
         screen = 1
         setContentView(studio ?: StudioScreen(this, this).also { studio = it })
+        addNoteTab()
     }
 
     override fun showClibbins() {
@@ -143,14 +147,68 @@ class MainActivity : Activity(), Host {
         screen = 2
         (studio?.parent as? android.view.ViewGroup)?.removeView(studio)
         setContentView(ClibbinsScreen(this, this).apply { backToStudio = { showStudio() } })
+        addNoteTab()
     }
 
     override fun showHall() {
         // everything stops, without a word: the music, every recording, the mic
         mic?.let { m -> mic = null; micFor = null; Thread { runCatching { m.stop() } }.start() }
-        Studio.hush()
-        screen = 3
-        setContentView(app.foxbox.ui.HallScreen(this).apply { onExit = { showClibbins() } })
+        if (screen != 0) Studio.hush()   // (from the title screen there's nothing playing, and no project open)
+        // found it: from now on the title screen has a way straight in
+        hallFound = true
+        val from = screen
+        screen = 3; hallFrom = from
+        setContentView(app.foxbox.ui.HallScreen(this).apply { onExit = { leaveHall() } })
+    }
+    private var hallFrom = 2
+    /** A project is open everywhere but the title screen (and the hall when it was entered from there). */
+    private val projectOpen get() = !(screen == 0 || (screen == 3 && hallFrom == 0))
+    private fun leaveHall() { if (hallFrom == 0) showProjects() else showClibbins() }
+    private val prefs by lazy { getSharedPreferences("5iy", MODE_PRIVATE) }
+    private var hallFound: Boolean
+        get() = prefs.getBoolean("hallFound", false)
+        set(v) { prefs.edit().putBoolean("hallFound", v).apply() }
+
+    // ------------------------------------------------------------------ the notebook (every screen but the game)
+
+    private var notebook: app.foxbox.notes.NotebookView? = null
+    private var sketchView: app.foxbox.notes.SketchEditor? = null
+    private val content get() = findViewById<android.widget.FrameLayout>(android.R.id.content)
+
+    /** The notebook's tab floats over the screen just shown (setContentView takes everything else away). */
+    private fun addNoteTab() {
+        notebook = null; sketchView = null
+        addContentView(app.foxbox.notes.NoteTab(this) { openNotebook() }, android.widget.FrameLayout.LayoutParams(Px.dp(46), Px.dp(52)))
+    }
+
+    private fun openNotebook() {
+        if (notebook != null) return
+        val nb = app.foxbox.notes.NotebookView(this, { closeNotebook() }) { s -> openSketch(s) }
+        notebook = nb
+        addContentView(nb, android.widget.FrameLayout.LayoutParams(-1, -1))
+    }
+
+    private fun openSketch(s: app.foxbox.notes.Notes.Sketch) {
+        if (sketchView != null) return
+        val v = app.foxbox.notes.SketchEditor(this, s) {
+            sketchView?.let { content.removeView(it) }
+            sketchView = null
+            notebook?.refresh()
+        }
+        sketchView = v
+        addContentView(v, android.widget.FrameLayout.LayoutParams(-1, -1))
+    }
+
+    /** Back (or Close): the sketch first, then the notebook. True if something closed. */
+    private fun closeNotebook(): Boolean {
+        sketchView?.let { it.close(); return true }
+        val nb = notebook ?: return false
+        (getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).hideSoftInputFromWindow(nb.windowToken, 0)
+        content.removeView(nb)
+        notebook = null
+        app.foxbox.notes.Notes.save()
+        immersive()
+        return true
     }
 
     @Deprecated("Back handling for Android 12 and older")

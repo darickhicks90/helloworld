@@ -72,9 +72,11 @@ class StudioScreen(c: Context, private val host: Host) : FrameLayout(c) {
     private var drawerOpen = false
 
     init {
-        setBackgroundColor(Pal.BROWN)
+        // the wood-grain cabinet of an old projection TV, speaker cloth behind the rail and clip bar
+        background = Tv.WoodDrawable()
         val body = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL }
         rail.orientation = LinearLayout.VERTICAL
+        rail.background = Tv.GrilleDrawable()
         rail.setPadding(Px.dp(4), Px.dp(4), Px.dp(2), Px.dp(4))
         body.addView(rail, lp(Px.dp(62), MATCH))
 
@@ -84,6 +86,7 @@ class StudioScreen(c: Context, private val host: Host) : FrameLayout(c) {
         drawer.visibility = GONE
         main.addView(content, lp(MATCH, 0, 1f))
         clipBar.orientation = LinearLayout.HORIZONTAL
+        clipBar.background = Tv.GrilleDrawable()
         clipBar.gravity = android.view.Gravity.CENTER_VERTICAL
         main.addView(clipBar, lp(MATCH, Px.dp(48)))
         body.addView(main, lp(0, MATCH, 1f))
@@ -163,7 +166,7 @@ class StudioScreen(c: Context, private val host: Host) : FrameLayout(c) {
             val t = Audio.transport
             val counting = (t.rec == Transport.Rec.ARMED && t.tick < t.recStart) || t.audioRec == Transport.Rec.ARMED || (t.sampRec == Transport.Rec.ARMED && t.tick < 0)
             val recording = t.rec == Transport.Rec.RECORDING || t.audioRec == Transport.Rec.RECORDING || t.sampRec == Transport.Rec.RECORDING
-            val bg = when { recording -> Pal.ORANGE_D; counting -> Pal.ORANGE_L; else -> Pal.BROWN_D }
+            val bg = when { recording -> Pal.ORANGE_D; counting -> Pal.ORANGE_L; else -> Tv.BEZEL }
             c.pixelBox(u, u, width - u, height - u, bg)
             val s = when {
                 counting -> "count ${t.beat + 1}"

@@ -39,16 +39,26 @@ class XyPad(c: Context, private val themeId: String, private val pickAxis: (XySt
         val pad = xy
         val dx = if (pad.touching) pad.x else pad.restX()
         val dy = if (pad.touching) pad.y else pad.restY()
-        c.save(); c.clipRect(u, u, w - u, h - u)
+        // the pad is the TV's picture: rounded glass inside a dark bezel
+        if (w != glassW || h != glassH) buildGlass(w, h)
+        c.save(); c.clipPath(glass)
         theme.draw(c, w, h, time, dx, dy)
         val mx = dx * w; val my = (1 - dy) * h
         var k = 0f
-        while (k < h) { c.dot(mx, k, Pal.alpha(Pal.BROWN_D, 0.3f)); k += u * 3 }
+        while (k < h) { c.dot(mx, k, Pal.alpha(Pal.CREAM, 0.3f)); k += u * 3 }
         k = 0f
-        while (k < w) { c.dot(k, my, Pal.alpha(Pal.BROWN_D, 0.3f)); k += u * 3 }
+        while (k < w) { c.dot(k, my, Pal.alpha(Pal.CREAM, 0.3f)); k += u * 3 }
         theme.marker(c, mx, my, time)
+        // scanlines, the dim corners of the tube, a soft glare across the glass, and a slow roll bar
+        k = 0f
+        while (k < h) { c.drawRect(0f, k, w, k + u * 0.5f, scanP); k += u * 1.5f }
+        c.drawRect(0f, 0f, w, h, vignetteP)
+        c.drawPath(glare, glareP)
+        val roll = ((time * 0.08f) % 1f) * (h + u * 20) - u * 10
+        c.save(); c.translate(0f, roll); c.drawRect(0f, 0f, w, u * 10, rollP); c.restore()
         c.restore()
-        c.pixelBox(0f, 0f, w, h, 0, shade = false)
+        c.drawPath(bezel, bezelP)
+        c.drawPath(glassEdge, edgeP)
         if (!pad.stay.on) {
             // home marker
             val hx = pad.homeX.value * w; val hy = (1 - pad.homeY.value) * h
@@ -60,9 +70,30 @@ class XyPad(c: Context, private val themeId: String, private val pickAxis: (XySt
         tag(c, m, w - u * 3 - label.measureText(m) - Px.dp(12f), u * 3, modeTag)
     }
 
+    // ---- the glass: shapes and shaders rebuilt when the pad changes size
+    private var glassW = 0f; private var glassH = 0f
+    private val glass = android.graphics.Path(); private val bezel = android.graphics.Path(); private val glare = android.graphics.Path(); private val glassEdge = android.graphics.Path()
+    private val scanP = Paint().apply { color = 0x1A000000 }
+    private val vignetteP = Paint(); private val glareP = Paint(Paint.ANTI_ALIAS_FLAG); private val rollP = Paint()
+    private val bezelP = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Tv.BEZEL }
+    private val edgeP = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; color = 0xFF3A332D.toInt() }
+    private fun buildGlass(w: Float, h: Float) {
+        glassW = w; glassH = h
+        val inset = u * 1.5f; val rad = minOf(w, h) * 0.06f + u * 2
+        glass.reset(); glass.addRoundRect(inset, inset, w - inset, h - inset, rad, rad, android.graphics.Path.Direction.CW)
+        bezel.reset(); bezel.fillType = android.graphics.Path.FillType.EVEN_ODD
+        bezel.addRect(0f, 0f, w, h, android.graphics.Path.Direction.CW); bezel.addRoundRect(inset, inset, w - inset, h - inset, rad, rad, android.graphics.Path.Direction.CW)
+        glassEdge.reset(); glassEdge.addRoundRect(inset, inset, w - inset, h - inset, rad, rad, android.graphics.Path.Direction.CW)
+        edgeP.strokeWidth = u * 0.5f
+        vignetteP.shader = android.graphics.RadialGradient(w / 2, h / 2, maxOf(w, h) * 0.72f,
+            intArrayOf(0x00000000, 0x00000000, 0x30000000, 0x70000000), floatArrayOf(0f, 0.55f, 0.85f, 1f), android.graphics.Shader.TileMode.CLAMP)
+        glare.reset(); glare.moveTo(inset, inset); glare.lineTo(w * 0.55f, inset); glare.quadTo(w * 0.3f, h * 0.12f, inset, h * 0.42f); glare.close()
+        glareP.shader = android.graphics.LinearGradient(0f, 0f, w * 0.35f, h * 0.3f, 0x30FFFFFF, 0x00FFFFFF, android.graphics.Shader.TileMode.CLAMP)
+        rollP.shader = android.graphics.LinearGradient(0f, 0f, 0f, u * 10, intArrayOf(0x00FFFFFF, 0x0EFFFFFF, 0x00FFFFFF), null, android.graphics.Shader.TileMode.CLAMP)
+    }
     private fun tag(c: Canvas, s: String, x: Float, y: Float, box: FloatArray) {
         val r = x + label.measureText(s) + Px.dp(12f)
-        c.fill(x, y, r, y + Px.dp(20f), Pal.alpha(Pal.BROWN_D, 0.85f))
+        c.fill(x, y, r, y + Px.dp(20f), Tv.OSD)
         c.drawText(s, x + Px.dp(6f), y + Px.dp(14f), label)
         box[0] = x; box[1] = y; box[2] = r; box[3] = y + Px.dp(20f)
     }
@@ -112,7 +143,16 @@ class XyPad(c: Context, private val themeId: String, private val pickAxis: (XySt
         val last = IntArray(1)
         fun pulse(): Boolean { val n = eng?.noteCount ?: 0; val hit = n != last[0]; last[0] = n; return hit }
         abstract fun draw(c: Canvas, w: Float, h: Float, t: Float, x: Float, y: Float)
-        open fun marker(c: Canvas, x: Float, y: Float, t: Float) = c.spriteCentered(Sprites.flower, x, y, Px.u * 2)
+        /** An on-screen-display cursor: four corner brackets round an orange dot. */
+        open fun marker(c: Canvas, x: Float, y: Float, t: Float) {
+            val g = Px.u; val r = g * 4
+            for ((sx, sy) in listOf(-1f to -1f, 1f to -1f, -1f to 1f, 1f to 1f)) {
+                val cx = x + sx * r; val cy = y + sy * r
+                c.fill(minOf(cx, cx - sx * g * 2), cy - g / 2, maxOf(cx, cx - sx * g * 2), cy + g / 2, Pal.CREAM)
+                c.fill(cx - g / 2, minOf(cy, cy - sy * g * 2), cx + g / 2, maxOf(cy, cy - sy * g * 2), Pal.CREAM)
+            }
+            c.fill(x - g, y - g, x + g, y + g, Pal.ORANGE)
+        }
         open fun touch(x: Float, y: Float) {}
     }
 
@@ -273,7 +313,8 @@ class XyPad(c: Context, private val themeId: String, private val pickAxis: (XySt
         override fun draw(c: Canvas, w: Float, h: Float, t: Float, x: Float, y: Float) {
             c.bands(0f, 0f, w, h * 0.7f, intArrayOf(Pal.AQUA_L, 0xFFC6EBE2.toInt(), Pal.CREAM, Pal.SUN))
             c.bands(0f, h * 0.7f, w, h, intArrayOf(Pal.GREEN_L, Pal.GREEN, Pal.GREEN_D))
-            for (i in 0 until 7) c.flower(w * (0.08f + i * 0.14f), h * (0.74f + (i % 2) * 0.06f), 0.7f, 0.6f + 0.4f * sin(t + i), i, t, false)
+            // tufts of meadow grass
+            for (i in 0 until 14) { val gx = w * (0.03f + i * 0.07f); val gy = h * (0.76f + (i % 3) * 0.05f); c.fill(gx, gy - Px.u * 3, gx + Px.u, gy, Pal.GREEN_D); c.fill(gx + Px.u, gy - Px.u * 2, gx + Px.u * 2, gy, Pal.GREEN_D); c.fill(gx - Px.u, gy - Px.u * 2, gx, gy, Pal.GREEN_D) }
             // Hive
             val hx = w - Px.u * 14; val hy = Px.u * 4
             for (r in 0 until 5) c.fill(hx + Px.u * (if (r % 2 == 0) 1 else 0), hy + r * Px.u * 2, hx + Px.u * (if (r % 2 == 0) 9 else 10), hy + r * Px.u * 2 + Px.u * 2, if (r % 2 == 0) Pal.HONEY else Pal.ORANGE_D)
@@ -361,7 +402,6 @@ class XyPad(c: Context, private val themeId: String, private val pickAxis: (XySt
             val f = Studio.flower ?: return
             val bloom = if (Studio.auditioning) 1f else 0.35f
             c.flower(w / 2, h * 0.45f, 3.2f, bloom, f.variant, t, Studio.auditioning)
-            for (i in 0 until 5) c.flower(w * (0.1f + i * 0.2f), h * 0.8f, 0.8f, 0.3f + 0.3f * sin(t * 0.7f + i), i + f.variant, t, false)
         }
     }
 }

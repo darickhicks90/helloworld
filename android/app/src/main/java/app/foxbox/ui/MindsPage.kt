@@ -105,7 +105,7 @@ class MindsPage(c: Context) : LinearLayout(c) {
 
         override fun paint(c: Canvas) {
             val w = width.toFloat(); val h = height.toFloat()
-            c.pixelBox(0f, 0f, w, h, Pal.BROWN_D, shade = false)
+            Tv.grille(c, 0f, 0f, w, h)
             val ring = minds.hits
             while (read < ring.written) { val i = (read % ring.a.size).toInt(); flash[ring.a[i].toInt().coerceIn(0, 7)] = 1f; read++ }
             val rows = Minds.DRUMS.size
@@ -123,7 +123,7 @@ class MindsPage(c: Context) : LinearLayout(c) {
                 for (s in 0 until Minds.STEPS) {
                     val l = labelW + u * 2 + s * cw
                     val v = minds.pattern[r][s]
-                    val base = if (s / 4 % 2 == 0) Pal.BROWN else 0xFF8A5733.toInt()
+                    val base = if (s / 4 % 2 == 0) Tv.WOOD else Tv.WOOD_L
                     c.fill(l + u, t + u, l + cw - u, t + rh - u, if (v > 0f) Pal.alpha(colors[r], 0.4f + v * 0.6f) else base)
                     // The generative layer shows as a small dot, brighter the more it is mixed in.
                     if (minds.generated[r][s] > 0f && minds.generative.value > 0.01f)
@@ -131,7 +131,7 @@ class MindsPage(c: Context) : LinearLayout(c) {
                     if (s == step) c.fill(l + u, t + u, l + cw - u, t + u * 2, Pal.CREAM)
                 }
             }
-            if (!minds.enabled.on) c.fill(labelW + u * 2, 0f, w, h, Pal.alpha(Pal.BROWN_D, 0.5f))
+            if (!minds.enabled.on) c.fill(labelW + u * 2, 0f, w, h, Pal.alpha(Tv.CLOTH_D, 0.6f))
         }
 
         @SuppressLint("ClickableViewAccessibility")

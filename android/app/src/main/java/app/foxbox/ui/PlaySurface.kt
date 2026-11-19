@@ -158,7 +158,7 @@ class StrumPad(c: Context, private val chords: ChordButtons) : PixelView(c) {
     private val origNote get() = (Studio.target as? app.foxbox.engines.SampleEngine)?.rootNote ?: -1
 
     private fun paintStrings(c: Canvas, w: Float, h: Float) {
-        c.pixelBox(0f, 0f, w, h, Pal.BROWN, shade = false)
+        Tv.grille(c, 0f, 0f, w, h)
         val s = strings()
         val now = System.nanoTime() / 1e9f
         val sw = w / s.size

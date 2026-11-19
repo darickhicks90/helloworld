@@ -57,8 +57,8 @@ class HallScreen(c: Context) : PixelView(c) {
             "GET OUT OF MY HALL BEFORE I #@%& FORGET MY MANNERS!",
         )
         val DEFEAT = listOf(
-            "#@%&... FINE. FINE! YOU WIN.",
-            "AND DON'T GO THROUGH THAT CRACK. THERE'S NOTHING IN THERE. NOTHING!",
+            "#@%&... MY FIVE EYES... THEY'RE GOING DIM...",
+            "DON'T YOU DARE GO THROUGH THAT CRACK. AND DON'T TOUCH MY AXE...",
         )
         val CHEST_LINES = listOf(
             "INSIDE: GOLD, GEMS, AND A FOLDED NOTE...",
@@ -76,13 +76,10 @@ class HallScreen(c: Context) : PixelView(c) {
     private val sc = Canvas(screen)
     private val p = Paint().apply { isAntiAlias = false; isFilterBitmap = false }
     private val font = Paint().apply { isAntiAlias = false; typeface = Px.head; textSize = 8f; color = INK }
-    private val yeti: Bitmap? = runCatching { c.assets.open("images/hall_yeti.png").use { BitmapFactory.decodeStream(it) } }.getOrNull()
+    private val yeti: Bitmap? = runCatching { c.assets.open("images/hall_yeti_axe.png").use { BitmapFactory.decodeStream(it) } }.getOrNull()
     /** The creature in the title screen's detail, for the duel (facing you, a swipe, a lunge, a roar). */
-    private val duelPose: Bitmap? = runCatching { c.assets.open("images/duel_yeti.png").use { BitmapFactory.decodeStream(it) } }.getOrNull()
-    private val duelRects: List<Rect> = runCatching {
-        val a = org.json.JSONObject(c.assets.open("images/duel_yeti.json").use { String(it.readBytes()) }).getJSONArray("frames")
-        (0 until a.length()).map { i -> a.getJSONArray(i).let { r -> Rect(r.getInt(0), r.getInt(1), r.getInt(0) + r.getInt(2), r.getInt(1) + r.getInt(3)) } }
-    }.getOrDefault(emptyList())
+    private val duelPose: Bitmap? = runCatching { c.assets.open("images/duel_stance.png").use { BitmapFactory.decodeStream(it) } }.getOrNull()
+    private val duelRects: List<Rect> = duelPose?.let { listOf(Rect(0, 0, it.width, it.height)) } ?: emptyList()
     private val t0 = System.nanoTime()
     private val rnd = kotlin.random.Random(System.nanoTime())
 
@@ -198,6 +195,9 @@ class HallScreen(c: Context) : PixelView(c) {
     private var bWanderT = 0f; private var bwx = 0f; private var bwy = 0f
     private var crackOpen = false; private var shakeT = 0f
     private var chestOpen = false
+    /** When he falls he perishes (fades to ash) and leaves his axe. */
+    private var perishT = 0f; private var bossGone = false
+    private val PERISH = 2.6f
     private val dais = RectF(84f, 34f, 156f, 86f)
 
     // spells: the rune he puts on your screen, and your attempt on the XY pad
@@ -355,10 +355,10 @@ class HallScreen(c: Context) : PixelView(c) {
     }
     private fun rollLoot(herbChance: Float): Loot {
         if (rnd.nextFloat() < herbChance) return Loot.HERB
-        val pool = Loot.values().filter { it != Loot.HERB && it !in bag.owned }.ifEmpty { listOf(Loot.HERB) }
+        val pool = Loot.values().filter { it != Loot.HERB && it != Loot.FIVE_EYED_AXE && it !in bag.owned }.ifEmpty { listOf(Loot.HERB) }
         return pool[rnd.nextInt(pool.size)]
     }
-    /** B: a ground stomp that throws nearby imps back (and stuns them a moment). */
+    /** B: a ground stomp that throws nearby imps back (and stuns them a moment); with his axe it cleaves them too. */
     private fun stomp() {
         if (phase != Phase.FIGHT || stompCd > 0f) return
         stompCd = 1.2f
@@ -370,8 +370,10 @@ class HallScreen(c: Context) : PixelView(c) {
             if (d < 40f) {
                 val k = (40f - d) / 40f * 150f + 60f; val dd = d.coerceAtLeast(1f); m.kx = dx / dd * k; m.ky = dy / dd * k; m.stun = 0.6f
                 if (bag.wearing(Loot.FROST_RING)) m.para = 2.5f
+                if (bag.wearing(Loot.FIVE_EYED_AXE)) { m.hp -= 2; m.hurtT = 0.4f }
             }
         }
+        killDead()
         performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
     }
 
@@ -435,6 +437,7 @@ class HallScreen(c: Context) : PixelView(c) {
 
     private fun restart() {
         hp = maxHp; invulnT = 0f; paraT = 0f; poisonT = 0f; invertT = 0f
+        perishT = 0f; bossGone = false
         bossHp = BOSS_MAX; stage = Stage.DAIS; bx = 120f; by = 64f; bossPara = 0f; bossWeak = 0f; bossConf = 0f
         bossShotT = 3f; spellT = 6f; summonT = 4f; castRune = -1; crackOpen = false; chestOpen = false
         minions.clear(); shots.clear(); wards.clear(); drawing.clear(); arcs.clear(); bursts.clear(); orbs.clear(); stroke.clear(); drops.clear(); battle = null; bagOpen = false
@@ -534,6 +537,14 @@ class HallScreen(c: Context) : PixelView(c) {
             hy + 15 > H + 4 && hasDoor(3) -> enterRoom(rx, ry + 1, hx, 22f)
         }
 
+        if (phase == Phase.WON && perishT > 0f && !bossGone) {
+            perishT += dt
+            if (perishT >= PERISH) { bossGone = true; drops += Drop(bx, by - 6, roomId, Loot.FIVE_EYED_AXE).also { it.life = 1e9f }; msg = "HE IS GONE. HIS AXE REMAINS."; msgT = 2.4f }
+        }
+        if (phase == Phase.WON) {
+            // his axe (and anything else) can still be picked up after the fight
+            drops.firstOrNull { it.room == roomId && hypot(it.x - (hx + 8), it.y - (hy + 11)) < 12f }?.let { d -> drops.remove(d); bursts += Burst(d.x, d.y); msg = bag.add(d.item); msgT = 2.4f }
+        }
         if (phase != Phase.FIGHT || talking) return
         invulnT -= dt; paraT -= dt; invertT -= dt
         if (poisonT > 0f) { poisonT -= dt; poisonTick -= dt; if (poisonTick <= 0f) { poisonTick = 1.5f; invulnT = 0f; hurt(8) } }
@@ -909,7 +920,7 @@ class HallScreen(c: Context) : PixelView(c) {
         val bmp = yeti ?: return
         val frame: Int; var dx = 0f; var dy = 0f
         when {
-            phase == Phase.WON -> { frame = 1; dy = 2f }
+            phase == Phase.WON -> { if (bossGone) return; frame = 1; dy = 2f }
             stage == Stage.SLAM -> {
                 if (slamT < 0.9f) { frame = 3; dx = if ((time * 20).toInt() % 2 == 0) -1f else 1f }
                 else { frame = 0; if (slamT > 1.6f) dy = -sin(((slamT - 1.6f) / 0.6f).coerceIn(0f, 1f) * Math.PI.toFloat()) * 18f }
@@ -926,7 +937,21 @@ class HallScreen(c: Context) : PixelView(c) {
         }
         val x = bx - 28 + dx; val y = by - 56 + dy
         box(bx - 14, by - 2, bx + 14, by, PALE)
-        src.set(frame * 56, 0, frame * 56 + 56, 56); dst.set(x, y, x + 56, y + 56)
+        // each cell is 72×72: the 56×56 figure sits 8 in and 16 down, with room above for the axe head
+        src.set(frame * 72, 0, frame * 72 + 72, 72); dst.set(x - 8, y - 16, x + 64, y + 56)
+        if (phase == Phase.WON && perishT > 0f) {
+            // perishing: he flickers, fades and blows away as ash
+            val k = (perishT / PERISH).coerceIn(0f, 1f)
+            p.alpha = ((1f - k) * 255).toInt().coerceIn(0, 255)
+            if (!(k > 0.4f && (time * 18).toInt() % 3 == 0)) sc.drawBitmap(bmp, src, dst, p)
+            p.alpha = 255
+            for (i in 0 until 26) {
+                val sx = x + 8 + (i * 37 % 40); val rise = (k * 70f + i * 3f) % 70f
+                val col = if (i % 3 == 0) PALE else if (i % 3 == 1) MID else DARK
+                if (rnd.nextFloat() < 1f - k * 0.6f) box(sx + sin(time * 3f + i) * 3f, y + 50 - rise, sx + 2 + sin(time * 3f + i) * 3f, y + 52 - rise, col)
+            }
+            return
+        }
         sc.drawBitmap(bmp, src, dst, p)
         // what Consecrate did to him
         val hx0 = bx; val hy0 = y + 2
@@ -1013,6 +1038,14 @@ class HallScreen(c: Context) : PixelView(c) {
     private fun drawDrop(d: Drop, time: Float) {
         if (d.life < 4f && (time * 10).toInt() % 2 == 0) return
         val x = d.x; val y = d.y
+        if (d.item == Loot.FIVE_EYED_AXE) {
+            // lying on its side: haft and the double head, glinting
+            box(x - 14, y - 1, x + 10, y + 2, INK); box(x - 13, y, x + 9, y + 1, 0xFF8A5028.toInt())
+            box(x + 6, y - 7, x + 14, y + 8, INK); box(x + 7, y - 6, x + 13, y - 1, 0xFFC4CCD6.toInt()); box(x + 7, y + 2, x + 13, y + 7, 0xFFC4CCD6.toInt())
+            box(x + 9, y - 1, x + 11, y + 2, 0xFF404250.toInt())
+            if ((time * 3).toInt() % 2 == 0) box(x + 12, y - 9, x + 14, y - 7, WHITE)
+            return
+        }
         box(x - 4, y - 2, x + 4, y + 4, INK); box(x - 3, y - 1, x + 3, y + 3, if (d.item == Loot.HERB) 0xFF6FA84A.toInt() else GOLD_D)
         box(x - 2, y - 4, x + 2, y - 2, INK); box(x - 1, y - 3, x + 1, y - 2, GOLD)
         if ((time * 3).toInt() % 3 == 0) box(x + 3, y - 6, x + 5, y - 4, WHITE)
@@ -1236,7 +1269,7 @@ class HallScreen(c: Context) : PixelView(c) {
         val time = (now - t0) / 1e9f
         update(dt)
         val b = battle
-        if (b != null) b.draw(sc, time, strokeNorm())
+        if (b != null) b.draw(sc, time)
         else drawHall(time)
         if (bagOpen) drawBag(time)
         paintShell(c, time)
@@ -1311,7 +1344,7 @@ class HallScreen(c: Context) : PixelView(c) {
         c.drawBitmap(screen, src, dst, if (inverted && (invertT > 0.6f || (time * 10).toInt() % 2 == 0)) invertP else p)
         c.restore()
         screenRect.set(sl, st, sl + sw, st + sh)
-        battle?.drawHiRes(c, screenRect, time)
+        battle?.drawHiRes(c, screenRect, time, strokeNorm())
 
         exitRect.set(Px.dp(10f), Px.dp(6f), Px.dp(116f), Px.dp(36f))
         val pw = Px.dp(150f)
@@ -1557,6 +1590,7 @@ class HallScreen(c: Context) : PixelView(c) {
     /** When he's done shouting, the fight starts. */
     private fun endTalk() {
         talking = false
+        if (phase == Phase.WON && !bossGone && perishT == 0f && talkLines === DEFEAT) { perishT = 0.001f; shakeT = 0.4f }
         if (phase == Phase.INTRO) { phase = Phase.FIGHT; msg = "FIGHT!"; msgT = 1.4f; spellT = 6f; bossShotT = 2f; summonT = 1f }
     }
 

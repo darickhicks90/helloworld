@@ -24,6 +24,8 @@ enum class Loot(val label: String, val mode: Int, val about: String) {
     FEATHER_CLOAK("FEATHER CLOAK", FIELD, "BLINK: SHIELD AND SWIFTNESS"),
     IRON_SKIN("IRON SKIN", FIELD, "TAKE A FIFTH LESS DAMAGE"),
     LODESTONE("LODESTONE", FIELD, "LOOT TWICE AS LIKELY"),
+    /** His own axe, taken when he falls: worn in the hall, the stomp cleaves; in a duel, strikes bite deep. */
+    FIVE_EYED_AXE("FIVE-EYED AXE", FIELD, "STOMP CLEAVES; DUEL STRIKES +15"),
     // ---- for the duel
     EMBERBRAND("EMBERBRAND", DUEL, "STRIKES SET HIM BURNING"),
     FROSTFANG("FROSTFANG", DUEL, "STRIKES MAY FREEZE HIS TURN"),
@@ -164,7 +166,7 @@ class HallBattle(
 
     private fun strike(k: Float, twice: Boolean = false) {
         var total = 0
-        repeat(if (twice) 2 else 1) { total += (rnd.nextInt(10, 15) * k).toInt() }
+        repeat(if (twice) 2 else 1) { total += ((rnd.nextInt(10, 15) + if (worn(Loot.FIVE_EYED_AXE)) 15 else 0) * k).toInt() }
         val tags = ArrayList<String>()
         when {
             worn(Loot.EMBERBRAND) -> { burn = 3; tags += "HE'S BURNING"; effect(FX_FIRE) }
@@ -338,25 +340,26 @@ class HallBattle(
         box(c, l + 1, tt + 1, l + 1 + (w - 2) * v.coerceIn(0f, 1f), tt + 4, col)
     }
 
-    /** The little screen: the hall (dimmed), the traveller, the windows, the runes. */
-    fun draw(c: Canvas, time: Float, strokeNorm: List<FloatArray>) {
+    /** The little screen: the hall (dimmed) and the traveller. The creature, the effects and the windows go on top (drawHiRes). */
+    fun draw(c: Canvas, time: Float) {
         host.backdrop(time)
         box(c, 0f, 0f, 240f, 176f, 0x66101020)               // the hall dims around the duel
         box(c, 0f, 120f, 240f, 176f, 0x33000000)
-        // the traveller, from behind, left
         if (!(heroHurtT > 0f && (time * 20).toInt() % 2 == 0)) {
             box(c, 26f, 122f, 74f, 126f, 0x55000000)
             src.set(0, 0, heroBack.w, heroBack.h); dst.set(26f, 66f, 26f + heroBack.w * 2, 66f + heroBack.h * 2)
             c.drawBitmap(heroBack.bmp, src, dst, p)
         }
-        // status windows
+    }
+
+    /** The windows, menu and runes, in the little screen's 240×176 units (drawn scaled, over the creature). */
+    private fun drawUi(c: Canvas, time: Float, strokeNorm: List<FloatArray>) {
         window(c, 4f, 4f, 116f, 26f)
         font.color = 0xFFF8F8F8.toInt(); c.drawText("FIVE-EYED ONE", 9f, 14f, font)
         bar(c, 9f, 17f, 102f, host.bossHp / host.bossMax.toFloat(), 0xFFC040C0.toInt())
         window(c, 4f, 28f, 116f, 50f)
         c.drawText("YOU  ${host.playerHp}/${host.playerMax}", 9f, 38f, font)
         bar(c, 9f, 41f, 102f, host.playerHp / host.playerMax.toFloat(), if (host.playerHp < host.playerMax / 4) 0xFFE04848.toInt() else 0xFF48C058.toInt())
-        // the message / menu window
         window(c, 4f, 128f, 236f, 172f)
         when (st) {
             St.MENU -> {
@@ -386,6 +389,7 @@ class HallBattle(
             box(c, 104f, 112f, 136f, 124f, if (lastScore >= NEED) 0xFF48A048.toInt() else 0xFFE04848.toInt())
             c.drawText(s, 108f, 122f, font)
         }
+        font.color = 0xFFF8F8F8.toInt()
     }
 
     private fun runeBox(c: Canvas, l: Float, tt: Float, w: Float, rune: List<Pair<Float, Float>>, label: String, col: Int, stroke: List<FloatArray>, time: Float) {
@@ -401,38 +405,41 @@ class HallBattle(
         }
     }
 
-    private val hp = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    private val hp = Paint().apply { isFilterBitmap = false; isAntiAlias = false }   // crisp pixels, like the title screen
     private val fxp = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeCap = Paint.Cap.ROUND }
     private val path = Path()
-    /** Shaking the whole screen during heavy blows (applied by the caller around both passes). */
-    fun shakeOffset(): Float = if (shake > 0f) (rnd.nextFloat() - 0.5f) * (if (fx == FX_QUAKE) 10f else 5f) else 0f
 
     /**
      * The creature in the title screen's detail, and the big effects, over the little screen.
      * [r] is where the little screen is on the display; positions are in its 240×176 units.
      */
-    fun drawHiRes(c: Canvas, r: RectF, time: Float) {
+    fun drawHiRes(c: Canvas, r: RectF, time: Float, strokeNorm: List<FloatArray>) {
         val k = r.width() / 240f
         fun X(x: Float) = r.left + x * k
         fun Y(y: Float) = r.top + y * k
         c.save(); c.clipRect(r)
-        // the creature: facing you on the right (mirrored to look toward the traveller); no idle wobble
+        if (shake > 0f) c.translate((rnd.nextFloat() - 0.5f) * (if (fx == FX_QUAKE) 10f else 5f) * k, (rnd.nextFloat() - 0.5f) * 3f * k)
+        // the creature, front on to you: crouched, arms out to grab, axe raised (no idle wobble)
         val bmp = pose
         if (bmp != null && poses.isNotEmpty() && !(bossHurtT > 0f && (time * 20).toInt() % 2 == 0)) {
-            val s = poses[bossPose.coerceIn(0, poses.size - 1)]
-            val hTarget = 116f
+            val s = poses[0]
+            val big = fx in FX_CLAW..FX_QUAKE && fxT < 0.5f
+            val lunge = if (big) sin(Math.PI.toFloat() * (fxT / 0.5f)) else 0f
+            val wind = if (st == St.ATTACK) 0.03f * sin(time * 18f) else 0f
+            val hTarget = 100f * (1f + 0.12f * lunge + wind)
             val wTarget = hTarget * s.width() / s.height()
-            val cx = 180f; val baseY = 122f
-            hp.alpha = 255
-            fxp.color = 0x55000000; c.drawOval(X(cx - 34f), Y(baseY - 4f), X(cx + 34f), Y(baseY + 4f), fxp)
-            c.save()
-            c.scale(-1f, 1f, X(cx), 0f)
+            val cx = 166f - 40f * lunge; val baseY = 124f + 4f * lunge
+            fxp.style = Paint.Style.FILL
+            fxp.color = 0x55000000; c.drawOval(X(cx - 40f), Y(baseY - 4f), X(cx + 40f), Y(baseY + 4f), fxp)
             dst.set(X(cx - wTarget / 2), Y(baseY - hTarget), X(cx + wTarget / 2), Y(baseY))
             c.drawBitmap(bmp, s, dst, hp)
-            c.restore()
-            if (bossHurtT > 0f) { fxp.color = 0x55FFFFFF; c.drawRect(X(cx - wTarget / 2), Y(baseY - hTarget), X(cx + wTarget / 2), Y(baseY), fxp) }
+            if (bossHurtT > 0f) { fxp.color = 0x55FFFFFF; c.drawRect(dst, fxp) }
         }
         drawFx(c, ::X, ::Y, k, time)
+        // the windows and runes, over everything
+        c.save(); c.translate(r.left, r.top); c.scale(k, k)
+        drawUi(c, time, strokeNorm)
+        c.restore()
         c.restore()
     }
 

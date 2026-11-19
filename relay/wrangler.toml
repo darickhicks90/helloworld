@@ -1,0 +1,14 @@
+# The 5IY jam relay: one-time codes, pairing two phones, and passing the leader's broadcast along.
+# Deploy with `npx wrangler deploy` (see README.md).
+name = "5iy-jam"
+main = "src/index.js"
+compatibility_date = "2025-06-01"
+
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "Room"
+
+# SQLite-backed Durable Objects run on the free plan.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room"]

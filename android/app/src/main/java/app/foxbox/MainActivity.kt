@@ -71,6 +71,7 @@ class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost {
         Studio.init(this)
         app.foxbox.notes.Notes.init(this)
         app.foxbox.radio.Radio.init(this)
+        app.foxbox.jam.Jam.init(this)
         Studio.onMessage = { Toast.makeText(this, it, Toast.LENGTH_SHORT).show() }
         Studio.needMic = { then -> withMic(then) }
         midi = MidiInput(this, Studio)
@@ -325,8 +326,8 @@ class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost {
         d.show()
     }
 
-    override fun mainMenu() = choose("Menu", listOf("File…", "Audio settings…", "MIDI…")) { i ->
-        when (i) { 0 -> fileMenu(); 1 -> audioSettings(); 2 -> midiMenu() }
+    override fun mainMenu() = choose("Menu", listOf("File…", "Audio settings…", "MIDI…", "Jam over the internet…")) { i ->
+        when (i) { 0 -> fileMenu(); 1 -> audioSettings(); 2 -> midiMenu(); 3 -> app.foxbox.jam.JamPanel.show(this) }
     }
 
     override fun chooseXyTarget(xy: XyState, isX: Boolean) {

@@ -73,4 +73,6 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:1.4.1")
     implementation("androidx.media3:media3-exoplayer-hls:1.4.1")
     implementation("androidx.annotation:annotation-experimental:1.4.1")
+    // Jamming over the internet: the WebSocket to the relay.
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 }

@@ -91,6 +91,8 @@ object Audio {
     /** Each audio track's dynamics and effects, and the master's. */
     val stripFx = Array(3) { StripFx(false) }
     val masterFx = StripFx(true)
+    /** Set while leading a jam: the finished mix is copied here for the broadcast. */
+    @Volatile var jamRing: app.foxbox.jam.JamRing? = null
     val liveInput = IntArray(3)
     private val inL = FloatArray(BLOCK); private val inR = FloatArray(BLOCK)
     private val liveL = FloatArray(BLOCK); private val liveR = FloatArray(BLOCK)
@@ -157,6 +159,8 @@ object Audio {
         transport.renderClick(mixL, mixR, n)
         if (testTone) for (i in 0 until n) { val v = kotlin.math.sin(TAU * tonePh) * 0.12f; tonePh = (tonePh + 440f / SRF) % 1f; mixL[i] += v; mixR[i] += v }
         limiter.process(mixL, mixR, n, masterVolume)
+        // a jam over the internet: the leader's mix goes out from here
+        jamRing?.write(mixL, mixR, n)
         var pk = peak * 0.97f
         for (i in 0 until n) pk = max(pk, abs(mixL[i]))
         peak = pk

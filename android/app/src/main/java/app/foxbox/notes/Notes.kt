@@ -123,7 +123,8 @@ object Notes {
     fun saveSketch(id: String, data: JSONObject, picture: Bitmap) {
         runCatching { File(dir, "sketch_$id.json").writeText(data.toString()) }
         runCatching { File(dir, "sketch_$id.png").outputStream().use { picture.compress(Bitmap.CompressFormat.PNG, 100, it) } }
-        thumbs.remove(id)
+        // the page shows the new picture straight away
+        thumbs[id] = picture
     }
     fun sketchPng(id: String): ByteArray? = runCatching { File(dir, "sketch_$id.png").readBytes() }.getOrNull()
     fun deleteSketchFiles(id: String) { File(dir, "sketch_$id.json").delete(); File(dir, "sketch_$id.png").delete(); thumbs.remove(id) }

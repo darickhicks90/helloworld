@@ -212,9 +212,13 @@ class MainActivity : Activity(), Host {
         val v = app.foxbox.notes.SketchEditor(this, s) {
             sketchView?.let { content.removeView(it) }
             sketchView = null
+            // back on the page (upright again), showing what was just drawn
+            if (notebook != null) requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
             notebook?.refresh()
         }
         sketchView = v
+        // the drawing board turns with the phone, whichever way suits the picture
+        requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_FULL_USER
         addContentView(v, android.widget.FrameLayout.LayoutParams(-1, -1))
     }
 

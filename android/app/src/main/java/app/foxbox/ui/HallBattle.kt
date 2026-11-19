@@ -430,9 +430,9 @@ class HallBattle(
             val big = fx in FX_CLAW..FX_QUAKE && fxT < 0.5f
             val lunge = if (big) sin(Math.PI.toFloat() * (fxT / 0.5f)) else 0f
             val wind = if (st == St.ATTACK) 0.03f * sin(time * 18f) else 0f
-            val hTarget = 100f * (1f + 0.12f * lunge + wind)
+            val hTarget = 116f * (1f + 0.12f * lunge + wind)
             val wTarget = hTarget * s.width() / s.height()
-            val cx = 166f - 40f * lunge; val baseY = 124f + 4f * lunge
+            val cx = 170f - 40f * lunge; val baseY = 126f + 4f * lunge
             fxp.style = Paint.Style.FILL
             fxp.color = 0x55000000; c.drawOval(X(cx - 40f), Y(baseY - 4f), X(cx + 40f), Y(baseY + 4f), fxp)
             dst.set(X(cx - wTarget / 2), Y(baseY - hTarget), X(cx + wTarget / 2), Y(baseY))

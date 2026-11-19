@@ -122,10 +122,13 @@ object Audio {
             val dr = if (c >= 0 && chains[c] != null) chR[c] else mixR
             val pn = e.livePan
             val pl = v * minOf(1f, 1f - pn); val pr = v * minOf(1f, 1f + pn)
+            var pk = e.meter * 0.985f
             for (i in 0 until n) {
                 dl[i] += eL[i] * pl; dr[i] += eR[i] * pr
                 revL[i] += eL[i] * s; revR[i] += eR[i] * s
+                pk = max(pk, max(abs(eL[i] * pl), abs(eR[i] * pr)))
             }
+            e.meter = pk
         }
         // Audio channels: their takes, plus live input on monitored tracks (clock running or not),
         // through each track's dynamics and effects strip, then its fader.

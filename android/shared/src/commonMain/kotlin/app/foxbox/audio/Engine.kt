@@ -20,6 +20,8 @@ abstract class Engine(val id: String, val title: String) {
     @Volatile var noteCount = 0
     @Volatile var lastNote = 60
     @Volatile var activeVoices = 0
+    /** Peak output level after the block's volume, falling back slowly (for the studio's VU meter). */
+    @Volatile var meter = 0f
     /** Pan from the clips playing on this block (-1..1), set by the transport each block. */
     @Volatile var livePan = 0f
     var panSum = 0f; var panCount = 0

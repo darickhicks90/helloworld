@@ -47,6 +47,8 @@ class InstrumentPage(c: Context, id: String, host: Host) : LinearLayout(c) {
         val accent = Pal.accent(id)
         chords.chords.accent = accent
         addView(SquareBox(c, XyPad(c, id) { xy, isX -> host.chooseXyTarget(xy, isX) }), lp(WRAP, MATCH))
+        // the block's level, on an old radio's edgewise meter
+        addView(VuMeter(c, id), lp(Px.dp(44), MATCH).apply { leftMargin = Px.dp(4) })
         val col = LinearLayout(c).apply { orientation = VERTICAL }
         col.addView(chords, lp(MATCH, 0, 1f))
         if (seq != null) {
@@ -173,7 +175,8 @@ class PickupPage(c: Context, private val host: Host) : LinearLayout(c) {
         orientation = HORIZONTAL
         setPadding(Px.dp(4), Px.dp(4), Px.dp(4), Px.dp(4))
         addView(SquareBox(c, XyPad(c, "pickup") { xy, isX -> host.chooseXyTarget(xy, isX) }), lp(WRAP, MATCH))
-        addView(SquareBox(c, pads), lp(WRAP, MATCH).apply { leftMargin = Px.dp(6) })
+        addView(VuMeter(c, "pickup"), lp(Px.dp(44), MATCH).apply { leftMargin = Px.dp(4) })
+        addView(SquareBox(c, pads), lp(WRAP, MATCH).apply { leftMargin = Px.dp(4) })
         val col = LinearLayout(c).apply { orientation = VERTICAL }
         soundTab.onClick = { showMode(0) }; patternTab.onClick = { showMode(1) }
         // Like Minds: one switch that stops or starts the whole pad sequencer.

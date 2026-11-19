@@ -11,19 +11,22 @@ import android.graphics.Typeface
 class PageGeo(val paper: RectF) {
     val pw get() = paper.width()
     val ph get() = paper.height()
-    val firstRule get() = paper.top + ph * 0.075f
-    val lineH get() = (ph * 0.905f - ph * 0.075f) / Notes.LINES
+    val firstRule get() = paper.top + ph * 0.06f
+    val lineH get() = (ph * 0.93f - ph * 0.06f) / Notes.LINES
     val marginX get() = paper.left + pw * 0.11f
     val textL get() = paper.left + pw * 0.135f
     val textR get() = paper.right - pw * 0.045f
     val textW get() = textR - textL
-    val toolTop get() = paper.top + ph * 0.905f
+    val toolTop get() = paper.top + ph * 0.93f
     fun lineTop(i: Int) = firstRule + i * lineH
-    fun baseline(i: Int) = lineTop(i) + lineH * 0.8f
+    fun baseline(i: Int) = lineTop(i + 1) - lineH * 0.2f
     fun lineAt(y: Float): Int = ((y - firstRule) / lineH).toInt().coerceIn(0, Notes.LINES - 1)
     fun sketchRect(s: Notes.Sketch, out: RectF = RectF()): RectF {
-        val l = textL + s.x * textW
-        return out.apply { set(l, lineTop(s.line) + lineH * 0.12f, l + s.w * textW, lineTop(s.line + s.lines) - lineH * 0.12f) }
+        // the window keeps its shape (4:3 or square) from its height in lines, whatever the screen
+        val t = lineTop(s.line) + lineH * 0.12f; val b = lineTop(s.line + s.lines) - lineH * 0.12f
+        val w = minOf((b - t) / (if (s.square) 1f else 0.75f), textW)
+        val l = (textL + s.x * textW).coerceAtMost(textR - w)
+        return out.apply { set(l, t, l + w, b) }
     }
 }
 
@@ -43,7 +46,8 @@ class PageArt(c: Context) {
         const val MARK = 0x66F4D35E
     }
 
-    fun sizeText(g: PageGeo) { text.textSize = g.lineH * 0.8f }
+    /** The type is sized to the line's width (about eight words a line), never taller than the line allows. */
+    fun sizeText(g: PageGeo) { text.textSize = minOf(g.textW * 0.062f, g.lineH * 0.78f) }
 
     /** Width of the first [n] characters of a line as typeset. */
     fun width(s: String, n: Int = s.length) = if (n <= 0) 0f else text.measureText(s, 0, n.coerceAtMost(s.length))

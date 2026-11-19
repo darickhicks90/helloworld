@@ -82,11 +82,13 @@ class NotebookView(private val a: Activity, private val close: () -> Unit, priva
     override fun onDetachedFromWindow() { Handwriting.onReady = null; removeCallbacks(recognize); super.onDetachedFromWindow() }
 
     override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) {
-        val m = Px.dp(10f)
-        var ph = h - m * 2; var pw = ph * Notes.ASPECT
-        if (pw > w - m * 2) { pw = w - m * 2; ph = pw / Notes.ASPECT }
+        // close up: the pad fills the upright screen, with just an edge of the desk around it
+        val m = maxOf(Px.dp(6f), minOf(w, h) * 0.025f)
+        var pw = w - m * 2; var ph = h - m * 2
+        if (pw / ph > 0.78f) pw = ph * 0.78f          // never wider than a memo pad (on a sideways screen)
+        if (pw / ph < 0.42f) ph = pw / 0.42f
         pad.set((w - pw) / 2, (h - ph) / 2, (w + pw) / 2, (h + ph) / 2)
-        header.set(pad.left, pad.top, pad.right, pad.top + ph * 0.07f)
+        header.set(pad.left, pad.top, pad.right, pad.top + minOf(ph * 0.06f, pw * 0.13f))
         g = PageGeo(RectF(pad.left, header.bottom, pad.right, pad.bottom))
         val hh = header.height()
         bookBtn.set(pad.left, pad.top, pad.left + pw * 0.4f, header.bottom)

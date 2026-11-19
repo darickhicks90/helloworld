@@ -14,10 +14,13 @@ import java.util.UUID
  * strokes) plus a PNG of the finished picture.
  */
 object Notes {
-    /** Ruled lines on a page. The page's shape is fixed, so a line holds the same amount everywhere. */
-    const val LINES = 18
-    /** Width ÷ height of a memo page (a pocket pad). */
-    const val ASPECT = 0.66f
+    /**
+     * Ruled lines on a page: tall enough to write several words across with a finger. The type
+     * is sized to the page's width, so a line holds the same words on every screen shape.
+     */
+    const val LINES = 14
+    /** Width ÷ height of a page in the PDF export (on screen the pad fills the upright phone). */
+    const val ASPECT = 0.6f
     /** Cover colours, in order for new books: oxblood, navy, forest, mustard, black. */
     val COVERS = intArrayOf(0xFF7A2630.toInt(), 0xFF27355E.toInt(), 0xFF2E5240.toInt(), 0xFFB8862C.toInt(), 0xFF26242A.toInt())
 
@@ -41,6 +44,20 @@ object Notes {
                 val sk = o.optJSONArray("sketches")?.let { a -> (0 until a.length()).map { Sketch.from(a.getJSONObject(it)) }.toMutableList() } ?: ArrayList()
                 return Page(o.getString("id"), ls, sk)
             }
+            /** A page saved with more lines than a page has now becomes several pages. */
+            fun split(o: JSONObject): List<Page> {
+                val arr = o.optJSONArray("lines") ?: JSONArray()
+                if (arr.length() <= LINES) return listOf(from(o))
+                val sk = o.optJSONArray("sketches")?.let { a -> (0 until a.length()).map { Sketch.from(a.getJSONObject(it)) } } ?: emptyList()
+                return (0 until (arr.length() + LINES - 1) / LINES).map { c ->
+                    val ls = Array(LINES) { i -> arr.optString(c * LINES + i, "") }
+                    val mine = sk.filter { it.line / LINES == c }.mapNotNull { s ->
+                        val line = s.line - c * LINES; val n = minOf(s.lines, LINES - line)
+                        if (n < 3) null else Sketch(s.id, line, s.x, s.w, n, s.square)
+                    }.toMutableList()
+                    Page(if (c == 0) o.getString("id") else newId(), ls, mine)
+                }
+            }
         }
     }
 
@@ -50,7 +67,9 @@ object Notes {
             .put("pages", JSONArray(pages.map { it.toJson() })).put("bookmarks", JSONArray(bookmarks))
         companion object {
             fun from(o: JSONObject): Book {
-                val ps = o.getJSONArray("pages").let { a -> (0 until a.length()).map { Page.from(a.getJSONObject(it)) }.toMutableList() }
+                val ps = ArrayList<Page>()
+                val arr = o.getJSONArray("pages")
+                for (k in 0 until arr.length()) ps += split(arr.getJSONObject(k))
                 if (ps.isEmpty()) ps += Page()
                 val bm = o.optJSONArray("bookmarks")?.let { a -> (0 until a.length()).map { a.getString(it) }.toMutableList() } ?: ArrayList()
                 return Book(o.getString("id"), o.optString("name", "Memo"), o.optInt("cover", COVERS[0]), ps, bm, o.optInt("current", 0))

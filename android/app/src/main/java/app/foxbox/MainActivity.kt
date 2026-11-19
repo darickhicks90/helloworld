@@ -172,12 +172,25 @@ class MainActivity : Activity(), Host {
     // ------------------------------------------------------------------ the notebook (every screen but the game)
 
     private var notebook: app.foxbox.notes.NotebookView? = null
+    private var hiddenViews: List<View> = emptyList()
+    private var restorePending = false
+    private fun restoreViews() {
+        if (!restorePending) return
+        restorePending = false
+        hiddenViews.forEach { it.visibility = View.VISIBLE }
+        hiddenViews = emptyList()
+    }
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (restorePending && newConfig.orientation != android.content.res.Configuration.ORIENTATION_PORTRAIT) restoreViews()
+    }
+    private var orientationBefore = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     private var sketchView: app.foxbox.notes.SketchEditor? = null
     private val content get() = findViewById<android.widget.FrameLayout>(android.R.id.content)
 
     /** The notebook's tab floats over the screen just shown (setContentView takes everything else away). */
     private fun addNoteTab() {
-        notebook = null; sketchView = null
+        notebook = null; sketchView = null; hiddenViews = emptyList(); restorePending = false
         addContentView(app.foxbox.notes.NoteTab(this) { openNotebook() }, android.widget.FrameLayout.LayoutParams(Px.dp(46), Px.dp(52)))
     }
 
@@ -185,6 +198,12 @@ class MainActivity : Activity(), Host {
         if (notebook != null) return
         val nb = app.foxbox.notes.NotebookView(this, { closeNotebook() }) { s -> openSketch(s) }
         notebook = nb
+        // the screen underneath steps aside (so it isn't laid out upright while the notebook is open)
+        hiddenViews = (0 until content.childCount).map { content.getChildAt(it) }.filter { it.visibility == View.VISIBLE }
+        hiddenViews.forEach { it.visibility = View.GONE }
+        // held upright, like a memo pad in the hand
+        orientationBefore = requestedOrientation
+        requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
         addContentView(nb, android.widget.FrameLayout.LayoutParams(-1, -1))
     }
 
@@ -206,6 +225,10 @@ class MainActivity : Activity(), Host {
         (getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).hideSoftInputFromWindow(nb.windowToken, 0)
         content.removeView(nb)
         notebook = null
+        requestedOrientation = orientationBefore
+        // bring the screen back once the phone has turned back (or straight away if it won't turn)
+        restorePending = true
+        main.postDelayed({ restoreViews() }, 800)
         app.foxbox.notes.Notes.save()
         immersive()
         return true

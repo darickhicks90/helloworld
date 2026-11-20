@@ -10,37 +10,58 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 /**
- * Loot is rare. Each find is either for moving about the hall (FIELD, three can be worn) or for
- * the duel (DUEL, three can be worn), plus herbs to eat.
+ * Loot is rare, and comes in tiers: common, rare, epic, legendary and exotic (exotics change how one
+ * of your own abilities works). Each find is either for moving about the hall (FIELD, three can be
+ * worn) or for the duel (DUEL, three can be worn); herbs heal and spirit blooms revive a companion.
  */
 /** Where a piece of loot is worn (top level: an enum's entries can't use its own companion). */
 private const val LOOT_FIELD = 0
 private const val LOOT_DUEL = 1
+private const val LOOT_EAT = 2
 
-enum class Loot(val label: String, val mode: Int, val about: String) {
+/** How rare a find is: its name, the colour it's shown in, and how often it turns up. */
+enum class Rarity(val label: String, val color: Int, val weight: Float) {
+    COMMON("COMMON", 0xFF8A8A9A.toInt(), 55f),
+    RARE("RARE", 0xFF3C7CE0.toInt(), 30f),
+    EPIC("EPIC", 0xFF9A44D0.toInt(), 11f),
+    LEGENDARY("LEGENDARY", 0xFFE8A020.toInt(), 3f),
+    EXOTIC("EXOTIC", 0xFF20C0B0.toInt(), 1.2f),
+}
+
+enum class Loot(val label: String, val mode: Int, val about: String, val rarity: Rarity, val dropped: Boolean = true) {
     // ---- for the hall
-    WIND_BOOTS("WIND BOOTS", LOOT_FIELD, "SPRINT RECHARGES TWICE AS FAST"),
-    EMBER_RING("EMBER RING", LOOT_FIELD, "SPARK BURNS: MORE DAMAGE, REACH"),
-    FROST_RING("FROST RING", LOOT_FIELD, "STOMP FREEZES IMPS"),
-    STORM_RING("STORM RING", LOOT_FIELD, "SPARK CHAINS TO FIVE"),
-    WARD_STONE("WARD STONE", LOOT_FIELD, "CONSECRATE LASTS LONGER"),
-    LANTERN("LANTERN", LOOT_FIELD, "MORE BALLS OF LIGHT"),
-    FEATHER_CLOAK("FEATHER CLOAK", LOOT_FIELD, "BLINK: SHIELD AND SWIFTNESS"),
-    IRON_SKIN("IRON SKIN", LOOT_FIELD, "TAKE A FIFTH LESS DAMAGE"),
-    LODESTONE("LODESTONE", LOOT_FIELD, "LOOT TWICE AS LIKELY"),
+    WIND_BOOTS("WIND BOOTS", LOOT_FIELD, "SPRINT RECHARGES TWICE AS FAST", Rarity.COMMON),
+    EMBER_RING("EMBER RING", LOOT_FIELD, "SPARK BURNS: MORE DAMAGE, REACH", Rarity.RARE),
+    FROST_RING("FROST RING", LOOT_FIELD, "STOMP FREEZES; SHATTERS FROZEN", Rarity.LEGENDARY),
+    STORM_RING("STORM RING", LOOT_FIELD, "SPARK CHAINS TO FIVE", Rarity.EPIC),
+    WARD_STONE("WARD STONE", LOOT_FIELD, "CONSECRATE LASTS LONGER", Rarity.COMMON),
+    LANTERN("LANTERN", LOOT_FIELD, "MORE BALLS OF LIGHT", Rarity.COMMON),
+    FEATHER_CLOAK("FEATHER CLOAK", LOOT_FIELD, "BLINK: SHIELD AND SWIFTNESS", Rarity.RARE),
+    IRON_SKIN("IRON SKIN", LOOT_FIELD, "TAKE A FIFTH LESS DAMAGE", Rarity.RARE),
+    LODESTONE("LODESTONE", LOOT_FIELD, "LOOT TWICE AS LIKELY", Rarity.EPIC),
     /** His own axe, taken when he falls: worn in the hall, the stomp cleaves; in a duel, strikes bite deep. */
-    FIVE_EYED_AXE("FIVE-EYED AXE", LOOT_FIELD, "STOMP CLEAVES; DUEL STRIKES +15"),
+    FIVE_EYED_AXE("FIVE-EYED AXE", LOOT_FIELD, "STOMP CLEAVES; DUEL STRIKES +15", Rarity.LEGENDARY, dropped = false),
+    /** In the treasure chest: two legendary charms for the Vital Spark. */
+    STARHEART("STARHEART", LOOT_FIELD, "SPARK CHAINS TO 6; NOVAS BURST", Rarity.LEGENDARY, dropped = false),
+    THUNDER_CROWN("THUNDER CROWN", LOOT_FIELD, "EVERY 4TH SPARK: SKY LIGHTNING", Rarity.LEGENDARY, dropped = false),
+    GLEANERS_LAMP("GLEANER'S LAMP", LOOT_FIELD, "YOUR FIREFLY FETCHES LOOT", Rarity.LEGENDARY),
+    // ---- exotics: each trades one of your abilities for something stranger
+    RUNECASTER("RUNECASTER", LOOT_FIELD, "BLINK BECOMES 3 RUNE SPELLS", Rarity.EXOTIC),
+    FLAMEDANCER("FLAMEDANCER", LOOT_FIELD, "SPRINT: LONG, BURNING FIREWALL", Rarity.EXOTIC),
     // ---- for the duel
-    EMBERBRAND("EMBERBRAND", LOOT_DUEL, "STRIKES SET HIM BURNING"),
-    FROSTFANG("FROSTFANG", LOOT_DUEL, "STRIKES MAY FREEZE HIS TURN"),
-    STORMCALLER("STORMCALLER", LOOT_DUEL, "THUNDER: A HUGE BOLT, ONCE"),
-    VENOM_THORN("VENOM THORN", LOOT_DUEL, "PARRIES POISON HIM"),
-    AEGIS_SHARD("AEGIS SHARD", LOOT_DUEL, "SOFTEN MORE; BLOCKS HEAL"),
-    MIRROR_CHARM("MIRROR CHARM", LOOT_DUEL, "PARRIES RETURN THE BLOW"),
-    SUN_LOCKET("SUN LOCKET", LOOT_DUEL, "HEAL A LITTLE EACH TURN"),
-    RUNE_LENS("RUNE LENS", LOOT_DUEL, "MORE TIME TO TRACE"),
-    ECHO_BELL("ECHO BELL", LOOT_DUEL, "ECHO: STRIKE TWICE"),
-    HERB("HERB", 2, "HEALS 35");
+    EMBERBRAND("EMBERBRAND", LOOT_DUEL, "STRIKES SET HIM BURNING", Rarity.RARE),
+    FROSTFANG("FROSTFANG", LOOT_DUEL, "STRIKES MAY FREEZE HIS TURN", Rarity.RARE),
+    STORMCALLER("STORMCALLER", LOOT_DUEL, "THUNDER: A HUGE BOLT, ONCE", Rarity.EPIC),
+    VENOM_THORN("VENOM THORN", LOOT_DUEL, "PARRIES POISON HIM", Rarity.COMMON),
+    AEGIS_SHARD("AEGIS SHARD", LOOT_DUEL, "SOFTEN MORE; BLOCKS HEAL", Rarity.RARE),
+    MIRROR_CHARM("MIRROR CHARM", LOOT_DUEL, "PARRIES RETURN THE BLOW", Rarity.EPIC),
+    SUN_LOCKET("SUN LOCKET", LOOT_DUEL, "HEAL A LITTLE EACH TURN", Rarity.COMMON),
+    RUNE_LENS("RUNE LENS", LOOT_DUEL, "MORE TIME TO TRACE", Rarity.COMMON),
+    ECHO_BELL("ECHO BELL", LOOT_DUEL, "ECHO: STRIKE TWICE", Rarity.EPIC),
+    HERB("HERB", LOOT_EAT, "HEALS 35", Rarity.COMMON, dropped = false),
+    /** Brings a fallen companion back where it lies. */
+    BLOOM("SPIRIT BLOOM", LOOT_EAT, "REVIVES YOUR COMPANION", Rarity.RARE, dropped = false);
+    val consumable get() = mode == LOOT_EAT
     companion object {
         const val FIELD = LOOT_FIELD; const val DUEL = LOOT_DUEL
         val fieldLoot get() = values().filter { it.mode == FIELD }
@@ -52,17 +73,20 @@ class Bag {
     val owned = ArrayList<Loot>()
     val worn = LinkedHashSet<Loot>()
     var herbs = 0
+    var blooms = 0
     val CAPACITY = 24
     fun wearing(l: Loot) = l in worn
     fun wornCount(mode: Int) = worn.count { it.mode == mode }
     /** Adds a find; it's worn straight away if there's a free slot. Returns what to say. */
     fun add(l: Loot): String {
         if (l == Loot.HERB) { herbs = minOf(herbs + 1, 9); return "FOUND A HERB" }
+        if (l == Loot.BLOOM) { blooms = minOf(blooms + 1, 5); return "A SPIRIT BLOOM! (REVIVES)" }
         if (l in owned) { herbs = minOf(herbs + 1, 9); return "A SPARE ${l.label}: TRADED FOR A HERB" }
         if (owned.size >= CAPACITY) return "YOUR BAG IS FULL"
         owned += l
-        if (wornCount(l.mode) < 3) { worn += l; return "${l.label}! WORN: ${l.about}" }
-        return "${l.label}! (BAG TO WEAR)"
+        val tier = if (l.rarity.ordinal >= Rarity.LEGENDARY.ordinal) l.rarity.label + "! " else ""
+        if (wornCount(l.mode) < 3) { worn += l; return "$tier${l.label}! WORN: ${l.about}" }
+        return "$tier${l.label}! (START TO WEAR)"
     }
     /** Wear or take off; false if that kind's three slots are full. */
     fun toggle(l: Loot): Boolean {
@@ -70,7 +94,7 @@ class Bag {
         if (wornCount(l.mode) >= 3) return false
         worn += l; return true
     }
-    fun clear() { owned.clear(); worn.clear(); herbs = 0 }
+    fun clear() { owned.clear(); worn.clear(); herbs = 0; blooms = 0 }
 }
 
 /** Rune shapes, as points on a unit square (closed ones end where they start). */

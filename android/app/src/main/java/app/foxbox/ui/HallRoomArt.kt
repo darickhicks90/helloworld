@@ -1,0 +1,453 @@
+package app.foxbox.ui
+
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.RectF
+import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.sin
+
+/**
+ * The great hall's scenery in finer detail, baked once per room into a bitmap (and re-baked when
+ * the room changes, e.g. the wall cracks): bevelled marble tiles with veins, chips and cracks;
+ * brick walls with a moulded cornice; soft shadows along the walls and under everything standing;
+ * stone-rimmed pools; carpets, rugs, banners, paintings, bookcases, ivy, alcoves with skulls,
+ * cobwebs, coins and gems. Then, every frame, the living bits: torch flames and their glow, dust
+ * drifting in the window light, ripples and glints on the water; and a soft vignette round it all.
+ */
+internal class HallRoomArt {
+    class Spec(
+        val id: Int, val kind: Int, val doors: BooleanArray, val throne: Boolean,
+        val props: List<Pair<Int, RectF>>, val pools: List<RectF>, val crack: Int, val dais: RectF,
+    )
+
+    private companion object {
+        const val W = 240; const val H = 176
+        const val WHITE = 0xFFF8F8F8.toInt(); const val PALE = 0xFFE0E0E8.toInt(); const val MID = 0xFFB8B8C8.toInt(); const val DARK = 0xFF707088.toInt(); const val INK = 0xFF181820.toInt()
+        const val WATER = 0xFFC4DCF0.toInt(); const val WATER_D = 0xFF8CA8C8.toInt()
+        const val LEAF = 0xFFBCD8AC.toInt(); const val LEAF_D = 0xFF7C9C74.toInt()
+        const val GOLD = 0xFFF0CC50.toInt(); const val GOLD_D = 0xFFA88420.toInt()
+        const val RUNE = 0xFF6048B0.toInt()
+        // prop kinds (as in HallScreen)
+        const val PILLAR = 0; const val ROCK = 1; const val SHRUB = 2; const val STATUE = 3; const val FOUNTAIN = 4
+        const val TABLE = 5; const val BRAZIER = 6; const val TOMB = 7; const val CHEST = 8
+    }
+
+    private val p = Paint().apply { isAntiAlias = false; isFilterBitmap = false }
+    private var c: Canvas = Canvas()
+    private var baked: Bitmap? = null
+    private var bakedKey = -1
+    private var spec: Spec? = null
+
+    private fun box(l: Float, t: Float, r: Float, b: Float, col: Int) { p.color = col; c.drawRect(l, t, r, b, p) }
+    private fun box(l: Int, t: Int, r: Int, b: Int, col: Int) = box(l.toFloat(), t.toFloat(), r.toFloat(), b.toFloat(), col)
+    private fun px(x: Int, y: Int, col: Int) = box(x, y, x + 1, y + 1, col)
+    /** A small deterministic hash, so the same tile always gets the same chip. */
+    private fun h(a: Int, b: Int, k: Int): Int { var x = a * 73856093 xor b * 19349663 xor k * 83492791; x = x xor (x ushr 13); x *= 0x5bd1e995; x = x xor (x ushr 15); return x and 0x7FFFFFFF }
+
+    /** The room's still scenery, baked for this state. */
+    fun background(key: Int, make: () -> Spec): Bitmap {
+        val b = baked ?: Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888).also { baked = it }
+        if (key != bakedKey) { bakedKey = key; val s = make(); spec = s; c = Canvas(b); b.eraseColor(0); bake(s) }
+        return b
+    }
+
+    // =====================================================================================
+    private fun bake(s: Spec) {
+        val crypt = s.kind == 5
+        floor(s, crypt)
+        when (s.kind) { 0 -> carpet(104, 86, 136, H, 0xFF9A2434.toInt(), 0xFF6E1626.toInt()); 4 -> carpet(104, 31, 136, H - 3, 0xFF2E4A8C.toInt(), 0xFF1E3366.toInt()); 3 -> rug(104, 128, 158, 166) }
+        if (s.kind == 6) treasureFloor(s)
+        if (crypt) bones(s)
+        wall(s, crypt)
+        sides(s, crypt)
+        ambient(s)
+        for (w in s.pools) pool(w, s.kind)
+        for ((k, f) in s.props) shadow(k, f)
+        decor(s, crypt)
+    }
+
+    private fun floor(s: Spec, crypt: Boolean) {
+        val a = if (crypt) 0xFFDCDCE4.toInt() else 0xFFF6F6FA.toInt()
+        val b = if (crypt) 0xFFD2D2DC.toInt() else 0xFFEEEEF4.toInt()
+        val hi = if (crypt) 0xFFE8E8EE.toInt() else 0xFFFFFFFF.toInt()
+        val lo = if (crypt) 0xFFC6C6D2.toInt() else 0xFFE2E2EA.toInt()
+        val grout = if (crypt) MID else 0xFFD4D4DE.toInt()
+        val vein = if (crypt) 0xFFBCBCCA.toInt() else 0xFFDADAE6.toInt()
+        box(0, 31, W, H, a)
+        for (ty in 0 until (H - 31) / 16 + 1) for (tx in 0 until W / 16) {
+            val x0 = tx * 16; val y0 = 31 + ty * 16; val v = h(tx, ty, s.id)
+            box(x0, y0, x0 + 16, y0 + 16, if (v % 5 == 0) b else a)
+            box(x0 + 1, y0 + 1, x0 + 16, y0 + 2, hi); box(x0 + 1, y0 + 1, x0 + 2, y0 + 16, hi)
+            box(x0 + 1, y0 + 15, x0 + 16, y0 + 16, lo); box(x0 + 15, y0 + 1, x0 + 16, y0 + 16, lo)
+            box(x0, y0, x0 + 16, y0 + 1, grout); box(x0, y0, x0 + 1, y0 + 16, grout)
+            px(x0, y0, if (crypt) DARK else MID)
+            // marble veins wandering across some tiles
+            if ((v / 7) % 3 == 0) {
+                var x = x0 + 3 + v % 9; var y = y0 + 3 + (v / 11) % 9
+                for (k in 0 until 9) { px(x, y, vein); x += if ((v shr k) and 1 == 0) 1 else 0; y += if ((v shr (k + 3)) and 1 == 0) 1 else -1; x = x.coerceIn(x0 + 2, x0 + 14); y = y.coerceIn(y0 + 2, y0 + 14); x++ ; if (x > x0 + 14) break }
+            }
+            // hairline cracks and chipped corners
+            if ((v / 13) % (if (crypt) 5 else 13) == 0) {
+                var x = x0 + 4 + v % 6; var y = y0 + 4 + (v / 5) % 6
+                for (k in 0 until 6) { px(x, y, if (crypt) DARK else MID); if (k % 2 == 0) x++ else y++ }
+            }
+            if ((v / 17) % 11 == 0) { px(x0 + 1, y0 + 1, grout); px(x0 + 2, y0 + 1, grout); px(x0 + 1, y0 + 2, grout) }
+            // moss creeping along the crypt's grout
+            if (crypt && v % 4 == 0) { val my = y0 + 2 + v % 12; px(x0, my, LEAF_D); px(x0 + 1, my + 1, LEAF_D); px(x0, my + 2, LEAF) }
+        }
+    }
+
+    /** A runner carpet with a gold border and a diamond pattern. */
+    private fun carpet(l: Int, t: Int, r: Int, b: Int, col: Int, dark: Int) {
+        box(l - 1, t, r + 1, b, 0x30000000)
+        box(l, t, r, b, GOLD_D); box(l + 1, t, r - 1, b, GOLD); box(l + 3, t, r - 3, b, dark); box(l + 4, t, r - 4, b, col)
+        var y = t + 6
+        while (y < b - 4) {
+            val cx = (l + r) / 2
+            for (k in 0..4) { box(cx - k, y - 4 + k, cx + k + 1, y - 3 + k, dark); box(cx - k, y + 4 - k, cx + k + 1, y + 5 - k, dark) }
+            px(cx, y, GOLD); px(cx - 1, y, GOLD_D); px(cx + 1, y, GOLD_D)
+            for (x in l + 6 until r - 5 step 4) px(x, y + 9, GOLD_D)
+            y += 18
+        }
+    }
+
+    private fun rug(l: Int, t: Int, r: Int, b: Int) {
+        box(l - 1, t + 1, r + 1, b + 2, 0x28000000)
+        box(l, t, r, b, 0xFF5A2A2A.toInt()); box(l + 2, t + 2, r - 2, b - 2, 0xFF8A3A34.toInt()); box(l + 4, t + 4, r - 4, b - 4, 0xFF5A2A2A.toInt()); box(l + 5, t + 5, r - 5, b - 5, 0xFF9A4A3A.toInt())
+        val cx = (l + r) / 2; val cy = (t + b) / 2
+        for (k in 0..8) { box(cx - k * 2, cy - (8 - k), cx + k * 2 + 1, cy - (8 - k) + 1, 0xFFC89A50.toInt()); box(cx - k * 2, cy + (8 - k), cx + k * 2 + 1, cy + (8 - k) + 1, 0xFFC89A50.toInt()) }
+        box(cx - 3, cy - 1, cx + 4, cy + 2, 0xFFE8C878.toInt())
+        for (x in l until r step 2) { px(x, t - 1, 0xFFC8B890.toInt()); px(x, b, 0xFFC8B890.toInt()) }
+    }
+
+    private fun treasureFloor(s: Spec) {
+        for (i in 0 until 46) {
+            val v = h(i, 7, s.id); val x = 8 + v % (W - 16); val y = 36 + (v / W) % (H - 44)
+            if (s.pools.any { it.contains(x.toFloat(), y.toFloat()) }) continue
+            when (v % 9) {
+                0 -> { px(x, y, 0xFFE04848.toInt()); px(x + 1, y, 0xFFF08888.toInt()) }
+                1 -> { px(x, y, 0xFF48A0E0.toInt()); px(x + 1, y, 0xFF98D0F8.toInt()) }
+                2 -> { px(x, y, 0xFF48C070.toInt()) }
+                else -> { box(x, y, x + 3, y + 2, GOLD_D); box(x, y, x + 2, y + 1, GOLD) }
+            }
+        }
+    }
+
+    private fun bones(s: Spec) {
+        for (i in 0 until 7) {
+            val v = h(i, 3, s.id); val x = 12 + v % (W - 30); val y = 40 + (v / W) % (H - 52)
+            if (s.pools.any { it.contains(x.toFloat(), y.toFloat()) } || s.props.any { it.second.contains(x.toFloat(), y.toFloat()) }) continue
+            if (i % 3 == 0) {
+                // a little skull
+                box(x, y, x + 5, y + 4, 0xFFF0EEE4.toInt()); box(x + 1, y + 4, x + 4, y + 5, 0xFFD8D4C8.toInt())
+                px(x + 1, y + 1, INK); px(x + 3, y + 1, INK); px(x + 2, y + 3, DARK)
+            } else {
+                box(x + 1, y, x + 6, y + 1, 0xFFF0EEE4.toInt()); px(x, y - 1, 0xFFF0EEE4.toInt()); px(x, y + 1, 0xFFF0EEE4.toInt()); px(x + 6, y - 1, 0xFFF0EEE4.toInt()); px(x + 6, y + 1, 0xFFF0EEE4.toInt())
+                box(x + 1, y + 1, x + 6, y + 2, 0xFFC8C4B8.toInt())
+            }
+        }
+    }
+
+    private fun wall(s: Spec, crypt: Boolean) {
+        val tones = if (crypt) intArrayOf(PALE, 0xFFD4D4DE.toInt(), 0xFFC8C8D4.toInt()) else intArrayOf(WHITE, 0xFFF0F0F6.toInt(), 0xFFE6E6EE.toInt())
+        val mortar = if (crypt) MID else PALE
+        box(0, 0, W, 31, mortar)
+        for (row in 0 until 3) for (k in 0 until W / 16 + 1) {
+            val off = if (row % 2 == 0) 0 else 8
+            val l = k * 16 - off + 1; val t = row * 9 + 1; val r = l + 14; val b = t + 7
+            val v = h(k, row, s.id + 31)
+            box(l, t, r, b, tones[v % 3])
+            box(l, t, r, t + 1, if (crypt) 0xFFE8E8EE.toInt() else 0xFFFFFFFF.toInt())
+            box(l, b - 1, r, b, if (crypt) 0xFFB4B4C4.toInt() else 0xFFD8D8E2.toInt())
+            if (v % 17 == 0) { px(l + 4, t + 2, DARK); px(l + 5, t + 3, DARK); px(l + 5, t + 4, DARK); px(l + 6, t + 5, DARK) }
+            if (v % 23 == 0) { px(r - 1, t, mortar); px(r - 2, t, mortar); px(r - 1, t + 1, mortar) }
+        }
+        // ceiling shadow and the moulded cornice along the foot of the wall
+        box(0, 0, W, 1, 0x30000000); box(0, 1, W, 2, 0x18000000)
+        box(0, 24, W, 27, if (crypt) 0xFFB0B0C0.toInt() else 0xFFD0D0DC.toInt()); box(0, 24, W, 25, if (crypt) PALE else WHITE)
+        box(0, 27, W, 30, MID)
+        for (x in 0 until W step 6) { box(x + 1, 27, x + 4, 29, if (crypt) PALE else 0xFFDCDCE6.toInt()); box(x + 1, 29, x + 4, 30, DARK) }
+        box(0, 30, W, 31, DARK)
+        if (s.doors[2] && !s.throne) {
+            // an archway up into the dark: keystone, jambs, steps falling away
+            box(100, 2, 140, 31, DARK); box(102, 3, 138, 31, MID); box(104, 6, 136, 31, INK)
+            for (k in 0 until 4) box(106 + k, 8 + k * 5, 134 - k, 13 + k * 5, if (k % 2 == 0) 0xFF303040.toInt() else 0xFF262634.toInt())
+            box(116, 1, 124, 6, PALE); box(117, 2, 123, 5, WHITE)
+            box(102, 2, 106, 4, PALE); box(134, 2, 138, 4, PALE)
+            box(104, 29, 136, 31, 0xFF404052.toInt())
+        }
+    }
+
+    private fun sides(s: Spec, crypt: Boolean) {
+        for (side in 0..1) {
+            val x0 = if (side == 0) 0 else W - 4
+            box(x0, 31, x0 + 4, H, MID); box(if (side == 0) 3 else W - 4, 31, if (side == 0) 4 else W - 3, H, DARK)
+            box(if (side == 0) 1 else W - 3, 31, if (side == 0) 2 else W - 2, H, PALE)
+            for (y in 40 until H step 24) box(x0, y, x0 + 4, y + 1, DARK)
+            if (s.doors[side]) { box(x0, 82, x0 + 4, 122, if (crypt) PALE else WHITE); box(x0, 81, x0 + 4, 82, DARK); box(x0, 122, x0 + 4, 123, DARK) }
+        }
+        box(0, H - 3, W, H, MID); box(0, H - 3, W, H - 2, DARK)
+        if (s.doors[3]) box(104, H - 3, 136, H, if (crypt) PALE else WHITE)
+        if (crypt) for (k in 0 until 6) { box(4 + k * 2, 31, 5 + k * 2, 31 + (6 - k) * 2, MID); box(W - 5 - k * 2, 31, W - 4 - k * 2, 31 + (6 - k) * 2, MID) }
+    }
+
+    /** Soft shadows where the floor meets the walls. */
+    private fun ambient(s: Spec) {
+        val a = intArrayOf(0x26000000, 0x1A000000, 0x10000000, 0x08000000, 0x04000000)
+        for (k in a.indices) {
+            box(4, 31 + k, W - 4, 32 + k, a[k])
+            box(4 + k, 31, 5 + k, H - 3, a[k]); box(W - 5 - k, 31, W - 4 - k, H - 3, a[k])
+        }
+        for (k in 0 until 3) box(4, H - 4 - k, W - 4, H - 3 - k, a[k + 1])
+    }
+
+    /** A stone-rimmed pool: a deep shaded edge under the rim, lighter water toward you, and lilies. */
+    private fun pool(w: RectF, kind: Int) {
+        val l = w.left.toInt(); val t = w.top.toInt(); val r = w.right.toInt(); val b = w.bottom.toInt()
+        box(l - 1, t + 1, r + 2, b + 3, 0x22000000)
+        box(l + 1, t - 1, r - 1, b + 1, MID); box(l - 1, t + 1, r + 1, b - 1, MID); box(l, t, r, b, MID)
+        box(l + 1, t - 1, r - 1, t, 0xFFD8D8E2.toInt()); box(l - 1, t + 1, l, b - 1, 0xFFC8C8D4.toInt())
+        box(l + 1, b, r - 1, b + 1, DARK); box(r, t + 1, r + 1, b - 1, DARK)
+        box(l + 2, t + 1, r - 2, b - 1, WATER); box(l + 1, t + 2, r - 1, b - 2, WATER)
+        box(l + 2, t + 1, r - 2, t + 4, WATER_D); box(l + 1, t + 2, l + 3, b - 2, WATER_D)
+        box(l + 3, t + 4, r - 2, t + 5, 0xFFA8C0DC.toInt())
+        box(l + 3, b - 3, r - 3, b - 1, 0xFFD8EAF8.toInt())
+        if (kind == 1 || kind == 2 || kind == 6) {
+            val v = h(l, t, kind)
+            for (i in 0 until 2) {
+                val x = l + 5 + (v shr (i * 4)) % maxOf(1, r - l - 12); val y = t + 6 + (v shr (i * 5 + 2)) % maxOf(1, b - t - 10)
+                box(x, y, x + 5, y + 3, LEAF_D); box(x + 1, y, x + 4, y + 2, LEAF); px(x + 2, y + 1, LEAF_D)
+                if (i == 0) { px(x + 3, y - 1, 0xFFF0A0C0.toInt()); px(x + 4, y - 1, 0xFFF8D0E0.toInt()) }
+            }
+        }
+    }
+
+    /** The soft shadow everything standing casts (light from the windows, up and to the left). */
+    private fun shadow(k: Int, f: RectF) {
+        val l = f.left.toInt(); val r = f.right.toInt(); val b = f.bottom.toInt()
+        val reach = when (k) { PILLAR -> 6; STATUE -> 5; FOUNTAIN -> 4; else -> 3 }
+        for (i in 0 until reach) {
+            val inset = i * 2 - 1
+            box(l + inset + 2, b - 1 + i, r - inset + 3, b + i, if (i == 0) 0x30000000 else 0x1C000000)
+        }
+    }
+
+    // =====================================================================================
+    private fun window(x: Int) {
+        box(x - 1, 2, x + 9, 25, MID); box(x, 2, x + 8, 24, 0xFFDCEBFA.toInt())
+        box(x, 2, x + 8, 3, MID); px(x, 3, MID); px(x + 7, 3, MID)
+        box(x, 14, x + 8, 24, 0xFFEAF2FC.toInt()); box(x + 1, 4, x + 3, 12, 0xFFF4FAFF.toInt())
+        box(x + 3, 3, x + 5, 24, 0xFFA0A0B4.toInt()); box(x, 12, x + 8, 13, 0xFFA0A0B4.toInt())
+        box(x - 2, 24, x + 10, 26, PALE); box(x - 2, 26, x + 10, 27, DARK)
+        // its light falling across the floor
+        for (y in 31 until 112) {
+            val k = (y - 31) / 3
+            p.color = if (y % 2 == 0) 0x10FFF0B0 else 0x0AFFF0B0
+            c.drawRect((x + k).toFloat(), y.toFloat(), (x + k + 10).toFloat(), (y + 1).toFloat(), p)
+        }
+    }
+
+    private fun banner(x: Int, col: Int, dark: Int) {
+        box(x - 2, 1, x + 14, 3, GOLD_D); box(x - 1, 1, x + 13, 2, GOLD)
+        box(x, 3, x + 12, 22, dark); box(x + 1, 3, x + 11, 21, col)
+        for (k in 0 until 6) { box(x + k, 22 + k / 2, x + k + 1, 23 + k / 2, dark); box(x + 11 - k, 22 + k / 2, x + 12 - k, 23 + k / 2, dark) }
+        box(x + 1, 4, x + 2, 21, GOLD_D); box(x + 10, 4, x + 11, 21, GOLD_D)
+        // the five eyes, in gold thread
+        val cx = x + 6
+        for ((ex, ey) in listOf(0 to 7, -3 to 10, 3 to 10, -2 to 14, 2 to 14)) { box(cx + ex - 1, ey, cx + ex + 1, ey + 2, GOLD); px(cx + ex, ey + 1, INK) }
+    }
+
+    private fun painting(x: Int, which: Int) {
+        box(x - 1, 5, x + 25, 25, 0x30000000)
+        box(x, 4, x + 24, 24, GOLD_D); box(x + 1, 5, x + 23, 23, GOLD); box(x + 2, 6, x + 22, 22, GOLD_D)
+        val l = x + 3; val t = 7; val r = x + 21; val b = 21
+        when (which) {
+            0 -> {
+                for (y in t until b) box(l, y, r, y + 1, if (y < 12) 0xFF9CC4E8.toInt() else if (y < 15) 0xFFC8DCF0.toInt() else LEAF)
+                box(l + 12, 9, l + 15, 12, GOLD); box(l, 15, l + 8, 17, LEAF_D); box(l + 6, 14, l + 14, 16, LEAF_D); box(l, 18, r, b, 0xFF6A8C5A.toInt())
+            }
+            1 -> {
+                box(l, t, r, b, 0xFF3A3448.toInt()); box(l + 5, 9, l + 13, 20, 0xFFC8A890.toInt()); box(l + 4, 17, l + 14, 21, 0xFF5A4A6A.toInt())
+                for ((ex, ey) in listOf(9 to 11, 7 to 13, 11 to 13, 8 to 15, 10 to 15)) px(l + ex, ey, INK)
+            }
+            else -> {
+                box(l, t, r, b, 0xFF4A3A30.toInt()); box(l, 18, r, b, 0xFF6A5040.toInt())
+                box(l + 6, 11, l + 12, 18, 0xFF5A80B0.toInt()); box(l + 7, 9, l + 11, 11, 0xFF5A80B0.toInt())
+                px(l + 8, 8, 0xFFE04848.toInt()); px(l + 10, 7, 0xFFF0A040.toInt()); px(l + 9, 8, LEAF_D)
+                box(l + 13, 16, l + 16, 18, 0xFFE0C048.toInt())
+            }
+        }
+        box(x + 8, 25, x + 16, 27, GOLD_D); box(x + 9, 25, x + 15, 26, GOLD)
+    }
+
+    private fun sconce(x: Int, y: Int) {
+        box(x - 1, y + 2, x + 2, y + 9, DARK); box(x - 3, y + 2, x + 4, y + 4, DARK); box(x - 2, y + 2, x + 3, y + 3, MID)
+        box(x - 1, y + 9, x + 2, y + 10, INK)
+    }
+
+    private fun decor(s: Spec, crypt: Boolean) {
+        when (s.kind) {
+            0 -> {
+                window(56); window(176)
+                banner(18, RUNE, 0xFF40307A.toInt()); banner(210, RUNE, 0xFF40307A.toInt())
+                sconce(96, 8); sconce(144, 8)
+                val d = s.dais
+                val l = d.left.toInt(); val t = d.top.toInt(); val r = d.right.toInt(); val b = d.bottom.toInt()
+                box(l - 1, b - 5, r + 2, b + 2, 0x2A000000)
+                box(l, b - 6, r, b, MID); box(l, b - 6, r, b - 5, 0xFFF0F0F6.toInt()); box(l, b - 1, r, b, DARK)
+                for (x in l + 4 until r step 8) box(x, b - 4, x + 1, b - 1, PALE)
+                box(l + 4, b - 12, r - 4, b - 6, PALE); box(l + 4, b - 12, r - 4, b - 11, WHITE); box(l + 4, b - 7, r - 4, b - 6, DARK)
+                box(l + 8, t, r - 8, b - 12, WHITE); box(l + 8, t, r - 8, t + 1, 0xFFFFFFFF.toInt())
+                box(l + 8, b - 13, r - 8, b - 12, GOLD_D)
+                // the dais carpet, purple with gold edging
+                box(l + 14, t + 2, r - 14, b - 12, 0xFF40307A.toInt()); box(l + 15, t + 2, r - 15, b - 13, RUNE)
+                box(l + 15, t + 2, l + 16, b - 13, GOLD); box(r - 16, t + 2, r - 15, b - 13, GOLD)
+                if (s.crack == 2) {
+                    box(110, 3, 128, 31, INK); box(106, 9, 134, 31, INK); box(104, 16, 136, 31, INK)
+                    box(112, 6, 126, 31, 0xFF303040.toInt()); box(108, 12, 132, 31, 0xFF303040.toInt())
+                    for (k in 0 until 8) { val v = h(k, 1, 4); box(100 + v % 40, 26 + v % 5, 102 + v % 40, 28 + v % 5, MID) }
+                } else if (s.crack == 1) {
+                    val xs = intArrayOf(119, 121, 117, 120, 123, 119, 116, 120)
+                    for (k in xs.indices) box(xs[k], 2 + k * 7 / 2, xs[k] + 2, 6 + k * 7 / 2, INK)
+                    box(112, 14, 117, 15, INK); box(123, 21, 129, 22, INK); box(110, 10, 112, 11, INK); box(128, 6, 131, 7, INK)
+                }
+            }
+            1 -> { painting(30, 0); painting(108, 1); painting(186, 2); sconce(72, 8); sconce(168, 8) }
+            2 -> {
+                for (x in intArrayOf(30, 84, 148, 202)) window(x)
+                sconce(118, 8)
+                // ivy trailing down from the cornice
+                for (i in 0 until 26) {
+                    val v = h(i, 9, s.id); val x = 4 + v % (W - 8); val len = 4 + v % 9
+                    for (y in 24 until 24 + len) { px(x + (if ((y + i) % 4 < 2) 0 else 1), y, if (y % 3 == 0) LEAF else LEAF_D) }
+                    px(x - 1, 24 + len / 2, LEAF); px(x + 2, 24 + len - 2, LEAF)
+                }
+            }
+            3 -> {
+                val wood = 0xFF5A3E2A.toInt(); val woodL = 0xFF7A5638.toInt()
+                val spines = intArrayOf(0xFF8A3A3A.toInt(), 0xFF3A5A8A.toInt(), 0xFF4A7A4A.toInt(), 0xFF8A6A3A.toInt(), 0xFF6A4A7A.toInt(), 0xFFC8B890.toInt(), 0xFF3A3A48.toInt())
+                for (x0 in intArrayOf(8, 146)) {
+                    box(x0 - 1, 1, x0 + 87, 31, INK); box(x0, 2, x0 + 86, 30, wood)
+                    for (shelf in 0 until 3) {
+                        val y0 = 4 + shelf * 9
+                        var x = x0 + 2
+                        while (x < x0 + 83) {
+                            val v = h(x, shelf, s.id); val wdt = 2 + v % 3; val ht = 5 + v % 3
+                            if (v % 11 == 0) { x += 3; continue }
+                            val col = spines[v % spines.size]
+                            box(x, y0 + 8 - ht, x + wdt, y0 + 8, col); box(x, y0 + 8 - ht, x + 1, y0 + 8, 0x30FFFFFF)
+                            if (wdt > 2) px(x + 1, y0 + 9 - ht + 1, GOLD)
+                            x += wdt + 1
+                        }
+                        box(x0, y0 + 8, x0 + 86, y0 + 9, woodL)
+                    }
+                    box(x0 - 1, 29, x0 + 87, 31, woodL)
+                }
+                // a ladder leaning on the left case
+                for (y in 4 until 31) { px(84, y, woodL); px(90, y, woodL); if (y % 4 == 0) box(84, y, 91, y + 1, woodL) }
+            }
+            4 -> {
+                banner(40, RUNE, 0xFF40307A.toInt()); banner(188, RUNE, 0xFF40307A.toInt())
+                sconce(72, 8); sconce(168, 8)
+            }
+            5 -> {
+                for (x in intArrayOf(36, 196)) {
+                    box(x - 7, 6, x + 7, 24, 0xFF505062.toInt()); box(x - 6, 7, x + 6, 24, 0xFF3A3A4A.toInt()); box(x - 5, 5, x + 5, 7, 0xFF505062.toInt())
+                    box(x - 3, 15, x + 3, 20, 0xFFF0EEE4.toInt()); box(x - 2, 20, x + 2, 22, 0xFFD8D4C8.toInt())
+                    px(x - 2, 17, INK); px(x - 1, 17, INK); px(x + 1, 17, INK); px(x + 2, 17, INK); px(x, 19, DARK)
+                }
+                // cobwebs in the corners
+                for (side in 0..1) {
+                    val x0 = if (side == 0) 4 else W - 5; val dir = if (side == 0) 1 else -1
+                    for (k in 0 until 4) { val a = k * 0.4f; for (r in 0 until 14) px(x0 + (dir * cos(a) * r).toInt(), 31 + (sin(a) * r * 0.9f).toInt(), 0x88F8F8FF.toInt()) }
+                    for (r in intArrayOf(5, 9, 13)) for (k in 0 until r) { val a = k / r.toFloat() * 1.3f; px(x0 + (dir * cos(a) * r).toInt(), 31 + (sin(a) * r * 0.9f).toInt(), 0x66F8F8FF) }
+                }
+                for ((x, y) in CANDLES5) { box(x - 1, y - 4, x + 1, y, 0xFFF0EEE4.toInt()); box(x - 2, y, x + 2, y + 1, 0xFFD8D4C8.toInt()); px(x, y - 5, INK) }
+            }
+            6 -> {
+                window(28); window(204)
+                sconce(60, 8); sconce(180, 8)
+                for (bxn in intArrayOf(84, 148)) {
+                    box(bxn - 1, 1, bxn + 11, 23, GOLD_D); box(bxn, 2, bxn + 10, 22, GOLD); box(bxn + 1, 3, bxn + 3, 20, 0xFFFFF0A0.toInt())
+                    box(bxn + 3, 6, bxn + 7, 10, 0xFFE04848.toInt()); px(bxn + 4, 7, 0xFFF8B0B0.toInt())
+                }
+                for ((gx, gy) in GOLD_PILES) {
+                    for (k in 0 until 6) box(gx - 9 + k, gy - k, gx + 9 - k, gy - k + 1, if (k % 2 == 0) GOLD_D else GOLD)
+                    box(gx - 9, gy, gx + 9, gy + 1, 0x30000000)
+                    for (i in 0 until 8) { val v = h(gx, gy, i); px(gx - 7 + v % 14, gy - 1 - (v / 14) % 4, if (i % 3 == 0) 0xFFFFF0A0.toInt() else GOLD_D) }
+                    px(gx - 2, gy - 3, 0xFFE04848.toInt()); px(gx + 3, gy - 2, 0xFF48A0E0.toInt())
+                }
+            }
+        }
+    }
+
+    private val CANDLES5 = listOf(84 to 70, 156 to 70, 84 to 150, 156 to 150)
+    private val GOLD_PILES = listOf(60 to 120, 176 to 128, 92 to 152, 150 to 146, 196 to 92)
+
+    // =====================================================================================
+    // every frame: flames, dust in the light, the water moving
+    // =====================================================================================
+    private val glow = Paint().apply { isAntiAlias = false }
+    private fun flame(cv: Canvas, x: Float, y: Float, time: Float, seed: Int, big: Boolean = false) {
+        val f = ((time * 9f).toInt() + seed) % 3
+        val r = if (big) 12f else 9f
+        glow.color = 0x22FFC060; cv.drawRect(x - r, y - r * 0.7f, x + r, y + r * 0.7f, glow)
+        glow.color = 0x22FFD890; cv.drawRect(x - r * 0.55f, y - r * 0.45f, x + r * 0.55f, y + r * 0.45f, glow)
+        glow.color = 0xFFE05020.toInt(); cv.drawRect(x - 2, y - 2 - f, x + 2, y + 2, glow)
+        glow.color = 0xFFF8B030.toInt(); cv.drawRect(x - 1, y - 3 - (f + 1) % 3, x + 1, y + 1, glow)
+        glow.color = 0xFFFFF4C0.toInt(); cv.drawRect(x - 1, y - 1, x, y + 1, glow)
+    }
+
+    fun overlay(cv: Canvas, time: Float) {
+        val s = spec ?: return
+        // torch flames
+        val torches = when (s.kind) {
+            0 -> listOf(96 to 8, 144 to 8); 1 -> listOf(72 to 8, 168 to 8); 2 -> listOf(118 to 8); 4 -> listOf(72 to 8, 168 to 8); 6 -> listOf(60 to 8, 180 to 8)
+            else -> emptyList()
+        }
+        torches.forEachIndexed { i, (x, y) -> flame(cv, x + 0.5f, y.toFloat(), time, i) }
+        if (s.kind == 5) CANDLES5.forEachIndexed { i, (x, y) ->
+            val f = ((time * 7f).toInt() + i) % 3
+            glow.color = 0x1CFFC060; cv.drawRect(x - 7f, y - 11f, x + 7f, y + 1f, glow)
+            glow.color = 0xFFF8B030.toInt(); cv.drawRect(x - 0.5f - (if (f == 1) 0.5f else 0f), y - 8f - f * 0.5f, x + 0.5f, y - 5f, glow)
+            glow.color = 0xFFFFF4C0.toInt(); cv.drawRect(x - 0.5f, y - 6f, x + 0.5f, y - 5f, glow)
+        }
+        // dust drifting in the window light
+        val wins = when (s.kind) { 0 -> intArrayOf(56, 176); 2 -> intArrayOf(30, 84, 148, 202); 6 -> intArrayOf(28, 204); else -> IntArray(0) }
+        for ((wi, wx) in wins.withIndex()) for (i in 0 until 5) {
+            val ph = (time * 0.05f + i * 0.21f + wi * 0.13f) % 1f
+            val y = 34f + ph * 74f; val x = wx + (y - 31f) / 3f + 5f + sin(time * 0.7f + i * 2f + wi) * 4f
+            glow.color = if ((i + wi) % 2 == 0) 0x90FFF8D8.toInt() else 0x60FFFFFF
+            cv.drawRect(x, y, x + 1, y + 1, glow)
+        }
+        // ripples and glints on the pools
+        for (w in s.pools) {
+            val ph = (time * 0.8f) % 1f
+            val y1 = w.top + 5 + ph * (w.height() - 9); val y2 = w.top + 5 + ((ph + 0.5f) % 1f) * (w.height() - 9)
+            glow.color = 0xCCFFFFFF.toInt()
+            cv.drawRect(w.left + 4, y1, w.left + w.width() * 0.45f, y1 + 1, glow); cv.drawRect(w.left + w.width() * 0.5f, y2, w.right - 4, y2 + 1, glow)
+            val g = ((time * 1.7f).toInt() + w.left.toInt()) % 5
+            if (g < 2) { glow.color = 0xFFFFFFFF.toInt(); val gx = w.left + 6 + abs(sin(time * 0.3f + w.top)) * (w.width() - 12); cv.drawRect(gx, w.bottom - 4, gx + 1, w.bottom - 3, glow) }
+        }
+    }
+
+    // =====================================================================================
+    private var vig: Bitmap? = null
+    /** A soft dithered darkening toward the corners of the screen. */
+    fun vignette(cv: Canvas) {
+        val v = vig ?: Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888).also { b ->
+            val bayer = intArrayOf(0, 2, 3, 1)
+            for (y in 0 until H) for (x in 0 until W) {
+                val dx = (x - W / 2f) / (W / 2f); val dy = (y - H / 2f) / (H / 2f)
+                val d = kotlin.math.sqrt(dx * dx * 0.8f + dy * dy * 0.9f)
+                val k = ((d - 0.72f) / 0.45f).coerceIn(0f, 1f)
+                val lvl = (k * 4f).toInt() + (if (bayer[(x and 1) + (y and 1) * 2] < ((k * 4f) % 1f) * 4f) 1 else 0)
+                if (lvl > 0) b.setPixel(x, y, (minOf(lvl, 4) * 0x0E shl 24) or 0x101020)
+            }
+            vig = b
+        }
+        cv.drawBitmap(v, 0f, 0f, p)
+    }
+}

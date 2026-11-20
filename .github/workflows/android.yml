@@ -1,5 +1,5 @@
 # Builds 5 Eye Yeti (5IY): a signed App Bundle (.aab) for Google Play and an APK for
-# sideloading. Download both from the run's "Artifacts" section.
+# sideloading, plus 5IY Builder (the world editor) as its own APK. Download them from the run's "Artifacts" section.
 # Release signing uses the FOXBOX_UPLOAD_* secrets when they are set
 # (see android/play/release-checklist.md); otherwise the test key is used.
 name: Android app
@@ -49,8 +49,9 @@ jobs:
           FOXBOX_UPLOAD_KEY_PASSWORD: ${{ secrets.FOXBOX_UPLOAD_KEY_PASSWORD }}
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon assembleRelease bundleRelease
+          ./gradlew --no-daemon :app:assembleRelease :app:bundleRelease :builder:assembleRelease
           cp app/build/outputs/apk/release/app-release.apk ../5IY.apk
+          cp builder/build/outputs/apk/release/builder-release.apk ../5IY-Builder.apk
           cp app/build/outputs/bundle/release/app-release.aab ../5IY-release.aab
 
       - name: Upload APK
@@ -58,6 +59,12 @@ jobs:
         with:
           name: 5IY-android
           path: 5IY.apk
+
+      - name: Upload Builder APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: 5IY-builder
+          path: 5IY-Builder.apk
 
       - name: Upload App Bundle
         uses: actions/upload-artifact@v4

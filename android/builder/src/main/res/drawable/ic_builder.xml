@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A white brick wall with a gold hammer, on the hall's night blue. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="27" android:viewportHeight="27">
+    <path android:fillColor="#2A2B40" android:pathData="M0,0h27v27h-27z" />
+    <path android:fillColor="#F8F8F8" android:pathData="M5,14h7v3h-7zM13,14h9v3h-9zM5,18h3v3h-3zM9,18h8v3h-8zM18,18h4v3h-4z" />
+    <path android:fillColor="#B8B8C8" android:pathData="M5,17h17v1h-17zM5,21h17v1h-17z" />
+    <path android:fillColor="#A88420" android:pathData="M15,5l1,-1l5,5l-1,1z" />
+    <path android:fillColor="#F0CC50" android:pathData="M13,6l3,-3l2,2l-3,3zM16,8l1,-1l-6,6l-1,-1z" />
+</vector>

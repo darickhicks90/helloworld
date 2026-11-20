@@ -966,7 +966,8 @@ class HallScreen(c: Context) : PixelView(c) {
         }
     }
 
-    private fun restart() {
+    /** A fresh match: from the first foe, or (a retry after she beat you) straight back into her fight. */
+    private fun restart(ch: Int = 1) {
         hp = maxHp; invulnT = 0f; paraT = 0f; poisonT = 0f; invertT = 0f
         perishT = 0f; bossGone = false; spiritGift = false; spiritTalks = 0
         chapter = 1; bossRoom = 4; followT = 0f; seeds.clear(); lashes.clear()
@@ -977,6 +978,7 @@ class HallScreen(c: Context) : PixelView(c) {
         spawnFriend(); saveSoon = true
         rx = 1; ry = 1; hx = 112f; hy = 120f; phase = Phase.FIGHT; bannerT = 1.8f; talking = false; orbT = 18f
         msg = "FIGHT!"; msgT = 1.2f
+        if (ch == 2) { chapter = 2; bossHp = bossMax; crackOpen = true; seedT = 5f; lashT = 7f; summonT = 6f; spellT = 7f; msg = "SHE IS WAITING."; msgT = 1.6f }
     }
 
     private fun fire(sx: Float, sy: Float, tx: Float, ty: Float, speed: Float, boss: Boolean, weak: Boolean, conf: Boolean) {
@@ -2780,7 +2782,7 @@ class HallScreen(c: Context) : PixelView(c) {
         if (talking) {
             if (shown < talkLines[line].length) shown = talkLines[line].length.toFloat()
             else if (line < talkLines.size - 1) { line++; shown = 0f } else endTalk()
-        } else if (phase == Phase.LOST) restart()
+        } else if (phase == Phase.LOST) restart(chapter)
         else if (phase == Phase.WON) {
             if (nearSpirit()) speakToSpirit()
             else if (roomId == 1 && !chestOpen && nearChest()) {

@@ -2132,7 +2132,7 @@ class HallScreen(c: Context) : PixelView(c) {
             font.color = if (ready) INK else MID
             sc.drawText(SPELLS[i], cx + 30, cy + 12, font)
             font.color = if (ready) DARK else MID
-            sc.drawText(if (ready) SPELL_ABOUT[i] else "READY IN ${spellCd[i].toInt() + 1}", cx + 30, cy + 24, font)
+            sc.drawText(if (ready) SPELL_ABOUT[i] else "WAIT ${spellCd[i].toInt() + 1}S", cx + 30, cy + 24, font)
         }
         font.color = INK
         box(l + 4, b - 6, r - 4, b - 3, PALE); box(l + 4, b - 6, l + 4 + (r - l - 8) * (runePromptT / RUNE_TIME).coerceIn(0f, 1f), b - 3, RUNE)

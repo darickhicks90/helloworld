@@ -18,7 +18,7 @@ import java.util.concurrent.Executors
  * folder can crash the Builder.
  */
 class Library(private val ctx: Context, val ws: Workspace) {
-    class Asset(val cat: String, val name: String, val id: String, val size: Long, val modified: Long) {
+    class Asset(val cat: String, val name: String, val id: String, val size: Long, val modified: Long, val fileName: String = name, val density: Int = 1) {
         var bmp: Bitmap? = null
         var frames = 1
         /** 4 for a four-direction sheet (rows: down, left, right, up), else 1. */
@@ -26,15 +26,20 @@ class Library(private val ctx: Context, val ws: Workspace) {
         var file: java.io.File? = null      // sounds: a private copy for the sound pool
         var soundId = 0
         val key get() = "$cat/$name"
-        val frameW get() = bmp?.let { it.width / frames } ?: 16
-        val frameH get() = bmp?.let { it.height / dirs } ?: 16
+        /** One frame in the picture's own pixels... */
+        val srcW get() = bmp?.let { it.width / frames } ?: 16
+        val srcH get() = bmp?.let { it.height / dirs } ?: 16
+        /** ...and in the world's (a detail sprite, name@4x.png, has 4 picture pixels to each world pixel). */
+        val frameW get() = maxOf(1, srcW / density)
+        val frameH get() = maxOf(1, srcH / density)
     }
 
     companion object {
         val SPRITES = listOf("tiles", "walls", "props", "decor", "characters", "kiosks", "items")
         val FOLDERS = SPRITES.map { "sprites/$it" } + listOf("sounds", "music", "worlds")
-        const val MAX_PX = 512; const val MAX_IMG = 4L shl 20; const val MAX_SND = 1L shl 20; const val MAX_MUSIC = 20L shl 20
+        const val MAX_PX = 2048; const val MAX_IMG = 8L shl 20; const val MAX_SND = 1L shl 20; const val MAX_MUSIC = 20L shl 20
         private val FRAMES = Regex("_f(\\d{1,2})$")
+        private val DENSITY = Regex("@([1-8])x$")
         fun folderOf(cat: String) = if (cat in SPRITES) "sprites/$cat" else cat
         fun extsOf(cat: String) = when (cat) { "sounds" -> setOf("wav", "ogg"); "music" -> setOf("ogg", "mp3", "wav"); else -> setOf("png") }
     }
@@ -79,15 +84,20 @@ class Library(private val ctx: Context, val ws: Workspace) {
                 if (e.isDir || e.name.startsWith(".")) continue
                 val ext = e.name.substringAfterLast('.', "").lowercase()
                 if (ext == "txt" || ext == "json") continue
-                val key = "$cat/${e.name.substringBeforeLast('.')}"
+                val stem = e.name.substringBeforeLast('.')
+                val density = if (cat in SPRITES) DENSITY.find(stem)?.groupValues?.get(1)?.toIntOrNull() ?: 1 else 1
+                val base = stem.replace(DENSITY, "")
+                val key = "$cat/$base"
                 if (ext !in extsOf(cat)) { bad["${folderOf(cat)}/${e.name}"] = "not a ${extsOf(cat).joinToString("/").uppercase()} file"; continue }
-                found[key] = Asset(cat, e.name.substringBeforeLast('.'), e.id, e.size, e.modified)
+                // the same sprite at two densities: the more detailed one wins
+                if ((found[key]?.density ?: 0) >= density) continue
+                found[key] = Asset(cat, base, e.id, e.size, e.modified, e.name, density)
             }
         }
         // load only what's new or changed since the last look
         val fresh = ArrayList<Asset>()
         for ((key, a) in found) {
-            val sig = a.size to a.modified
+            val sig = (a.size + a.fileName.hashCode().toLong() * 7919L) to a.modified
             if (seen[key] == sig) continue
             failed[key]?.let { (fs, msg) -> if (fs == sig) { bad["${folderOf(a.cat)}/${a.name}"] = msg; null } else null }
             if (failed[key]?.first == sig) continue
@@ -114,12 +124,12 @@ class Library(private val ctx: Context, val ws: Workspace) {
             }
             "music" -> if (a.size > MAX_MUSIC) throw IllegalStateException("bigger than 20 MB")
             else -> {
-                if (a.size > MAX_IMG) throw IllegalStateException("bigger than 4 MB")
-                val bytes = ws.read(a.id, MAX_IMG) ?: throw IllegalStateException("bigger than 4 MB")
+                if (a.size > MAX_IMG) throw IllegalStateException("bigger than 8 MB")
+                val bytes = ws.read(a.id, MAX_IMG) ?: throw IllegalStateException("bigger than 8 MB")
                 val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
                 BitmapFactory.decodeByteArray(bytes, 0, bytes.size, o)
                 if (o.outWidth <= 0) throw IllegalStateException("not a PNG Android can read")
-                if (o.outWidth > MAX_PX || o.outHeight > MAX_PX) throw IllegalStateException("${o.outWidth} x ${o.outHeight} px is bigger than $MAX_PX x $MAX_PX")
+                if (o.outWidth > MAX_PX || o.outHeight > MAX_PX || o.outWidth.toLong() * o.outHeight > 4_000_000L) throw IllegalStateException("${o.outWidth} x ${o.outHeight} px is too big (at most $MAX_PX px a side, 4 million pixels)")
                 val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inScaled = false; inPreferredConfig = Bitmap.Config.ARGB_8888 })
                     ?: throw IllegalStateException("not a PNG Android can read")
                 val n = FRAMES.find(a.name)?.groupValues?.get(1)?.toIntOrNull()?.coerceIn(1, 64) ?: 1

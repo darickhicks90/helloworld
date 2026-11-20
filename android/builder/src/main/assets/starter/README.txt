@@ -27,6 +27,10 @@ Each folder has its own README with sizes and formats. The short version:
     name with _f and the number of frames, e.g. torch_f3.png. They play at 6 frames a second.
   * Characters face four ways: rows down, left, right, up in one PNG named like
     hero_4dir_f3.png (see sprites/characters/README.txt). The house style is 24 x 24.
+  * Detail sprites: draw at 2, 3 or 4 picture pixels per world pixel for a smoother,
+    hand-painted look, and add @2x, @3x or @4x to the end of the name (knight_4dir_f3@4x.png
+    is 96 x 96 a frame and stands 24 x 24 in the world). They're drawn smoothly; plain ones
+    stay crisp. If both exist, the detailed one is used.
   * Draw your own in the Builder's PIXEL STUDIO (the ✎ PIXEL button); it saves here.
   * Names: lowercase letters, numbers and underscores (my_tree.png). The name is the label.
   * Sounds: WAV or OGG. Music: OGG, MP3 or WAV.
@@ -34,4 +38,4 @@ Each folder has its own README with sizes and formats. The short version:
     Removed one? Things using it show a "?" box until it's back. Nothing breaks.
 
 Limits (larger files are skipped and listed under Problems in the Builder's menu):
-pictures at most 512 x 512 px and 4 MB; sounds at most 1 MB; music at most 20 MB.
+pictures at most 2048 px a side, 4 million pixels and 8 MB; sounds at most 1 MB; music at most 20 MB.

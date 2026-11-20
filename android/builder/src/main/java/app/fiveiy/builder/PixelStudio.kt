@@ -35,10 +35,17 @@ import kotlin.math.min
  */
 class PixDoc(var w: Int, var h: Int, var dirs: Int, frames: Int) {
     var cells: Array<ArrayList<IntArray>> = Array(dirs) { ArrayList<IntArray>().apply { repeat(frames) { add(IntArray(w * h)) } } }
+    /** Picture pixels per world pixel: 1 for pixel art; 2 to 4 for detail sprites (saved as name@4x.png). */
+    var density = 1
     val frames get() = cells[0].size
     fun cell(d: Int, f: Int) = cells[d.coerceIn(0, dirs - 1)][f.coerceIn(0, frames - 1)]
-    fun copy(): PixDoc { val c = PixDoc(w, h, dirs, 1); c.cells = Array(dirs) { d -> ArrayList(cells[d].map { it.copyOf() }) }; return c }
-    fun restore(o: PixDoc) { w = o.w; h = o.h; dirs = o.dirs; cells = Array(o.dirs) { d -> ArrayList(o.cells[d].map { it.copyOf() }) } }
+    fun copy(): PixDoc { val c = PixDoc(w, h, dirs, 1); c.density = density; c.cells = Array(dirs) { d -> ArrayList(cells[d].map { it.copyOf() }) }; return c }
+    fun restore(o: PixDoc) { w = o.w; h = o.h; dirs = o.dirs; density = o.density; cells = Array(o.dirs) { d -> ArrayList(o.cells[d].map { it.copyOf() }) } }
+    /** Up to a finer density: every picture enlarged (smoothly, or as blocks) so you can draw detail into it. */
+    fun detail(k: Int, smooth: Boolean) {
+        cells = Array(dirs) { d -> ArrayList(cells[d].map { PixelOps.upscale(it, w, h, k, smooth) }) }
+        w *= k; h *= k; density *= k
+    }
 
     fun toBitmap(): Bitmap {
         val b = Bitmap.createBitmap(w * frames, h * dirs, Bitmap.Config.ARGB_8888)
@@ -60,8 +67,8 @@ class PixDoc(var w: Int, var h: Int, var dirs: Int, frames: Int) {
     companion object {
         fun fromAsset(a: Library.Asset): PixDoc? {
             val b = a.bmp ?: return null
-            val fw = a.frameW; val fh = a.frameH
-            val d = PixDoc(fw, fh, a.dirs, a.frames)
+            val fw = a.srcW; val fh = a.srcH
+            val d = PixDoc(fw, fh, a.dirs, a.frames); d.density = a.density
             for (dd in 0 until a.dirs) for (f in 0 until a.frames) b.getPixels(d.cells[dd][f], 0, fw, f * fw, dd * fh, fw, fh)
             return d
         }
@@ -72,6 +79,7 @@ class PixDoc(var w: Int, var h: Int, var dirs: Int, frames: Int) {
 @SuppressLint("ViewConstructor")
 class PixelCanvas(ctx: Context, private val studio: PixelStudio) : View(ctx) {
     private val p = Paint().apply { isFilterBitmap = false; isAntiAlias = false }
+    private val sp = Paint(Paint.FILTER_BITMAP_FLAG)
     private val f = Paint()
     private val line = Paint().apply { style = Paint.Style.STROKE }
     var zoom = 0f; var panX = 0f; var panY = 0f
@@ -110,23 +118,31 @@ class PixelCanvas(ctx: Context, private val studio: PixelStudio) : View(ctx) {
             p.alpha = 70; c.drawBitmap(cellBitmap(d.cell(studio.dir, (studio.frame - 1 + d.frames) % d.frames), d.w, d.h), null, dst, p); p.alpha = 255
         }
         c.drawBitmap(cellBitmap(studio.preview ?: d.cell(studio.dir, studio.frame), d.w, d.h), null, dst, p)
-        if (studio.grid && zoom >= 6f) {
-            line.color = 0x33FFFFFF; line.strokeWidth = 1f
-            for (i in 0..d.w) c.drawLine(l + i * zoom, t, l + i * zoom, b, line)
-            for (i in 0..d.h) c.drawLine(l, t + i * zoom, r, t + i * zoom, line)
-            line.color = 0x66F0CC50
-            if (d.w % 8 == 0) for (i in 8 until d.w step 8) c.drawLine(l + i * zoom, t, l + i * zoom, b, line)
-            if (d.h % 8 == 0) for (i in 8 until d.h step 8) c.drawLine(l, t + i * zoom, r, t + i * zoom, line)
+        if (studio.grid) {
+            line.strokeWidth = 1f
+            if (zoom >= 6f) {
+                line.color = if (d.density > 1) 0x18FFFFFF else 0x33FFFFFF
+                for (i in 0..d.w) c.drawLine(l + i * zoom, t, l + i * zoom, b, line)
+                for (i in 0..d.h) c.drawLine(l, t + i * zoom, r, t + i * zoom, line)
+            }
+            // on a detail sprite, the world's pixels; on pixel art, every 8
+            val step = if (d.density > 1) d.density else 8
+            if (step * zoom >= 6f) {
+                line.color = if (d.density > 1) 0x44FFFFFF else 0x66F0CC50
+                if (d.w % step == 0) for (i in step until d.w step step) c.drawLine(l + i * zoom, t, l + i * zoom, b, line)
+                if (d.h % step == 0) for (i in step until d.h step step) c.drawLine(l, t + i * zoom, r, t + i * zoom, line)
+            }
         }
         if (studio.mirror) { line.color = 0xAA48C0F0.toInt(); line.strokeWidth = 2f; c.drawLine((l + r) / 2, t, (l + r) / 2, b, line) }
         line.color = 0xFF707088.toInt(); line.strokeWidth = 2f; c.drawRect(l - 1, t - 1, r + 1, b + 1, line)
         // a little live preview of the animation, at 2x (or 1x for big sprites)
-        val pk = if (d.w * 3 < width / 3) 3f else if (d.w * 2 < width / 3) 2f else 1f
+        // (a detail sprite is previewed at its size in the world, smoothed, as the Builder shows it)
+        val pk = if (d.density > 1) 3f / d.density else if (d.w * 3 < width / 3) 3f else if (d.w * 2 < width / 3) 2f else 1f
         val pw = d.w * pk; val ph = d.h * pk
         f.color = 0xFF2A2A36.toInt(); c.drawRect(width - pw - 16, 8f, width - 8f, ph + 16, f)
         val pf = if (d.frames > 1) ((System.nanoTime() - t0) / 1e9 * 6).toInt() % d.frames else 0
         val frameShown = if (d.dirs == 4 && d.frames == 3) RoomView.WALK3[((System.nanoTime() - t0) / 1e9 * 7).toInt() % 4] else pf
-        c.drawBitmap(cellBitmap(d.cell(studio.dir, frameShown), d.w, d.h), null, RectF(width - pw - 12, 12f, width - 12f, 12 + ph), p)
+        c.drawBitmap(cellBitmap(d.cell(studio.dir, frameShown), d.w, d.h), null, RectF(width - pw - 12, 12f, width - 12f, 12 + ph), if (d.density > 1) sp else p)
         postInvalidateOnAnimation()
     }
 
@@ -138,14 +154,14 @@ class PixelCanvas(ctx: Context, private val studio: PixelStudio) : View(ctx) {
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(e: MotionEvent): Boolean {
         when (e.actionMasked) {
-            MotionEvent.ACTION_DOWN -> { mode = 1; val q = pixel(e.x, e.y); studio.strokeStart(q[0], q[1]) }
+            MotionEvent.ACTION_DOWN -> { mode = 1; val q = pixel(e.x, e.y); studio.strokeStart(q[0], q[1], (e.x - panX) / zoom, (e.y - panY) / zoom) }
             MotionEvent.ACTION_POINTER_DOWN -> if (e.pointerCount == 2) {
                 if (mode == 1) studio.strokeCancel()
                 mode = 2; startDist = hypot(e.getX(0) - e.getX(1), e.getY(0) - e.getY(1)); startZoom = zoom
                 midX = (e.getX(0) + e.getX(1)) / 2; midY = (e.getY(0) + e.getY(1)) / 2
             }
             MotionEvent.ACTION_MOVE -> when (mode) {
-                1 -> { val q = pixel(e.x, e.y); studio.strokeMove(q[0], q[1]) }
+                1 -> { val q = pixel(e.x, e.y); studio.strokeMove(q[0], q[1], (e.x - panX) / zoom, (e.y - panY) / zoom) }
                 2 -> if (e.pointerCount >= 2) {
                     val d = hypot(e.getX(0) - e.getX(1), e.getY(0) - e.getY(1))
                     val mx = (e.getX(0) + e.getX(1)) / 2; val my = (e.getY(0) + e.getY(1)) / 2
@@ -168,12 +184,15 @@ class PixelCanvas(ctx: Context, private val studio: PixelStudio) : View(ctx) {
  * picks them up.
  */
 class PixelStudio(private val act: MainActivity, private val lib: Library, private val ws: Workspace, private val onClose: () -> Unit) {
-    enum class Tool { PEN, ERASE, FILL, LINE, BOX, OVAL, PICK, MOVE }
+    enum class Tool { PEN, ERASE, SMOOTH, FILL, LINE, BOX, OVAL, PICK, MOVE }
     var doc = PixDoc(24, 24, 4, 3)
     var dir = 0; var frame = 0
     var tool = Tool.PEN
     var color = 0xFF201828.toInt()
     var brush = 1
+    /** Soft: round, feathered brushes (and fills that blend into their edges); hard: square pixels. */
+    var soft = false
+    var opacity = 1f
     var mirror = false; var grid = true; var onion = false
     var preview: IntArray? = null
     private var name = "new_character"; private var cat = "characters"; private var openedKey: String? = null
@@ -200,6 +219,7 @@ class PixelStudio(private val act: MainActivity, private val lib: Library, priva
             0xFF4A4A58, 0xFF6E6E80, 0xFF9A9AA8, 0xFFA88420, 0xFFF0CC50, 0x00000000,
         ).map { it.toInt() }.toIntArray()
         val TRANSPARENT = 0
+        val SIZES = intArrayOf(1, 2, 3, 4, 6, 8, 12, 16, 24, 32)
     }
 
     private fun dp(v: Float) = v * act.resources.displayMetrics.density
@@ -250,14 +270,19 @@ class PixelStudio(private val act: MainActivity, private val lib: Library, priva
 
     private fun refreshAll() { refreshTitle(); refreshTools(); refreshFrames(); refreshColors() }
     private fun refreshTitle() {
-        title.text = "$cat/$name  ${doc.w}×${doc.h}" + (if (doc.dirs == 4) "  4 DIRECTIONS" else "") + "  ${doc.frames} FRAME" + (if (doc.frames > 1) "S" else "") + if (dirty) "  •" else ""
+        title.text = "$cat/$name  " + (if (doc.density > 1) "${doc.w / doc.density}×${doc.h / doc.density} AT ×${doc.density} DETAIL (${doc.w}×${doc.h})" else "${doc.w}×${doc.h}") + (if (doc.dirs == 4) "  4 DIRECTIONS" else "") + "  ${doc.frames} FRAME" + (if (doc.frames > 1) "S" else "") + if (dirty) "  •" else ""
     }
 
     private fun refreshTools() {
         toolRow.removeAllViews()
-        for ((t, s) in listOf(Tool.PEN to "PEN", Tool.ERASE to "ERASE", Tool.FILL to "FILL", Tool.LINE to "LINE", Tool.BOX to "BOX", Tool.OVAL to "OVAL", Tool.PICK to "PICK", Tool.MOVE to "MOVE"))
+        for ((t, s) in listOf(Tool.PEN to "PEN", Tool.ERASE to "ERASE", Tool.SMOOTH to "SMOOTH", Tool.FILL to "FILL", Tool.LINE to "LINE", Tool.BOX to "BOX", Tool.OVAL to "OVAL", Tool.PICK to "PICK", Tool.MOVE to "MOVE"))
             toolRow.put(btn(s, if (tool == t) MainActivity.GOLD else MainActivity.GREY) { tool = t; refreshTools() })
-        toolRow.put(btn("SIZE $brush", MainActivity.GREY) { brush = brush % 3 + 1; refreshTools() })
+        toolRow.put(btn("SIZE $brush", MainActivity.GREY) { brush = SIZES[(SIZES.indexOf(brush) + 1) % SIZES.size]; refreshTools() })
+        toolRow.put(btn(if (soft) "SOFT" else "HARD", if (soft) MainActivity.BLUE else MainActivity.GREY) { soft = !soft; refreshTools() })
+        toolRow.put(btn("${(opacity * 100).toInt()}%", MainActivity.GREY) { opacity = when (opacity) { 1f -> 0.6f; 0.6f -> 0.35f; 0.35f -> 0.15f; else -> 1f }; refreshTools() })
+        toolRow.put(btn("DETAIL", MainActivity.GOLD) { detailDialog() })
+        toolRow.put(btn("SMOOTH EDGES", MainActivity.BLUE) { smoothDialog() })
+        toolRow.put(btn("IMPORT IMAGE", MainActivity.GREEN) { act.pickImageForStudio() })
         toolRow.put(btn("MIRROR", if (mirror) MainActivity.BLUE else MainActivity.GREY) { mirror = !mirror; refreshTools() })
         toolRow.put(btn("GRID", if (grid) MainActivity.BLUE else MainActivity.GREY) { grid = !grid; refreshTools() })
         toolRow.put(btn("ONION", if (onion) MainActivity.BLUE else MainActivity.GREY) { onion = !onion; refreshTools() })
@@ -357,14 +382,45 @@ class PixelStudio(private val act: MainActivity, private val lib: Library, priva
     private fun doRedo() { val r = redo.removeLastOrNull() ?: return; undo.addLast(doc.copy()); doc.restore(r); clampSel(); refreshAll() }
     private fun clampSel() { dir = dir.coerceIn(0, doc.dirs - 1); frame = frame.coerceIn(0, doc.frames - 1) }
 
-    private fun put(c: IntArray, x: Int, y: Int, col: Int) {
-        val r = brush - 1
-        for (yy in y - r / 2..y + (r + 1) / 2 - (if (r == 0) 0 else 0)) for (xx in x - r / 2..x + (r + 1) / 2) {
-            if (xx in 0 until doc.w && yy in 0 until doc.h) {
-                c[yy * doc.w + xx] = col
-                if (mirror) c[yy * doc.w + doc.w - 1 - xx] = col
+    /** One dab of the brush at (x, y): how much of each pixel it covers (0..1). */
+    private fun dab(x: Float, y: Float, cover: (Int, Float) -> Unit) {
+        val w = doc.w; val h = doc.h
+        if (!soft) {
+            val r = brush - 1; val x0 = kotlin.math.floor(x).toInt() - r / 2; val y0 = kotlin.math.floor(y).toInt() - r / 2
+            for (yy in y0..y0 + r) for (xx in x0..x0 + r) if (xx in 0 until w && yy in 0 until h) { cover(yy * w + xx, 1f); if (mirror) cover(yy * w + w - 1 - xx, 1f) }
+            return
+        }
+        val rad = max(0.8f, brush / 2f)
+        for (yy in kotlin.math.floor(y - rad - 1).toInt()..kotlin.math.ceil(y + rad + 1).toInt()) for (xx in kotlin.math.floor(x - rad - 1).toInt()..kotlin.math.ceil(x + rad + 1).toInt()) {
+            if (xx !in 0 until w || yy !in 0 until h) continue
+            val d = hypot(xx + 0.5f - x, yy + 0.5f - y)
+            val k = if (rad <= 1f) (1.5f - d).coerceIn(0f, 1f) else ((rad - d) / (rad * 0.6f)).coerceIn(0f, 1f).let { it * it * (3 - 2 * it) }
+            if (k > 0f) { cover(yy * w + xx, k); if (mirror) cover(yy * w + w - 1 - xx, k) }
+        }
+    }
+    private var base: IntArray? = null
+    private var cov: FloatArray? = null
+    /** Paints (or erases) under the brush along a line, from the stroke's starting picture. */
+    private fun paintLine(c: IntArray, x0: Float, y0: Float, x1: Float, y1: Float, erase: Boolean) {
+        val bs = base ?: return; val cv = cov ?: return
+        val dist = hypot(x1 - x0, y1 - y0); val step = max(0.35f, brush / 5f); val n = max(1, (dist / step).toInt())
+        for (k in 0..n) {
+            val t = k / n.toFloat()
+            dab(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t) { i, a ->
+                if (a <= cv[i]) return@dab
+                cv[i] = a
+                val strength = a * opacity
+                c[i] = if (erase) { val al = (PixelOps.a(bs[i]) * (1 - strength)).toInt(); if (al <= 2) 0 else (bs[i] and 0xFFFFFF) or (al shl 24) } else PixelOps.over(bs[i], color, strength)
             }
         }
+    }
+    /** The smoothing brush: blends each pixel under it toward its neighbours. */
+    private fun smoothAt(c: IntArray, x: Float, y: Float) {
+        val src = c.copyOf()
+        dab(x, y) { i, a -> c[i] = PixelOps.mix(src[i], PixelOps.blurAt(src, doc.w, doc.h, i % doc.w, i / doc.w), a * opacity * 0.6f) }
+    }
+    private fun put(c: IntArray, x: Int, y: Int, col: Int) {
+        dab(x + 0.5f, y + 0.5f) { i, _ -> c[i] = col }
     }
     private fun lineOn(c: IntArray, x0: Int, y0: Int, x1: Int, y1: Int, col: Int) {
         var x = x0; var y = y0; val dx = abs(x1 - x0); val dy = -abs(y1 - y0); val sx = if (x0 < x1) 1 else -1; val sy = if (y0 < y1) 1 else -1; var err = dx + dy
@@ -393,25 +449,43 @@ class PixelStudio(private val act: MainActivity, private val lib: Library, priva
         }
         if (mirror) { val mx = doc.w - 1 - x; if (c[y * doc.w + mx] == target) fill(c, mx, y, col) }
     }
+    /** A fill whose edge blends into what's around it. */
+    private fun softFill(c: IntArray, x: Int, y: Int, col: Int) {
+        val before = c.copyOf(); fill(c, x, y, col)
+        val w = doc.w; val h = doc.h
+        val mask = BooleanArray(w * h)
+        for (i in c.indices) if (c[i] != before[i]) {
+            val px = i % w; val py = i / w
+            for (dy in -1..1) for (dx in -1..1) { val xx = px + dx; val yy = py + dy; if (xx in 0 until w && yy in 0 until h) mask[yy * w + xx] = true }
+        }
+        PixelOps.smoothEdges(c, w, h, 0.6f, mask)
+    }
 
-    fun strokeStart(x: Int, y: Int) {
-        before = doc.copy(); sx = x; sy = y; lx = x; ly = y
+    private var fx = 0f; private var fy = 0f
+    fun strokeStart(x: Int, y: Int, px: Float = x + 0.5f, py: Float = y + 0.5f) {
+        before = doc.copy(); sx = x; sy = y; lx = x; ly = y; fx = px; fy = py
         val c = doc.cell(dir, frame)
+        base = c.copyOf(); cov = FloatArray(c.size)
         when (tool) {
-            Tool.PEN -> put(c, x, y, color)
-            Tool.ERASE -> put(c, x, y, TRANSPARENT)
-            Tool.FILL -> fill(c, x, y, color)
+            Tool.PEN -> paintLine(c, px, py, px, py, false)
+            Tool.ERASE -> paintLine(c, px, py, px, py, true)
+            Tool.SMOOTH -> smoothAt(c, px, py)
+            Tool.FILL -> if (opacity < 1f) { val f0 = c.copyOf(); if (soft) softFill(c, x, y, color) else fill(c, x, y, color); for (i in c.indices) if (c[i] != f0[i]) c[i] = PixelOps.mix(f0[i], c[i], opacity) } else if (soft) softFill(c, x, y, color) else fill(c, x, y, color)
             Tool.PICK -> if (x in 0 until doc.w && y in 0 until doc.h) { val v = c[y * doc.w + x]; if (Color.alpha(v) > 0) { color = v; remember(v); tool = Tool.PEN; refreshColors(); refreshTools() } }
             Tool.MOVE -> moveBase = c.copyOf()
             else -> {}
         }
     }
-    fun strokeMove(x: Int, y: Int) {
-        if (x == lx && y == ly) return
+    fun strokeMove(x: Int, y: Int, px: Float = x + 0.5f, py: Float = y + 0.5f) {
         val c = doc.cell(dir, frame)
         when (tool) {
-            Tool.PEN -> lineOn(c, lx, ly, x, y, color)
-            Tool.ERASE -> lineOn(c, lx, ly, x, y, TRANSPARENT)
+            Tool.PEN -> { paintLine(c, fx, fy, px, py, false); fx = px; fy = py; lx = x; ly = y; return }
+            Tool.ERASE -> { paintLine(c, fx, fy, px, py, true); fx = px; fy = py; lx = x; ly = y; return }
+            Tool.SMOOTH -> { if (hypot(px - fx, py - fy) >= max(0.5f, brush / 4f)) { smoothAt(c, px, py); fx = px; fy = py }; return }
+            else -> {}
+        }
+        if (x == lx && y == ly) return
+        when (tool) {
             Tool.LINE, Tool.BOX, Tool.OVAL -> {
                 val pv = c.copyOf()
                 when (tool) { Tool.LINE -> lineOn(pv, sx, sy, x, y, color); Tool.BOX -> boxOn(pv, sx, sy, x, y, color); else -> ovalOn(pv, sx, sy, x, y, color) }
@@ -426,18 +500,115 @@ class PixelStudio(private val act: MainActivity, private val lib: Library, priva
         lx = x; ly = y
     }
     fun strokeEnd() {
-        preview?.let { it.copyInto(doc.cell(dir, frame)) }; preview = null; moveBase = null
+        preview?.let { it.copyInto(doc.cell(dir, frame)) }; preview = null; moveBase = null; base = null; cov = null
         val b = before ?: return; before = null
         if (tool == Tool.PICK) return
         undo.addLast(b); while (undo.size > 60) undo.removeFirst(); redo.clear()
         dirty = true; refreshTitle(); frameRow.invalidate(); for (i in 0 until frameRow.childCount) frameRow.getChildAt(i).invalidate()
     }
-    fun strokeCancel() { before?.let { doc.restore(it) }; before = null; preview = null; moveBase = null }
+    fun strokeCancel() { before?.let { doc.restore(it) }; before = null; preview = null; moveBase = null; base = null; cov = null }
+
+    private fun detailDialog() {
+        val opts = arrayOf("×2 detail, smoothed", "×3 detail, smoothed", "×4 detail, smoothed", "×2 as plain blocks", "×4 as plain blocks", "Back to pixel art (×1)")
+        AlertDialog.Builder(act).setTitle("Draw finer detail: the sprite keeps its size in the world, with more pixels to paint")
+            .setItems(opts) { _, i ->
+                if (i == 5) {
+                    if (doc.density == 1) return@setItems
+                    val k = doc.density
+                    edit { doc.cells = Array(doc.dirs) { d -> ArrayList(doc.cells[d].map { PixelOps.boxDown(it, doc.w, doc.h, doc.w / k, doc.h / k).also { o -> for (j in o.indices) if (PixelOps.a(o[j]) < 110) o[j] = 0 else o[j] = o[j] or (0xFF shl 24) } }) }; doc.w /= k; doc.h /= k; doc.density = 1 }
+                } else {
+                    val k = intArrayOf(2, 3, 4, 2, 4)[i]; val smooth = i < 3
+                    if (doc.w * k * doc.frames > Library.MAX_PX || doc.h * k * doc.dirs > Library.MAX_PX) { act.toastIt("Too big for that much detail"); return@setItems }
+                    edit { doc.detail(k, smooth) }
+                    if (brush == 1) brush = k
+                    soft = true; refreshTools()
+                }
+                canvas.fit(); refreshTitle()
+            }.show()
+    }
+
+    private fun smoothDialog() {
+        AlertDialog.Builder(act).setTitle("Smooth the edges (where colours meet; flat areas stay put)")
+            .setItems(arrayOf("This frame, gently", "This frame, strongly", "Every frame and direction, gently")) { _, i ->
+                edit {
+                    val cells = if (i == 2) doc.cells.flatMap { it } else listOf(doc.cell(dir, frame))
+                    cells.forEach { c -> PixelOps.smoothEdges(c, doc.w, doc.h, if (i == 1) 0.8f else 0.5f); if (i == 1) PixelOps.smoothEdges(c, doc.w, doc.h, 0.5f) }
+                }
+            }.show()
+    }
+
+    /** A picture from anywhere on the phone, turned into a sprite with a live preview. */
+    fun importImage(uri: android.net.Uri) {
+        val bmp = runCatching {
+            val o = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            act.contentResolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, o) }
+            var sample = 1; while (o.outWidth / sample > 1600 || o.outHeight / sample > 1600) sample *= 2
+            act.contentResolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample; inPreferredConfig = Bitmap.Config.ARGB_8888 }) }
+        }.getOrNull()
+        if (bmp == null) { act.toastIt("Couldn't open that picture"); return }
+        val src = PixelOps.source(bmp)
+        val o = PixelOps.Convert(width = 48, detail = 1, colors = 24, background = 30, outline = true, punch = 30, smooth = false)
+        var outW = 0; var outH = 0; var out = IntArray(0)
+        val pv = object : View(act) {
+            val pp = Paint().apply { isFilterBitmap = false }; val fp = Paint()
+            override fun onDraw(c: Canvas) {
+                fp.color = 0xFF2E2E3C.toInt(); c.drawRect(0f, 0f, width.toFloat(), height.toFloat(), fp)
+                if (outW == 0) return
+                val b = Bitmap.createBitmap(outW, outH, Bitmap.Config.ARGB_8888); b.setPixels(out, 0, outW, 0, 0, outW, outH)
+                val k = min((width - 16f) / outW, (height - 16f) / outH)
+                // shown at its world size x some zoom: detail sprites smoothed, pixel art crisp
+                val dw = outW * k; val dh = outH * k
+                c.drawBitmap(b, null, RectF(width / 2 - dw / 2, height / 2 - dh / 2, width / 2 + dw / 2, height / 2 + dh / 2), pp)
+            }
+        }
+        val info = TextView(act).apply { textSize = 12f }
+        fun recompute() {
+            val bw = o.width.coerceAtLeast(4); val bh = max(4, (bw * src.h / src.w.toFloat()).toInt())
+            outW = (bw * o.detail).coerceAtMost(Library.MAX_PX); outH = (bh * o.detail).coerceAtMost(Library.MAX_PX)
+            out = PixelOps.convert(src, outW, outH, o)
+            info.text = "${bw} × ${bh} in the world" + (if (o.detail > 1) "  (${outW} × ${outH} picture pixels)" else "") + (if (o.colors in 2..64) "  ${o.colors} colours" else "  all colours")
+            pv.invalidate()
+        }
+        val box = LinearLayout(act).apply { orientation = LinearLayout.VERTICAL; setPadding(dpi(16f), dpi(6f), dpi(16f), 0) }
+        box.addView(pv, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dpi(220f)))
+        box.addView(info)
+        fun slider(label: String, lo: Int, hi: Int, v: Int, show: (Int) -> String, on: (Int) -> Unit) {
+            val t = TextView(act).apply { textSize = 12f; text = "$label: ${show(v)}" }
+            box.addView(t)
+            box.addView(SeekBar(act).apply { max = hi - lo; progress = v - lo; setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(sb: SeekBar?, p: Int, u: Boolean) { t.text = "$label: ${show(p + lo)}"; on(p + lo) }
+                override fun onStartTrackingTouch(sb: SeekBar?) {}
+                override fun onStopTrackingTouch(sb: SeekBar?) { recompute() } }) })
+        }
+        slider("Size (width in world pixels)", 8, 128, o.width, { "$it" }) { o.width = it }
+        slider("Detail", 1, 4, o.detail, { if (it == 1) "×1 pixel art" else "×$it smooth detail" }) { o.detail = it; if (it > 1) o.smooth = true }
+        slider("Colours", 2, 65, o.colors, { if (it > 64) "all" else "$it" }) { o.colors = it }
+        slider("Remove background", 0, 100, o.background, { if (it == 0) "off" else "$it" }) { o.background = it }
+        slider("Punch (colour and contrast)", 0, 100, o.punch, { "$it" }) { o.punch = it }
+        val outlineBox = android.widget.CheckBox(act).apply { text = "Dark outline"; isChecked = o.outline; setOnCheckedChangeListener { _, b -> o.outline = b; recompute() } }
+        val smoothBox = android.widget.CheckBox(act).apply { text = "Smooth edges (organic)"; isChecked = o.smooth; setOnCheckedChangeListener { _, b -> o.smooth = b; recompute() } }
+        box.addView(outlineBox); box.addView(smoothBox)
+        recompute()
+        AlertDialog.Builder(act).setTitle("Turn a picture into a sprite").setView(android.widget.ScrollView(act).apply { addView(box) })
+            .setPositiveButton("New sprite") { _, _ ->
+                push(); val d = PixDoc(outW, outH, 1, 1); d.density = o.detail; out.copyInto(d.cell(0, 0))
+                doc = d; dir = 0; frame = 0; openedKey = null; dirty = true; cat = if (cat == "tiles" || cat == "walls") "props" else cat
+                name = "imported"; if (o.detail > 1) { soft = true; brush = o.detail }
+                canvas.fit(); refreshAll()
+            }
+            .setNeutralButton("Into this frame") { _, _ ->
+                // fitted inside the current frame at its own detail, standing on the bottom edge
+                val oo = PixelOps.Convert(o.width, doc.density, o.colors, o.background, o.outline, o.punch, o.smooth)
+                val pic = PixelOps.convert(src, doc.w, doc.h, oo)
+                edit { val c = doc.cell(dir, frame); for (i in c.indices) if (PixelOps.a(pic[i]) > 0) c[i] = PixelOps.over(c[i], pic[i], 1f) }
+            }
+            .setNegativeButton("Cancel", null).show()
+    }
 
     private fun outlineDialog() {
         AlertDialog.Builder(act).setTitle("Outline in the current colour")
             .setItems(arrayOf("This frame", "Every frame and direction")) { _, i ->
-                edit { val cells = if (i == 0) listOf(doc.cell(dir, frame)) else doc.cells.flatMap { it }; cells.forEach { outline(it, color) } }
+                edit { val cells = if (i == 0) listOf(doc.cell(dir, frame)) else doc.cells.flatMap { it }; cells.forEach { c -> repeat(doc.density) { outline(c, color) } } }
             }.show()
     }
     private fun outline(c: IntArray, col: Int) {
@@ -464,6 +635,8 @@ class PixelStudio(private val act: MainActivity, private val lib: Library, priva
         box.addView(custom)
         val frames = spinner(listOf("1 frame (still)", "2 frames", "3 frames (walk: stand, step, step)", "4 frames", "6 frames", "8 frames"), 2)
         box.addView(cap("Frames (per direction):")); box.addView(frames)
+        val det = spinner(listOf("×1: classic pixel art", "×2 detail", "×3 detail", "×4 detail: smooth, organic"), 0)
+        box.addView(cap("Detail (more pixels per world pixel, drawn at the same size in the world):")); box.addView(det)
         val nm = EditText(act).apply { setText("my_sprite"); inputType = InputType.TYPE_CLASS_TEXT }
         box.addView(cap("Name:")); box.addView(nm)
         kind.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
@@ -478,7 +651,10 @@ class PixelStudio(private val act: MainActivity, private val lib: Library, priva
             if (k >= 6) { w = 16; h = 16 }
             w = w.coerceIn(4, Library.MAX_PX); h = h.coerceIn(4, Library.MAX_PX)
             val f = intArrayOf(1, 2, 3, 4, 6, 8)[frames.selectedItemPosition]
-            val d = PixDoc(w, h, if (k <= 1) 4 else 1, f)
+            val dk = det.selectedItemPosition + 1
+            if (w * dk * f > Library.MAX_PX || h * dk * (if (k <= 1) 4 else 1) > Library.MAX_PX) { act.toastIt("Too big at that detail"); return@setPositiveButton }
+            val d = PixDoc(w * dk, h * dk, if (k <= 1) 4 else 1, f); d.density = dk
+            if (dk > 1) { soft = true; brush = dk } else { soft = false; brush = 1 }
             push(); doc = d; dir = 0; frame = 0; cat = kinds[k].second; openedKey = null; dirty = true
             name = nm.text.toString().lowercase().replace(Regex("[^a-z0-9_]+"), "_").trim('_').ifEmpty { "my_sprite" }
             canvas.fit(); refreshAll()
@@ -506,7 +682,7 @@ class PixelStudio(private val act: MainActivity, private val lib: Library, priva
                         edit { doc.resize(nw, nh) }; canvas.fit()
                     }.setNegativeButton("Cancel", null).show()
                 }
-                1, 2, 3 -> { val k = floatArrayOf(2f, 1.5f, 0.5f)[i - 1]; if (doc.w * k > Library.MAX_PX || doc.h * k > Library.MAX_PX) act.toastIt("Too big") else { edit { doc.scale(k) }; canvas.fit() } }
+                1, 2, 3 -> { val k = floatArrayOf(2f, 1.5f, 0.5f)[i - 1]; if (doc.density > 1) { act.toastIt("Use DETAIL to change a detail sprite's resolution"); return@setItems }; if (doc.w * k > Library.MAX_PX || doc.h * k > Library.MAX_PX) act.toastIt("Too big") else { edit { doc.scale(k) }; canvas.fit() } }
                 4 -> if (doc.dirs == 1) { edit { val base = doc.cells[0]; doc.cells = Array(4) { d -> ArrayList(base.map { it.copyOf() }) }; doc.dirs = 4; if (cat != "characters") cat = "characters" } }
                 5 -> if (doc.dirs == 4) { edit { doc.cells = arrayOf(doc.cells[0]); doc.dirs = 1; dir = 0 } }
             }
@@ -514,7 +690,7 @@ class PixelStudio(private val act: MainActivity, private val lib: Library, priva
         }.show()
     }
 
-    private fun fileName() = name + (if (doc.dirs == 4) "_4dir" else "") + (if (doc.frames > 1) "_f${doc.frames}" else "") + ".png"
+    private fun fileName() = name + (if (doc.dirs == 4) "_4dir" else "") + (if (doc.frames > 1) "_f${doc.frames}" else "") + (if (doc.density > 1) "@${doc.density}x" else "") + ".png"
 
     private fun save(askName: Boolean) {
         if (askName || openedKey == null && name == "new_character") {
@@ -539,14 +715,12 @@ class PixelStudio(private val act: MainActivity, private val lib: Library, priva
                 val dirId = ws.dir(Library.folderOf(c)) ?: throw IllegalStateException("no folder")
                 ws.write(dirId, file, "image/png", bytes)
                 // the same sprite saved under a new frame count: replace the old sheet rather than leave a twin
-                if (old != null && old.substringBefore('/') == c && lib.get(old)?.let { "${it.name}.png" } != file) {
-                    val oldName = old.substringAfter('/') + ".png"
-                    ws.list(dirId).firstOrNull { it.name == oldName }?.let { ws.delete(it.id) }
-                }
+                val oldName = old?.let { lib.get(it)?.fileName }
+                if (old != null && old.substringBefore('/') == c && oldName != null && oldName != file) ws.list(dirId).firstOrNull { it.name == oldName }?.let { ws.delete(it.id) }
             }.exceptionOrNull()
             act.runOnUiThread {
                 if (err != null) act.toastIt("Couldn't save: ${err.message}")
-                else { openedKey = "$c/" + file.removeSuffix(".png"); dirty = false; refreshTitle(); act.toastIt("Saved $c/$file"); lib.rescan() }
+                else { openedKey = "$c/" + file.removeSuffix(".png").replace(Regex("@[1-8]x$"), ""); dirty = false; refreshTitle(); act.toastIt("Saved $c/$file"); lib.rescan() }
             }
         }.start()
     }

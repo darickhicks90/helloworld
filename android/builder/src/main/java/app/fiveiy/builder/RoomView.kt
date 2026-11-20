@@ -38,6 +38,7 @@ class RoomView(ctx: Context, private val lib: Library) : View(ctx) {
     var onRoom: (() -> Unit)? = null
 
     private val p = Paint().apply { isFilterBitmap = false; isAntiAlias = false }
+    private val smooth = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
     private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
     private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD); color = 0xFF181820.toInt() }
@@ -111,8 +112,8 @@ class RoomView(ctx: Context, private val lib: Library) : View(ctx) {
             val a = lib.get(k); val b = a?.bmp
             if (b == null) { missing(c, l, t, 16f, 16f); continue }
             val f = if (a.frames > 1) (time * 6).toInt() % a.frames else 0
-            src.set(f * a.frameW, 0, f * a.frameW + a.frameW, a.frameH); dst.set(l, t, l + 16, t + 16)
-            c.drawBitmap(b, src, dst, p)
+            src.set(f * a.srcW, 0, f * a.srcW + a.srcW, a.srcH); dst.set(l, t, l + 16, t + 16)
+            c.drawBitmap(b, src, dst, if (a.density > 1) smooth else p)
         }
     }
 
@@ -138,9 +139,11 @@ class RoomView(ctx: Context, private val lib: Library) : View(ctx) {
             else -> (time * 6).toInt() % a.frames
         }
         val row = if (a.dirs == 4) dir.coerceIn(0, 3) else 0
-        val fh = a.frameH
-        src.set(f * a.frameW, row * fh, f * a.frameW + a.frameW, row * fh + fh)
-        if (flip) { c.save(); c.scale(-1f, 1f, x, 0f); c.drawBitmap(b, src, dst, p); c.restore() } else c.drawBitmap(b, src, dst, p)
+        val fh = a.srcH
+        src.set(f * a.srcW, row * fh, f * a.srcW + a.srcW, row * fh + fh)
+        // detail sprites are drawn smoothly; plain pixel art stays crisp
+        val pp = if (a.density > 1) smooth else p
+        if (flip) { c.save(); c.scale(-1f, 1f, x, 0f); c.drawBitmap(b, src, dst, pp); c.restore() } else c.drawBitmap(b, src, dst, pp)
     }
 
     private val selBox = RectF(); private val footBox = RectF()

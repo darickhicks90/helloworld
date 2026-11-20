@@ -56,7 +56,7 @@ class MainActivity : Activity() {
     private fun dpi(v: Float) = dp(v).toInt()
 
     companion object {
-        const val PICK_FOLDER = 1; const val IMPORT = 2
+        const val PICK_FOLDER = 1; const val IMPORT = 2; const val STUDIO_IMAGE = 3
         const val BG = 0xFF14141C.toInt(); const val PANEL = 0xFF22222E.toInt(); const val INK = 0xFF181820.toInt()
         const val GOLD = 0xFFF0CC50.toInt(); const val GREEN = 0xFF48A058.toInt(); const val RED = 0xFFC84848.toInt(); const val BLUE = 0xFF3C6CC8.toInt(); const val PURPLE = 0xFF6048B0.toInt(); const val GREY = 0xFF4A4A5A.toInt()
         val TABS = listOf("tiles" to "Tiles", "walls" to "Walls", "props" to "Props", "decor" to "Decor", "characters" to "Characters", "kiosks" to "Kiosks", "items" to "Items", "sounds" to "Sounds", "music" to "Music")
@@ -109,6 +109,7 @@ class MainActivity : Activity() {
                 openFolder(uri)
             }
             IMPORT -> importFile(uri)
+            STUDIO_IMAGE -> studio?.importImage(uri)
         }
     }
 
@@ -192,6 +193,10 @@ class MainActivity : Activity() {
     private var mainRoot: View? = null
     private var studio: PixelStudio? = null
     fun toastIt(s: String) = toast(s)
+    fun pickImageForStudio() {
+        runCatching { startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("image/*"), STUDIO_IMAGE) }
+            .onFailure { toast("No picture picker on this phone") }
+    }
     private fun openStudio(key: String?) {
         val l = lib ?: return; val w = ws ?: return
         if (view.play) toggleMode()
@@ -223,6 +228,7 @@ class MainActivity : Activity() {
     /** One palette cell: the sprite's first frame (or a note for sounds), and its name. */
     private inner class Thumb(val key: String?, val title: String, val on: Boolean) : View(this@MainActivity) {
         private val p = Paint().apply { isFilterBitmap = false }
+        private val sp = Paint(Paint.FILTER_BITMAP_FLAG)
         private val f = Paint(Paint.ANTI_ALIAS_FLAG)
         private val t = Paint(Paint.ANTI_ALIAS_FLAG).apply { textSize = dp(10f); color = 0xFFE0E0E8.toInt(); textAlign = Paint.Align.CENTER; typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD) }
         override fun onDraw(c: Canvas) {
@@ -233,9 +239,9 @@ class MainActivity : Activity() {
             val box = RectF(dp(8f), dp(6f), w - dp(8f), h - dp(20f))
             if (b != null) {
                 val fw = a.frameW.toFloat(); val fh = a.frameH.toFloat()
-                val k = minOf(box.width() / fw, box.height() / fh).let { if (it >= 1f) kotlin.math.floor(it) else it }
+                val k = minOf(box.width() / fw, box.height() / fh).let { if (it >= 1f && a.density == 1) kotlin.math.floor(it) else it }
                 val dw = fw * k; val dh = fh * k
-                c.drawBitmap(b, Rect(0, 0, a.frameW, a.frameH), RectF(box.centerX() - dw / 2, box.bottom - dh, box.centerX() + dw / 2, box.bottom), p)
+                c.drawBitmap(b, Rect(0, 0, a.srcW, a.srcH), RectF(box.centerX() - dw / 2, box.bottom - dh, box.centerX() + dw / 2, box.bottom), if (a.density > 1) sp else p)
                 if (a.frames > 1) { t.textSize = dp(9f); t.color = GOLD; c.drawText("×${a.frames}", w - dp(14f), dp(16f), t); t.color = 0xFFE0E0E8.toInt() }
             } else {
                 t.textSize = dp(24f); c.drawText(when { key == null -> title.take(1); key.startsWith("music") -> "♫"; key.startsWith("sounds") -> "♪"; else -> "?" }, box.centerX(), box.centerY() + dp(9f), t)
@@ -427,6 +433,9 @@ class MainActivity : Activity() {
             "PLAY\n• Drag anywhere to walk; tap to talk, read, shop or use.\n• Tap a palette picture to drop it in front of you.\n\n" +
             "PIXEL STUDIO\n• NEW makes a character (4 directions, 24×24, a 3-frame walk), a monster, prop, tile or item at any size.\n" +
             "• One finger draws; two fingers pinch to zoom and drag to pan. MIRROR paints both halves; ONION shows the frame before.\n" +
+            "• DETAIL gives a sprite 2-4x the pixels at the same size in the world, smoothed, to paint finer detail with SOFT brushes, " +
+            "opacity, SMOOTH (blends edges) and soft fills; SMOOTH EDGES rounds off jaggies. Saved as name@4x.png.\n" +
+            "• IMPORT IMAGE turns any picture into a sprite: size, detail, colours, background removal, punch, outline.\n" +
             "• ▶ TO ◀ makes the left-facing row by mirroring the right. OUTLINE rims everything in the current colour.\n• SAVE puts it in your folder; the palette picks it up.\n\n" +
             "YOUR FILES\n• Put PNGs, sounds and music in the matching folders (each has a README). They show up within two seconds, even while you're here.\n" +
             "• Save over a file to update it everywhere. Files that can't be used are listed under WORLD → Problems.\n\nEverything saves by itself, and UNDO steps back.")

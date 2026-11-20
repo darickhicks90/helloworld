@@ -719,7 +719,7 @@ class HallScreen(c: Context) : PixelView(c) {
 
     /** Is this box of floor taken? (pools only stop feet, not shots) */
     private fun solid(l: Float, t: Float, r: Float, b: Float, walk: Boolean = true): Boolean {
-        if (throne && phase != Phase.WON && r > dais.left + 4 && l < dais.right - 4 && t < dais.bottom - 2 && b > dais.top) return true
+        if (throne && phase != Phase.WON && chapter == 1 && r > dais.left + 4 && l < dais.right - 4 && t < dais.bottom - 2 && b > dais.top) return true
         for (pp in room.props) { val f = pp.foot; if (r > f.left && l < f.right && t < f.bottom && b > f.top) return true }
         if (walk) for (w in room.pools) if (r > w.left + 2 && l < w.right - 2 && t < w.bottom - 2 && b > w.top + 2) return true
         return false
@@ -908,12 +908,23 @@ class HallScreen(c: Context) : PixelView(c) {
 
     private fun enterRoom(nx: Int, ny: Int, px: Float, py: Float) {
         rx = nx; ry = ny; hx = px; hy = py; bannerT = 1.8f
+        if (blocked(hx, hy)) unstick()
         if (friend != null && frState == 1) { frRoom = roomId; placeFriendNear() }
         if (chapter == 2 && phase == Phase.FIGHT && stage == Stage.CHASE && bossRoom != roomId) { followT = 2.2f; entryX = hx + 8; entryY = hy + 14 }
         shots.clear(); drawing.clear(); drawLen = 0f
         if (castRune >= 0) { castRune = -1; stroke.clear(); spellT = 4f }
         val id = roomId
         if (room.kind != 6 && !throne && phase == Phase.FIGHT && minions.count { it.room == id } < 2) repeat(2 + rnd.nextInt(2)) { spawnMinion(null) }
+    }
+
+    /** Moves you to the nearest open floor (arriving through a doorway onto something solid). */
+    private fun unstick() {
+        val x0 = hx; val y0 = hy
+        for (r in 2..90 step 2) for (k in 0 until 16) {
+            val a = k * 0.3927f; val x = x0 + cos(a) * r; val y = y0 + sin(a) * r
+            if (x < 0f || x > W - 16f || y < 14f || y > H - 16f) continue
+            if (!blocked(x, y)) { hx = x; hy = y; return }
+        }
     }
 
     private fun spawnMinion(at: Pair<Float, Float>?) {
@@ -1002,7 +1013,7 @@ class HallScreen(c: Context) : PixelView(c) {
             override fun score(stroke: List<FloatArray>, rune: List<Pair<Float, Float>>) = similarityTo(stroke, rune, RuneShapes.closed(rune))
             override fun buzz() { performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP) }
             override fun backdrop(time: Float) { drawRoom(time); room.props.forEach { drawProp(it, time) } }
-        }, queen = her, handX = 0.908f, handY = 0.032f)
+        }, queen = her, handX = 0.908f, handY = 0.113f)
         sfx.play(HallSfx.S.DUEL); sfx.rumbleBig()
     }
 

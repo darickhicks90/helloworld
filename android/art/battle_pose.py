@@ -1,178 +1,259 @@
-"""The duel's creature: the night-meadow pixel art re-posed into a fighting stance with a battle axe.
-Cut out of its background (no moon), arms re-posed at the shoulders (axe raised in one hand, the other
-reaching to grab), knees bent a little, an angry brow, and the axe painted in the same pixel style."""
-import math, sys
+"""The duel's creature, from the night-meadow pixel art (native 256x224), in the two-handed axe stance of
+the reference pose: feet set wide, one hand forward on the haft near the head, the other low at the hip
+near the butt, the haft across the body. His torso and head stay as drawn; the legs swing out at the
+hips; the arms are grown anew along the pose with his own arm fur mapped onto them (so there are no
+seams at the joints); the fists close on the haft; the axe is painted at the same pixel scale."""
+import math, random, sys
 from PIL import Image, ImageDraw
-nat = Image.open(sys.argv[1]).convert("RGBA")       # 256x224 native pixels
-W, H = nat.size
-px = nat.load()
+random.seed(5)
+nat = Image.open(sys.argv[1]).convert("RGBA"); W, H = nat.size; npx = nat.load()
+MID_X = 126                                  # he's symmetric about here
+def mx(x): return 2 * MID_X - x
 
 def is_fur(c):
     r, g, b, _ = c
     return r > g >= b - 6 and r - b > 22 and r > 48
-mask = Image.new("L", (W, H), 0); m = mask.load()
+# ---- his silhouette (biggest fur region, holes filled), and stray fireflies / grass painted over
+fur = [[is_fur(npx[x, y]) for x in range(W)] for y in range(H)]
+seen = [[False] * W for _ in range(H)]; best = []
 for y in range(H):
     for x in range(W):
-        if is_fur(px[x, y]): m[x, y] = 255
-# keep the biggest piece (him), then fill the holes in it (eyes, fireflies in front of him)
-seen = set(); best = []
-for y in range(H):
-    for x in range(W):
-        if m[x, y] and (x, y) not in seen:
-            comp = []; st = [(x, y)]; seen.add((x, y))
+        if fur[y][x] and not seen[y][x]:
+            comp = []; st = [(x, y)]; seen[y][x] = True
             while st:
                 cx, cy = st.pop(); comp.append((cx, cy))
                 for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-                    nx, ny = cx + dx, cy + dy
-                    if 0 <= nx < W and 0 <= ny < H and m[nx, ny] and (nx, ny) not in seen: seen.add((nx, ny)); st.append((nx, ny))
+                    nx_, ny_ = cx + dx, cy + dy
+                    if 0 <= nx_ < W and 0 <= ny_ < H and fur[ny_][nx_] and not seen[ny_][nx_]: seen[ny_][nx_] = True; st.append((nx_, ny_))
             if len(comp) > len(best): best = comp
-body = Image.new("L", (W, H), 0); bm = body.load()
-for (x, y) in best: bm[x, y] = 255
-outside = set(); st = [(0, 0)]; outside.add((0, 0))
+body = [[False] * W for _ in range(H)]
+for (x, y) in best: body[y][x] = True
+out_ = [[False] * W for _ in range(H)]; st = [(0, 0)]; out_[0][0] = True
 while st:
     cx, cy = st.pop()
     for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-        nx, ny = cx + dx, cy + dy
-        if 0 <= nx < W and 0 <= ny < H and not bm[nx, ny] and (nx, ny) not in outside: outside.add((nx, ny)); st.append((nx, ny))
+        nx_, ny_ = cx + dx, cy + dy
+        if 0 <= nx_ < W and 0 <= ny_ < H and not body[ny_][nx_] and not out_[ny_][nx_]: out_[ny_][nx_] = True; st.append((nx_, ny_))
 for y in range(H):
     for x in range(W):
-        if not bm[x, y] and (x, y) not in outside: bm[x, y] = 255
-# repaint stray firefly / grass pixels inside him with the fur beside them
+        if not body[y][x] and not out_[y][x]: body[y][x] = True
 src = nat.copy(); sp = src.load()
 for y in range(H):
     for x in range(W):
-        if bm[x, y] and not is_fur(px[x, y]):
-            r, g, b, _ = px[x, y]
-            white = r > 200 and g > 190 and b > 170   # the whites of his eyes stay
-            dark = r < 60 and g < 50                  # outlines stay
-            if not white and not dark and (g > r - 6 or b > r):
-                for k in range(1, 7):
-                    hit = next(((x + dx, y + dy) for dx, dy in ((-k, 0), (k, 0), (0, -k), (0, k)) if 0 <= x + dx < W and 0 <= y + dy < H and is_fur(px[x + dx, y + dy])), None)
-                    if hit: sp[x, y] = px[hit]; break
-cut = Image.new("RGBA", (W, H), (0, 0, 0, 0)); cut.paste(src, (0, 0), body)
+        if body[y][x] and not is_fur(npx[x, y]):
+            r, g, b, _ = npx[x, y]
+            if r > 200 and g > 190 and b > 170: continue        # the whites of his eyes
+            if r < 70 and g < 50: continue                     # outlines
+            for k in range(1, 7):
+                hit = next(((x + dx, y + dy) for dx, dy in ((-k, 0), (k, 0), (0, -k), (0, k)) if 0 <= x + dx < W and 0 <= y + dy < H and is_fur(npx[x + dx, y + dy])), None)
+                if hit: sp[x, y] = npx[hit]; break
+def in_poly(x, y, poly):
+    c = False; j = len(poly) - 1
+    for i in range(len(poly)):
+        xi, yi = poly[i]; xj, yj = poly[j]
+        if (yi > y) != (yj > y) and x < (xj - xi) * (y - yi) / (yj - yi) + xi: c = not c
+        j = i
+    return c
+L_ARM = [(0, 30), (86, 44), (90, 62), (92, 100), (80, 150), (0, 150)]
+R_ARM = [(mx(x), y) for (x, y) in L_ARM]
+def layer(): return Image.new("RGBA", (CW, CH), (0, 0, 0, 0))
 
-def poly_mask(pts):
-    mm = Image.new("L", (W, H), 0); ImageDraw.Draw(mm).polygon(pts, fill=255)
-    out = Image.new("L", (W, H), 0); out.paste(body, (0, 0), mm); return out
-L_ARM = [(20, 62), (97, 48), (93, 70), (89, 99), (78, 126), (62, 152), (20, 152)]
-R_ARM = [(250, 62), (165, 48), (171, 70), (173, 99), (184, 126), (200, 152), (250, 152)]
-la_m = poly_mask(L_ARM); ra_m = poly_mask(R_ARM)
-def take(m_):
-    o = Image.new("RGBA", (W, H), (0, 0, 0, 0)); o.paste(cut, (0, 0), m_); return o
-la = take(la_m); ra = take(ra_m)
-torso_m = body.copy()
-tm = torso_m.load(); lm = la_m.load(); rm = ra_m.load()
+PAD_L, PAD_T, PAD_R, PAD_B = 70, 30, 40, 6
+CW, CH = W + PAD_L + PAD_R, H + PAD_T + PAD_B
+def C(p): return (p[0] + PAD_L, p[1] + PAD_T)
+
+# ---- torso and head as drawn (arms and legs taken off)
+torso = layer(); tp = torso.load()
 for y in range(H):
     for x in range(W):
-        if lm[x, y] or rm[x, y]: tm[x, y] = 0
-legs_m = torso_m.copy(); ImageDraw.Draw(legs_m).rectangle((0, 0, W, 149), fill=0)
-up_m = torso_m.copy(); ImageDraw.Draw(up_m).rectangle((0, 150, W, H), fill=0)
-torso = take(up_m); legs = take(legs_m)
-
-PAD_T, PAD_L, PAD_R = 60, 40, 70
-CW, CH = W + PAD_L + PAD_R, H + PAD_T
-GROUND = PAD_T + 214
-canvas = Image.new("RGBA", (CW, CH), (0, 0, 0, 0))
-DROP = 0
-
-# ---- legs as drawn
-legs_l = Image.new("RGBA", (CW, CH), (0, 0, 0, 0)); legs_l.alpha_composite(legs, (PAD_L, PAD_T))
-
-# ---- arms
-def arm_layer(img, pivot, ang):
-    lay = Image.new("RGBA", (CW, CH), (0, 0, 0, 0)); lay.alpha_composite(img, (PAD_L, PAD_T + DROP))
-    return lay.rotate(ang, resample=Image.NEAREST, center=(pivot[0] + PAD_L, pivot[1] + PAD_T + DROP))
-def moved(pivot, pt, ang):
-    a = math.radians(ang); dx, dy = pt[0] - pivot[0], pt[1] - pivot[1]
-    return (pivot[0] + math.cos(a) * dx + math.sin(a) * dy + PAD_L, pivot[1] - math.sin(a) * dx + math.cos(a) * dy + PAD_T + DROP)
-LP, RP = (98, 60), (172, 60)
-LANG, RANG = -30, 96          # left: swung up and out to grab; right: raised high with the axe
-arm_l = arm_layer(la, LP, LANG); arm_r = arm_layer(ra, RP, RANG)
-# the raised hand: the arm's pixel farthest from the shoulder
-ar = arm_r.load(); pvx, pvy = RP[0] + PAD_L, RP[1] + PAD_T
-far = max(((x, y) for y in range(CH) for x in range(CW) if ar[x, y][3] > 0), key=lambda q: (q[0] - pvx) ** 2 + (q[1] - pvy) ** 2)
-# grip a little back down the arm from the fingertips
-gl = math.hypot(far[0] - pvx, far[1] - pvy)
-hand_r = (far[0] - (far[0] - pvx) / gl * 9, far[1] - (far[1] - pvy) / gl * 9)
-
-# ---- the axe: haft through the raised fist, a big bearded double head above, painted in pixels
-axe = Image.new("RGBA", (CW, CH), (0, 0, 0, 0)); ad = ImageDraw.Draw(axe)
-OUT = (34, 24, 30, 255); W1 = (84, 52, 30, 255); W2 = (118, 76, 42, 255); W3 = (150, 102, 58, 255); WRAP = (62, 36, 26, 255)
-ST1 = (64, 70, 84, 255); ST2 = (104, 112, 128, 255); ST3 = (156, 164, 178, 255); ST4 = (214, 220, 230, 255); EDGE = (244, 248, 252, 255)
-hx, hy = hand_r
-bx_, by_ = hx + 14, hy + 24          # butt
-tx_, ty_ = hx - 12, hy - 58          # top
-def lerp(a, b, t): return a + (b - a) * t
-n = int(math.hypot(tx_ - bx_, ty_ - by_))
-for i in range(n + 1):
-    t = i / n; x = round(lerp(bx_, tx_, t)); y = round(lerp(by_, ty_, t))
-    ad.point((x - 2, y), OUT); ad.point((x + 2, y), OUT)
-    ad.point((x - 1, y), W1); ad.point((x, y), W2 if (i // 4) % 2 else W3); ad.point((x + 1, y), W2)
-for t in (0.06, 0.1, 0.14):
-    x = round(lerp(bx_, tx_, t)); y = round(lerp(by_, ty_, t)); ad.line((x - 2, y, x + 2, y), fill=WRAP)
-ad.rectangle((bx_ - 3, by_ - 1, bx_ + 3, by_ + 3), fill=OUT); ad.rectangle((bx_ - 2, by_, bx_ + 2, by_ + 2), fill=ST3)
-cx, cy = round(lerp(bx_, tx_, 0.88)), round(lerp(by_, ty_, 0.88))
-def blade(side):
-    pts = []
-    for i in range(0, 25):
-        a = math.radians(-80 + i * 6.6)
-        pts.append((cx + side * (8 + 22 * math.cos(a)), cy + 4 + 24 * math.sin(a)))
-    pts += [(cx + side * 7, cy + 10), (cx + side * 4, cy + 6), (cx + side * 4, cy - 6), (cx + side * 7, cy - 9)]
-    return pts
-for s_ in (-1, 1):
-    ad.polygon(blade(s_), fill=OUT)
-    ad.polygon([(cx + (x - cx) * 0.88, cy + (y - cy) * 0.88) for x, y in blade(s_)], fill=ST2)
-    ad.polygon([(cx + (x - cx) * 0.62 + s_ * 3, cy + (y - cy) * 0.62) for x, y in blade(s_)][:13] + [(cx + s_ * 8, cy)], fill=ST3)
-    edge = [(cx + s_ * (8 + 21 * math.cos(math.radians(-80 + i * 6.6))), cy + 4 + 23 * math.sin(math.radians(-80 + i * 6.6))) for i in range(25)]
-    ad.line(edge, fill=EDGE, width=1)
-    for i in range(0, 25, 2):
-        x, y = edge[i]; ad.point((x - s_, y), ST4)
-    ad.line([(cx + s_ * 9, cy + 12), (cx + s_ * 16, cy + 18)], fill=ST1)
-ad.rectangle((cx - 5, cy - 10, cx + 5, cy + 12), fill=OUT); ad.rectangle((cx - 4, cy - 9, cx + 4, cy + 11), fill=ST1)
-ad.line([(cx - 3, cy - 8), (cx - 3, cy + 10)], fill=ST2)
-ad.line([(cx - 1, cy - 4), (cx + 2, cy - 1), (cx - 1, cy + 2), (cx + 2, cy + 5)], fill=(232, 120, 52, 255))
-ad.polygon([(cx - 3, cy - 10), (cx + 3, cy - 10), (cx, cy - 20)], fill=OUT); ad.polygon([(cx - 1, cy - 11), (cx + 1, cy - 11), (cx, cy - 17)], fill=ST3)
-
-# ---- torso and head, dropped into the crouch, with an angry brow
-tl = Image.new("RGBA", (CW, CH), (0, 0, 0, 0)); tl.alpha_composite(torso, (PAD_L, PAD_T + DROP))
-fd = ImageDraw.Draw(tl)
-BROW = (46, 26, 18, 255)
+        if body[y][x] and y < 158 and not in_poly(x, y, L_ARM) and not in_poly(x, y, R_ARM):
+            tp[x + PAD_L, y + PAD_T] = sp[x, y]
+# an angry brow over the four small eyes
+td = ImageDraw.Draw(torso)
 for (x0, y0, x1, y1) in ((107, 43, 118, 46), (143, 43, 132, 46)):
-    fd.line((x0 + PAD_L, y0 + PAD_T + DROP, x1 + PAD_L, y1 + PAD_T + DROP), fill=BROW, width=2)
+    td.line((x0 + PAD_L, y0 + PAD_T, x1 + PAD_L, y1 + PAD_T), fill=(46, 26, 18, 255), width=2)
 
-out = Image.new("RGBA", (CW, CH), (0, 0, 0, 0))
-out = Image.alpha_composite(out, arm_l)
-out = Image.alpha_composite(out, legs_l)
-out = Image.alpha_composite(out, arm_r)
-out = Image.alpha_composite(out, tl)
-# round fur caps over the shoulder joints
-patch = cut.crop((120, 100, 140, 120))
-for (pv, sgn) in ((LP, -1), (RP, 1)):
-    mm = Image.new("L", patch.size, 0); ImageDraw.Draw(mm).ellipse((0, 0, 19, 19), fill=255)
-    cap = Image.new("RGBA", patch.size, (0, 0, 0, 0)); cap.paste(patch, (0, 0), mm)
-    out.alpha_composite(cap, (int(pv[0] + PAD_L - 10 + sgn * 2), int(pv[1] + PAD_T + DROP - 8)))
-out = Image.alpha_composite(out, axe)
-# fingers curled round the haft, in front of it
-od = ImageDraw.Draw(out)
-SK = (190, 132, 92, 255); SKD = (140, 90, 60, 255)
-for k_ in range(4):
-    yy = hy - 6 + k_ * 3; xx = round(lerp(bx_, tx_, (by_ - yy) / (by_ - ty_)))
-    od.rectangle((xx - 4, yy, xx + 3, yy + 2), fill=OUT); od.rectangle((xx - 3, yy, xx + 2, yy + 1), fill=SK); od.point((xx + 2, yy + 1), SKD)
-# a clean outline where he meets the air
-o = out.load(); Wc, Hc = out.size
-edge = [(x, y) for y in range(Hc) for x in range(Wc) if o[x, y][3] == 0 and any(0 <= x + a < Wc and 0 <= y + b < Hc and o[x + a, y + b][3] > 128 for a, b in ((1, 0), (-1, 0), (0, 1), (0, -1)))]
-for (x, y) in edge: o[x, y] = (40, 22, 16, 255)
-for y in range(Hc):
-    for x in range(Wc):
-        if o[x, y][3] and sum(1 for a in (-1, 0, 1) for b in (-1, 0, 1) if (a or b) and 0 <= x + a < Wc and 0 <= y + b < Hc and o[x + a, y + b][3]) <= 1: o[x, y] = (0, 0, 0, 0)
-# any green or yellow speck left on the fur (a firefly, a blade of grass) takes the fur beside it
+# ---- legs: each swung out at the hip into a wide stance
+def leg(x0, x1, hip, ang):
+    lay = layer(); lp = lay.load()
+    for y in range(146, H):
+        for x in range(x0, x1):
+            if body[y][x] and not in_poly(x, y, L_ARM) and not in_poly(x, y, R_ARM): lp[x + PAD_L, y + PAD_T] = sp[x, y]
+    return lay.rotate(ang, resample=Image.NEAREST, center=C(hip))
+legs = layer()
+legs = Image.alpha_composite(legs, leg(60, MID_X + 1, (108, 150), -15))
+legs = Image.alpha_composite(legs, leg(MID_X + 1, 200, (144, 150), 15))
+
+# ---- arms: his own arm fur mapped along new bent arms
+def arm_strip(S, E):
+    """Half-width of the source arm along S→E (scanning out from the axis until the fur ends)."""
+    dx, dy = E[0] - S[0], E[1] - S[1]; L = math.hypot(dx, dy); ux, uy = dx / L, dy / L; nx_, ny_ = -uy, ux
+    widths = []
+    for i in range(21):
+        t = i / 20; ax, ay = S[0] + dx * t, S[1] + dy * t
+        def run(sg):
+            k = 0
+            while k < 20:
+                x = round(ax + nx_ * sg * (k + 1)); y = round(ay + ny_ * sg * (k + 1))
+                if not (0 <= x < W and 0 <= y < H) or not body[y][x]: break
+                k += 1
+            return k
+        widths.append((run(1), run(-1)))
+    return widths
+def grow(S, E, path, flip=False):
+    """Paint an arm along `path` (shoulder, elbow, wrist), sampling the source arm S→E."""
+    lay = layer(); lp = lay.load()
+    dx, dy = E[0] - S[0], E[1] - S[1]; Ls = math.hypot(dx, dy); sux, suy = dx / Ls, dy / Ls; snx, sny = -suy, sux
+    widths = arm_strip(S, E)
+    segs = []; total = 0
+    for a, b in zip(path, path[1:]):
+        l = math.hypot(b[0] - a[0], b[1] - a[1]); segs.append((a, b, l, total)); total += l
+    xs = [p[0] for p in path]; ys = [p[1] for p in path]
+    for y in range(int(min(ys)) - 14, int(max(ys)) + 15):
+        for x in range(int(min(xs)) - 14, int(max(xs)) + 15):
+            best_ = None
+            for (a, b, l, off) in segs:
+                ux, uy = (b[0] - a[0]) / l, (b[1] - a[1]) / l
+                t = max(0, min(l, (x - a[0]) * ux + (y - a[1]) * uy))
+                px_, py_ = a[0] + ux * t, a[1] + uy * t
+                dd = math.hypot(x - px_, y - py_)
+                if best_ is None or dd < best_[0]:
+                    sd = (x - px_) * (-uy) + (y - py_) * ux
+                    if t <= 0 or t >= l: sd = math.copysign(dd, sd if sd != 0 else 1)   # rounded at the joints
+                    best_ = (dd, (off + t) / total, sd)
+            _, u, sd = best_
+            if flip: sd = -sd
+            i = min(20, max(0, round(u * 20))); wp, wn = widths[i]
+            # the fur keeps its own width; a little fuller at the elbow
+            if not (-wn - 0.5 <= sd <= wp + 0.5): continue
+            sx = S[0] + dx * u + snx * sd; sy = S[1] + dy * u + sny * sd
+            sx, sy = round(sx), round(sy)
+            if 0 <= sx < W and 0 <= sy < H and body[sy][sx]:
+                lp[x + PAD_L, y + PAD_T] = sp[sx, sy]
+    return lay
+# source arms (shoulder → wrist), and the new paths
+SL, WL = (86, 64), (57, 112)
+SR, WR = (mx(86), 64), (mx(57), 112)
+NEW_L = [(88, 60), (66, 94), (42, 88)]            # forward hand: elbow down, forearm out to the haft
+NEW_R = [(162, 60), (186, 98), (178, 127)]        # back hand: elbow out, forearm in to the hip
+arm_l = grow(SL, WL, NEW_L)
+arm_r = grow(SR, WR, NEW_R)
+
+# ---- the axe, painted at his pixel scale
+HL, HR = (40, 87), (180, 133)                      # the two fists on the haft
+ux, uy = HR[0] - HL[0], HR[1] - HL[1]; Lh = math.hypot(ux, uy); ux, uy = ux / Lh, uy / Lh
+nx_, ny_ = -uy, ux
+butt = (HR[0] + ux * 16, HR[1] + uy * 16)
+head = (HL[0] - ux * 30, HL[1] - uy * 30)          # the socket's middle (the blade reaches on past it)
+axe = layer(); ap = axe.load()
+OUT = (30, 22, 26, 255)
+WOOD = [(70, 40, 24), (96, 58, 32), (124, 80, 44), (152, 104, 60)]
+LEATHER = [(52, 30, 24), (78, 46, 32)]
+IRON = [(44, 46, 56), (66, 70, 84), (92, 98, 114), (124, 132, 148), (164, 172, 186), (206, 212, 222), (240, 244, 250)]
+def put(x, y, c):
+    x, y = round(x) + PAD_L, round(y) + PAD_T
+    if 0 <= x < CW and 0 <= y < CH: ap[x, y] = c if len(c) == 4 else c + (255,)
+# haft: 5 px across, grain running along it, leather wraps at the grips, an iron cap at the butt
+L_haft = math.hypot(butt[0] - head[0], butt[1] - head[1])
+for i in range(int(L_haft * 2) + 1):
+    t = i / 2
+    cx, cy = head[0] + ux * t, head[1] + uy * t
+    for k in (-3, 3): put(cx + nx_ * k, cy + ny_ * k, OUT)
+    for k in (-2, -1, 0, 1, 2):
+        grain = (int(t * 0.7 + k * 5) % 9 == 0)
+        shade = {-2: 3, -1: 2, 0: 2, 1: 1, 2: 0}[k]
+        if grain: shade = max(0, shade - 1)
+        put(cx + nx_ * k, cy + ny_ * k, WOOD[shade])
+for g in (HL, HR):
+    for t in range(-7, 8):
+        cx, cy = g[0] + ux * t, g[1] + uy * t
+        for k in (-2, -1, 0, 1, 2): put(cx + nx_ * k, cy + ny_ * k, LEATHER[1] if (t + k) % 3 else LEATHER[0])
+for t in range(0, 6):
+    cx, cy = butt[0] - ux * t, butt[1] - uy * t
+    for k in (-3, -2, -1, 0, 1, 2, 3): put(cx + nx_ * k, cy + ny_ * k, OUT if abs(k) == 3 or t in (0, 5) else IRON[2 + (1 if k < 0 else 0)])
+# head: in its own frame (a along the haft toward the head, b across), a bearded crescent blade
+REACH = 36
+def edge_at(b): return REACH - 0.006 * b * b                        # the long, gently curved cutting edge
+def inside(a, b):
+    if -7 <= a <= 7 and -9 <= b <= 9: return "socket"
+    if -13 <= a < -7 and -5 <= b <= 5: return "poll"
+    if a > 7:
+        f = (a - 7) / (REACH - 7)                                   # 0 at the neck, 1 at the edge
+        up = 8 + 24 * f ** 1.6                                       # flaring to the horns,
+        down = 8 + 27 * f ** 1.6                                     # a touch more beard below
+        if a <= edge_at(b) and -up <= b <= down: return "blade"
+    return None
+nicks = {round(random.uniform(-20, 20)) for _ in range(4)}
+for y in range(-40, 50):
+    for x in range(-50, 40):
+        X, Y = head[0] + x, head[1] + y
+        a = -(x * ux + y * uy); b = x * nx_ + y * ny_                # a grows toward the blade (beyond the head end)
+        part = inside(a, b)
+        if not part: continue
+        edge_out = any(not inside(a + da, b + db) for da, db in ((1, 0), (-1, 0), (0, 1), (0, -1)))
+        if edge_out: put(X, Y, OUT); continue
+        if part == "socket":
+            c = IRON[2] if b < 0 else IRON[1]
+            if abs(a) == 5 or (abs(b) == 5 and abs(a) < 4): c = IRON[0]
+            if (a, b) in ((-3, -4), (3, -4), (-3, 4), (3, 4)): c = IRON[5]       # rivets
+            put(X, Y, c); continue
+        if part == "poll": put(X, Y, IRON[3] if b < 0 else IRON[2]); continue
+        to_edge = edge_at(b) - a
+        if round(b) in nicks and to_edge < 1.5: continue                   # nicks in the edge
+        f = (a - 7) / (REACH - 7)
+        if to_edge < 1.5: c = IRON[6]
+        elif to_edge < 4.5: c = IRON[5] if (round(a) + round(b)) % 2 else IRON[4]   # the honed bevel, dithered
+        elif to_edge < 6: c = IRON[3]
+        else:
+            # forged face: darker by the neck, lit from above, with hammer marks and pitting
+            k = 1 + (1 if b < 0 else 0) + (1 if f > 0.45 else 0)
+            if (round(a * 0.7) + round(b * 0.5)) % 7 == 0: k += 1
+            if random.random() < 0.07: k -= 1
+            c = IRON[max(0, min(4, k))]
+        # a dark fuller line following the edge
+        if 7.5 <= to_edge < 8.5 and abs(b) < 20: c = IRON[1]
+        put(X, Y, c)
+# a worn rune on the cheek of the blade
+for (a, b) in ((16, -4), (17, -3), (18, -2), (17, -1), (16, 0), (17, 1), (18, 2), (17, 3), (16, 4)):
+    put(head[0] - ux * a + nx_ * b, head[1] - uy * a + ny_ * b, (210, 116, 52))
+
+# ---- fists closed round the haft
+SKIN = [(98, 53, 48), (134, 80, 60), (168, 108, 76), (196, 138, 98), (217, 166, 124)]
+def fist(c, flipped):
+    lay = layer(); fp = lay.load(); fd = ImageDraw.Draw(lay)
+    cx, cy = c[0] + PAD_L, c[1] + PAD_T
+    # a rounded fist across the haft, knuckles toward us
+    for y in range(-8, 9):
+        for x in range(-8, 9):
+            if (x / 8.2) ** 2 + (y / 8.6) ** 2 > 1: continue
+            light = -x * 0.25 - y * 0.35 + (1 if flipped else 0) * x * 0.2
+            k = 2 + (1 if light > 0.6 else 0) + (1 if light > 1.6 else 0) - (1 if light < -1.2 else 0)
+            fp[cx + x, cy + y] = SKIN[max(0, min(4, k))] + (255,)
+    for i in range(4):                                   # four fingers curled round, creases between
+        yy = cy - 5 + i * 3
+        fd.line((cx - 6 if not flipped else cx + 1, yy, cx - 1 if not flipped else cx + 6, yy), fill=SKIN[0] + (255,))
+        fd.point((cx - 6 if not flipped else cx + 6, yy + 1), fill=SKIN[1] + (255,))
+    fd.line((cx + (2 if not flipped else -6), cy - 7, cx + (6 if not flipped else -2), cy - 3), fill=SKIN[4] + (255,))   # the thumb over the top
+    fd.line((cx + (2 if not flipped else -6), cy - 6, cx + (6 if not flipped else -2), cy - 2), fill=SKIN[3] + (255,))
+    return lay
+
+figure = layer()
+for part in (legs, torso, arm_r, axe, arm_l, fist(HL, False), fist(HR, True)):
+    figure = Image.alpha_composite(figure, part)
+# one clean outline round the whole figure, then tidy specks
+fp = figure.load()
+edge = [(x, y) for y in range(CH) for x in range(CW) if fp[x, y][3] == 0 and any(0 <= x + a < CW and 0 <= y + b < CH and fp[x + a, y + b][3] > 128 for a, b in ((1, 0), (-1, 0), (0, 1), (0, -1)))]
+for (x, y) in edge: fp[x, y] = (40, 22, 16, 255)
+for y in range(CH):
+    for x in range(CW):
+        if fp[x, y][3] and sum(1 for a in (-1, 0, 1) for b in (-1, 0, 1) if (a or b) and 0 <= x + a < CW and 0 <= y + b < CH and fp[x + a, y + b][3]) <= 1: fp[x, y] = (0, 0, 0, 0)
 for _ in range(2):
-    for y in range(Hc):
-        for x in range(Wc):
-            r, g, b_, al = o[x, y]
+    for y in range(CH):
+        for x in range(CW):
+            r, g, b_, al = fp[x, y]
             if al and g > r - 20 and g > b_ + 25:
                 for k in range(1, 6):
-                    hit = next(((x + dx, y + dy) for dx, dy in ((-k, 0), (k, 0), (0, -k), (0, k)) if 0 <= x + dx < Wc and 0 <= y + dy < Hc and o[x + dx, y + dy][3] and o[x + dx, y + dy][0] > o[x + dx, y + dy][1] + 8), None)
-                    if hit: o[x, y] = o[hit]; break
-out = out.crop(out.getbbox())
-out.save(sys.argv[2]); print(out.size)
+                    hit = next(((x + dx, y + dy) for dx, dy in ((-k, 0), (k, 0), (0, -k), (0, k)) if 0 <= x + dx < CW and 0 <= y + dy < CH and fp[x + dx, y + dy][3] and fp[x + dx, y + dy][0] > fp[x + dx, y + dy][1] + 8), None)
+                    if hit: fp[x, y] = fp[hit]; break
+figure = figure.crop(figure.getbbox())
+figure.save(sys.argv[2]); print(figure.size)

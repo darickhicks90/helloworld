@@ -358,12 +358,12 @@ class HallBattle(
 
     /** The windows, menu and runes, in the little screen's 240×176 units (drawn scaled, over the creature). */
     private fun drawUi(c: Canvas, time: Float, strokeNorm: List<FloatArray>) {
-        window(c, 4f, 4f, 116f, 26f)
-        font.color = 0xFFF8F8F8.toInt(); c.drawText("FIVE-EYED ONE", 9f, 14f, font)
-        bar(c, 9f, 17f, 102f, host.bossHp / host.bossMax.toFloat(), 0xFFC040C0.toInt())
-        window(c, 4f, 28f, 116f, 50f)
-        c.drawText("YOU  ${host.playerHp}/${host.playerMax}", 9f, 38f, font)
-        bar(c, 9f, 41f, 102f, host.playerHp / host.playerMax.toFloat(), if (host.playerHp < host.playerMax / 4) 0xFFE04848.toInt() else 0xFF48C058.toInt())
+        // one compact status window, clear of his axe
+        window(c, 4f, 4f, 100f, 38f)
+        font.color = 0xFFF8F8F8.toInt(); c.drawText("FIVE-EYED", 9f, 13f, font)
+        bar(c, 9f, 15f, 86f, host.bossHp / host.bossMax.toFloat(), 0xFFC040C0.toInt())
+        c.drawText("YOU ${host.playerHp}", 9f, 29f, font)
+        bar(c, 9f, 31f, 86f, host.playerHp / host.playerMax.toFloat(), if (host.playerHp < host.playerMax / 4) 0xFFE04848.toInt() else 0xFF48C058.toInt())
         window(c, 4f, 128f, 236f, 172f)
         when (st) {
             St.MENU -> {
@@ -409,7 +409,15 @@ class HallBattle(
         }
     }
 
-    private val hp = Paint().apply { isFilterBitmap = false; isAntiAlias = false }   // crisp pixels, like the title screen
+    /** Crisp pixels, toned down a little to sit in the dimmed hall. */
+    private val hp = Paint().apply { isFilterBitmap = false; isAntiAlias = false; colorFilter = android.graphics.LightingColorFilter(0xE6E6F5.toInt(), 0) }
+    private var feetCache: Pair<Int, Int>? = null
+    /** Where his feet are in the picture (the left and right of the bottom rows). */
+    private fun feet(b: Bitmap, r: Rect): Pair<Int, Int> = feetCache ?: run {
+        var l = r.width(); var rr = 0
+        for (y in r.bottom - 6 until r.bottom) for (x in r.left until r.right) if ((b.getPixel(x, y) ushr 24) > 0) { l = minOf(l, x - r.left); rr = maxOf(rr, x - r.left) }
+        (if (rr > l) l to rr else 0 to r.width()).also { feetCache = it }
+    }
     private val fxp = Paint(Paint.ANTI_ALIAS_FLAG).apply { strokeCap = Paint.Cap.ROUND }
     private val path = Path()
 
@@ -430,12 +438,17 @@ class HallBattle(
             val big = fx in FX_CLAW..FX_QUAKE && fxT < 0.5f
             val lunge = if (big) sin(Math.PI.toFloat() * (fxT / 0.5f)) else 0f
             val wind = if (st == St.ATTACK) 0.03f * sin(time * 18f) else 0f
-            val hTarget = 116f * (1f + 0.12f * lunge + wind)
-            val wTarget = hTarget * s.width() / s.height()
-            val cx = 170f - 40f * lunge; val baseY = 126f + 4f * lunge
+            val hTarget = 108f * (1f + 0.12f * lunge + wind)
+            val sc = hTarget / s.height()
+            val (fl, fr) = feet(bmp, s)
+            // stood by his feet (not the picture's middle, which the axe pulls left), on the hall floor
+            val footX = 182f - 40f * lunge; val baseY = 126f + 4f * lunge
+            val left = footX - (fl + fr) / 2f * sc
             fxp.style = Paint.Style.FILL
-            fxp.color = 0x55000000; c.drawOval(X(cx - 40f), Y(baseY - 4f), X(cx + 40f), Y(baseY + 4f), fxp)
-            dst.set(X(cx - wTarget / 2), Y(baseY - hTarget), X(cx + wTarget / 2), Y(baseY))
+            fxp.color = 0x3C000000; c.drawOval(X(footX - 34f), Y(baseY - 4f), X(footX + 34f), Y(baseY + 4f), fxp)
+            fxp.color = 0x5A000000
+            for (fx_ in floatArrayOf(left + (fl + 10) * sc, left + (fr - 10) * sc)) c.drawOval(X(fx_ - 9f), Y(baseY - 2f), X(fx_ + 9f), Y(baseY + 2f), fxp)
+            dst.set(X(left), Y(baseY - hTarget), X(left + s.width() * sc), Y(baseY))
             c.drawBitmap(bmp, s, dst, hp)
             if (bossHurtT > 0f) { fxp.color = 0x55FFFFFF; c.drawRect(dst, fxp) }
         }

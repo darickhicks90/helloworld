@@ -117,6 +117,11 @@ object PixelOps {
 
     private fun removeBackground(px: IntArray, w: Int, h: Int, tol: Int) {
         if (tol <= 0) return
+        // a picture that already has a see-through background doesn't need one taken away
+        var clear = 0; var edge = 0
+        for (x in 0 until w) { edge += 2; if (a(px[x]) < 128) clear++; if (a(px[(h - 1) * w + x]) < 128) clear++ }
+        for (y in 0 until h) { edge += 2; if (a(px[y * w]) < 128) clear++; if (a(px[y * w + w - 1]) < 128) clear++ }
+        if (clear > edge / 5) return
         val lim = tol * 4.4f
         val seen = BooleanArray(w * h); val stack = ArrayDeque<Int>()
         fun seed(i: Int) { if (!seen[i] && a(px[i]) > 0) { seen[i] = true; stack.addLast(i) } else if (a(px[i]) == 0) seen[i] = true }

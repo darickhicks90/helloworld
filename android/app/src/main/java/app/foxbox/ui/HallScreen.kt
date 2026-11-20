@@ -335,7 +335,7 @@ class HallScreen(c: Context) : PixelView(c) {
     // ---- the Runecaster: a circle drawn round yourself no longer blinks; it opens the rune book.
     // Trace one of six runes on the XY pad (before the time runs out) and it takes effect.
     private val SPELLS = listOf("HEX", "BIND", "STARFALL", "HASTE", "BULWARK", "MEND")
-    private val SPELL_ABOUT = listOf("FOES WITHER", "FOES FROZEN", "STARS FALL", "ALLIES QUICK", "ALLIES HARDY", "GREAT HEAL")
+    private val SPELL_ABOUT = listOf("FOES WEAK", "FOES HELD", "FOES HIT", "ALL QUICK", "HALF HARM", "BIG HEAL")
     private val spellShapes = listOf(RuneShapes.ZIG, RuneShapes.HOUR, RuneShapes.BOLT, RuneShapes.ARCH, RuneShapes.COIL, RuneShapes.TRI)
     private val spellCdMax = floatArrayOf(14f, 16f, 18f, 15f, 16f, 22f)
     private val spellCd = FloatArray(6)
@@ -2118,27 +2118,28 @@ class HallScreen(c: Context) : PixelView(c) {
     /** The Runecaster's book: six runes; trace one on the XY pad before the bar runs out. */
     private fun drawRuneBook(time: Float) {
         if (runePromptT <= 0f || (castRune >= 0 && throne)) return
-        val l = 30f; val t = 22f; val r = 210f; val b = 118f
+        val l = 14f; val t = 18f; val r = 226f; val b = 132f
         box(l - 1, t - 1, r + 1, b + 1, INK); box(l, t, r, b, WHITE); box(l + 1, t + 1, r - 1, b - 1, 0xFFF4F0E4.toInt())
-        font.color = RUNE; sc.drawText("DRAW A RUNE", l + 46, t + 10, font)
+        font.color = RUNE; sc.drawText("DRAW A RUNE ON THE PAD", l + 6, t + 10, font)
         for (i in 0 until 6) {
-            val cx = l + 6 + (i % 3) * 60f; val cy = t + 16 + (i / 3) * 38f
+            // two columns of three: foes on the left (red), friends on the right (green)
+            val cx = l + 4 + (i / 3) * 104f; val cy = t + 15 + (i % 3) * 32f
             val ready = spellCd[i] <= 0f
-            box(cx, cy, cx + 54, cy + 34, if (ready) WHITE else PALE)
+            box(cx, cy, cx + 100, cy + 29, if (ready) WHITE else PALE)
             line2.color = if (!ready) MID else if (i < 3) 0xFFB04040.toInt() else 0xFF3C8048.toInt()
-            val pts = spellShapes[i]; val g = 18f
-            for (j in 1 until pts.size) sc.drawLine(cx + 3 + pts[j - 1].first * g, cy + 3 + pts[j - 1].second * g, cx + 3 + pts[j].first * g, cy + 3 + pts[j].second * g, line2)
+            val pts = spellShapes[i]; val g = 21f
+            for (j in 1 until pts.size) sc.drawLine(cx + 4 + pts[j - 1].first * g, cy + 4 + pts[j - 1].second * g, cx + 4 + pts[j].first * g, cy + 4 + pts[j].second * g, line2)
             font.color = if (ready) INK else MID
-            sc.drawText(SPELLS[i].take(6), cx + 24, cy + 12, font)
+            sc.drawText(SPELLS[i], cx + 30, cy + 12, font)
             font.color = if (ready) DARK else MID
-            sc.drawText(if (ready) SPELL_ABOUT[i].take(6) else "${spellCd[i].toInt() + 1}S", cx + 24, cy + 24, font)
+            sc.drawText(if (ready) SPELL_ABOUT[i] else "READY IN ${spellCd[i].toInt() + 1}", cx + 30, cy + 24, font)
         }
         font.color = INK
         box(l + 4, b - 6, r - 4, b - 3, PALE); box(l + 4, b - 6, l + 4 + (r - l - 8) * (runePromptT / RUNE_TIME).coerceIn(0f, 1f), b - 3, RUNE)
         if (stroke.size > 1 && xyRect.width() > 0) {
             line1.color = 0xFFE04848.toInt()
-            fun mx(v: Float) = r - 40 + ((v - xyRect.left) / xyRect.width()) * 34
-            fun my(v: Float) = t + 2 + ((v - xyRect.top) / xyRect.height()) * 12
+            fun mx(v: Float) = r - 30 + ((v - xyRect.left) / xyRect.width()) * 26
+            fun my(v: Float) = t + 2 + ((v - xyRect.top) / xyRect.height()) * 11
             for (k in 1 until stroke.size) sc.drawLine(mx(stroke[k - 1][0]), my(stroke[k - 1][1]), mx(stroke[k][0]), my(stroke[k][1]), line1)
         }
     }

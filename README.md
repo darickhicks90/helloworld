@@ -21,6 +21,11 @@ tablecloths, pixel flowers and mushrooms, and a little pixel fox. The pixel
 fonts come from Google Fonts. Without internet, FoxBox uses a plain
 monospace font instead.
 
+> **Also in this repository:** [✎ SketchSolve](mathsketch/), a handwriting
+> maths solver. Write an equation and circle what to solve for, or draw a
+> shape, bracket what you know and circle what you want to find. Open
+> `mathsketch/index.html`.
+
 ## How to run it
 
 FoxBox is just files. You don't need to install or build anything.

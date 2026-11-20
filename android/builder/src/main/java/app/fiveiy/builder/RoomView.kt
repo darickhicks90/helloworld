@@ -111,7 +111,7 @@ class RoomView(ctx: Context, private val lib: Library) : View(ctx) {
             val a = lib.get(k); val b = a?.bmp
             if (b == null) { missing(c, l, t, 16f, 16f); continue }
             val f = if (a.frames > 1) (time * 6).toInt() % a.frames else 0
-            src.set(f * a.frameW, 0, f * a.frameW + a.frameW, b.height); dst.set(l, t, l + 16, t + 16)
+            src.set(f * a.frameW, 0, f * a.frameW + a.frameW, a.frameH); dst.set(l, t, l + 16, t + 16)
             c.drawBitmap(b, src, dst, p)
         }
     }
@@ -123,7 +123,7 @@ class RoomView(ctx: Context, private val lib: Library) : View(ctx) {
         c.drawText("?", l + w / 2, t + h * 0.75f, text); text.textAlign = Paint.Align.LEFT
     }
 
-    private fun drawObj(c: Canvas, o: World.Obj, x: Float, y: Float, moving: Boolean = isMoving(o), flip: Boolean = o.flip) {
+    private fun drawObj(c: Canvas, o: World.Obj, x: Float, y: Float, moving: Boolean = isMoving(o), flip: Boolean = o.flip && (lib.get(o.sprite)?.dirs ?: 1) == 1, dir: Int = facing(o)) {
         val a = lib.get(o.sprite); val b = a?.bmp
         bounds(o, x, y, dst)
         if (b == null) { missing(c, dst.left, dst.top, dst.width().coerceAtLeast(8f), dst.height().coerceAtLeast(8f)); return }
@@ -131,8 +131,15 @@ class RoomView(ctx: Context, private val lib: Library) : View(ctx) {
             fill.color = 0x30000000; val w = dst.width() * 0.42f
             c.drawOval(x - w, y - 2f, x + w, y + 1.5f, fill)
         }
-        val f = when { a.frames <= 1 -> 0; o.cat == "characters" && !moving -> 0; else -> (time * 6).toInt() % a.frames }
-        src.set(f * a.frameW, 0, f * a.frameW + a.frameW, b.height)
+        val f = when {
+            a.frames <= 1 -> 0
+            o.cat == "characters" && !moving -> 0
+            o.cat == "characters" && a.frames == 3 -> WALK3[(time * 7).toInt() % 4]   // stand, step, stand, other step
+            else -> (time * 6).toInt() % a.frames
+        }
+        val row = if (a.dirs == 4) dir.coerceIn(0, 3) else 0
+        val fh = a.frameH
+        src.set(f * a.frameW, row * fh, f * a.frameW + a.frameW, row * fh + fh)
         if (flip) { c.save(); c.scale(-1f, 1f, x, 0f); c.drawBitmap(b, src, dst, p); c.restore() } else c.drawBitmap(b, src, dst, p)
     }
 
@@ -244,7 +251,7 @@ class RoomView(ctx: Context, private val lib: Library) : View(ctx) {
     // Play
     // =====================================================================================
     class PlayState {
-        var hx = 120f; var hy = 150f; var face = 1; var moving = false
+        var hx = 120f; var hy = 150f; var face = 1; var dir = 0; var moving = false
         var coins = 0
         val bag = LinkedHashMap<String, Int>()
         val taken = HashSet<Int>(); val opened = HashSet<Int>()
@@ -280,15 +287,28 @@ class RoomView(ctx: Context, private val lib: Library) : View(ctx) {
         r.objs += o; say("+ " + label(key)); return o
     }
 
+    /** Characters face where they walk (in play), or the way you set them. */
+    private val walkDir = HashMap<Int, Int>()
+    private fun facing(o: World.Obj): Int {
+        if (!play) return o.dir
+        val st = ps.npc[o.id]
+        if (st != null && isMoving(o)) return walkDir[o.id] ?: o.dir
+        // someone talking to you turns to face you
+        if (ps.dialog != null && talkingTo == o.id) { val dx = ps.hx - posX(o); val dy = ps.hy - posY(o); return if (abs(dx) > abs(dy)) (if (dx < 0) 1 else 2) else (if (dy < 0) 3 else 0) }
+        return o.dir
+    }
+    private var talkingTo = -1
     private fun posX(o: World.Obj) = if (play) o.x + (ps.npc[o.id]?.get(0) ?: 0f) else o.x
     private fun posY(o: World.Obj) = if (play) o.y + (ps.npc[o.id]?.get(1) ?: 0f) else o.y
     private fun isMoving(o: World.Obj) = play && o.wander && (ps.npc[o.id]?.let { abs(it[0] - it[2]) + abs(it[1] - it[3]) > 0.5f } ?: false)
 
-    private val heroKey get() = listOf("characters/player_f2", "characters/player").firstOrNull { lib.get(it) != null }
+    private val heroKey get() = listOf("characters/player_4dir_f3", "characters/player_4dir_f2", "characters/player_4dir", "characters/player_f2", "characters/player").firstOrNull { lib.get(it) != null }
+        ?: lib.list("characters").firstOrNull { it.name.startsWith("player") }?.key
     private val heroObj = World.Obj(-1, "characters/player", 0f, 0f)
     private fun drawHero(c: Canvas) {
         heroObj.sprite = heroKey ?: "characters/player"
-        drawObj(c, heroObj, ps.hx, ps.hy, ps.moving, ps.face < 0)
+        val four = (lib.get(heroObj.sprite)?.dirs ?: 1) == 4
+        drawObj(c, heroObj, ps.hx, ps.hy, ps.moving, !four && ps.face < 0, ps.dir)
     }
 
     private val tmp = RectF()
@@ -335,6 +355,7 @@ class RoomView(ctx: Context, private val lib: Library) : View(ctx) {
             if (!blocked(nx, ps.hy)) ps.hx = nx
             if (!blocked(ps.hx, ny)) ps.hy = ny
             if (abs(mx) > 0.2f) ps.face = if (mx > 0) 1 else -1
+            ps.dir = if (abs(mx) > abs(my)) (if (mx < 0) 1 else 2) else (if (my < 0) 3 else 0)
             ps.stepT -= dt; if (ps.stepT <= 0f) { ps.stepT = 0.32f; lib.play("sounds/step", 0.25f) }
         }
         // through an edge into the room next door
@@ -365,7 +386,10 @@ class RoomView(ctx: Context, private val lib: Library) : View(ctx) {
             val dx = st[2] - st[0]; val dy = st[3] - st[1]; val d = hypot(dx, dy)
             if (d > 0.5f) {
                 val sp = minOf(d, 16f * dt); val nx = st[0] + dx / d * sp; val ny = st[1] + dy / d * sp
-                if (!blocked(o.x + nx, o.y + ny, o) && hypot(o.x + nx - ps.hx, o.y + ny - ps.hy) > 9f) { st[0] = nx; st[1] = ny; if (abs(dx) > 0.3f) o.flip = dx < 0 } else { st[2] = st[0]; st[3] = st[1] }
+                if (!blocked(o.x + nx, o.y + ny, o) && hypot(o.x + nx - ps.hx, o.y + ny - ps.hy) > 9f) {
+                    st[0] = nx; st[1] = ny
+                    walkDir[o.id] = if (abs(dx) > abs(dy)) (if (dx < 0) 1 else 2) else (if (dy < 0) 3 else 0)
+                } else { st[2] = st[0]; st[3] = st[1] }
             }
         }
         if (w.rooms.isEmpty()) return
@@ -389,7 +413,7 @@ class RoomView(ctx: Context, private val lib: Library) : View(ctx) {
             .minByOrNull { hypot(posX(it) - ps.hx, posY(it) - 2 - ps.hy) }
             ?.takeIf { hypot(posX(it) - ps.hx, posY(it) - 2 - ps.hy) < 22f + 6f * it.scale } ?: return
         fun talk(lines: List<String>) { if (lines.isNotEmpty()) { ps.dialog = lines; ps.dialogLine = 0 } }
-        if (o.cat != "kiosks") { lib.play(o.sound ?: "sounds/talk_blip"); talk(o.lines.ifEmpty { listOf("...") }); return }
+        if (o.cat != "kiosks") { talkingTo = o.id; lib.play(o.sound ?: "sounds/talk_blip"); talk(o.lines.ifEmpty { listOf("...") }); return }
         when (o.kiosk) {
             "shop" -> {
                 val item = o.item
@@ -482,6 +506,7 @@ class RoomView(ctx: Context, private val lib: Library) : View(ctx) {
     }
 
     companion object {
-        fun label(key: String) = key.substringAfter('/').replace(Regex("_f\\d+$"), "").replace('_', ' ').uppercase()
+        fun label(key: String) = key.substringAfter('/').replace(Regex("_f\\d+$"), "").replace("_4dir", "").replace('_', ' ').uppercase()
+        val WALK3 = intArrayOf(1, 0, 2, 0)
     }
 }

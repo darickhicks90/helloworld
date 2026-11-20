@@ -25,6 +25,9 @@ Each folder has its own README with sizes and formats. The short version:
   * The bottom edge of a sprite is where it stands on the floor.
   * Animation: put the frames side by side in one PNG, all the same width, and end the
     name with _f and the number of frames, e.g. torch_f3.png. They play at 6 frames a second.
+  * Characters face four ways: rows down, left, right, up in one PNG named like
+    hero_4dir_f3.png (see sprites/characters/README.txt). The house style is 24 x 24.
+  * Draw your own in the Builder's PIXEL STUDIO (the ✎ PIXEL button); it saves here.
   * Names: lowercase letters, numbers and underscores (my_tree.png). The name is the label.
   * Sounds: WAV or OGG. Music: OGG, MP3 or WAV.
   * Changed a file? Save over it with the same name: everything using it updates.

@@ -117,7 +117,7 @@ class MainActivity : Activity() {
         val w = Workspace(this, tree); ws = w
         io.execute {
             val err = runCatching {
-                val key = "starter:$tree"
+                val key = "starter2:$tree"
                 if (!prefs.getBoolean(key, false)) { w.installStarter(); prefs.edit().putBoolean(key, true).apply() }
                 else w.installStarter(onlyReadmes = true)
             }.exceptionOrNull()
@@ -163,11 +163,13 @@ class MainActivity : Activity() {
         view.onRoom = { refreshRoomBtn(); refreshPalette() }
 
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(BG) }
+        mainRoot = root
         val top = row()
         modeBtn = button("▶ PLAY", GREEN) { toggleMode() }; top.put(modeBtn)
         roomBtn = button("ROOM", BLUE) { showMap() }; top.put(roomBtn)
         top.put(button("UNDO", GREY) { doUndo() })
         top.put(button("WORLD", PURPLE) { worldMenu() })
+        top.put(button("✎ PIXEL", GOLD) { openStudio(null) })
         top.put(button("?", GREY) { help() })
         root.addView(scroll(top))
         root.addView(view, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
@@ -184,6 +186,23 @@ class MainActivity : Activity() {
         palette = row(); root.addView(scroll(palette), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dpi(84f)))
         setContentView(padded(root))
         refreshTabs(); refreshTools(); refreshInspector()
+    }
+
+    // ---- the pixel studio, over the whole screen
+    private var mainRoot: View? = null
+    private var studio: PixelStudio? = null
+    fun toastIt(s: String) = toast(s)
+    private fun openStudio(key: String?) {
+        val l = lib ?: return; val w = ws ?: return
+        if (view.play) toggleMode()
+        val st = studio ?: PixelStudio(this, l, w) { closeStudio() }.also { studio = it }
+        val v = st.build(); if (key != null) st.open(key)
+        setContentView(padded(v))
+    }
+    private fun closeStudio() {
+        studio = null
+        mainRoot?.let { r -> (r.parent as? ViewGroup)?.removeView(r); setContentView(padded(r)) }
+        refreshTabs()
     }
 
     private fun refreshTools() {
@@ -213,10 +232,10 @@ class MainActivity : Activity() {
             val a = lib?.get(key); val b = a?.bmp
             val box = RectF(dp(8f), dp(6f), w - dp(8f), h - dp(20f))
             if (b != null) {
-                val fw = a.frameW.toFloat(); val fh = b.height.toFloat()
+                val fw = a.frameW.toFloat(); val fh = a.frameH.toFloat()
                 val k = minOf(box.width() / fw, box.height() / fh).let { if (it >= 1f) kotlin.math.floor(it) else it }
                 val dw = fw * k; val dh = fh * k
-                c.drawBitmap(b, Rect(0, 0, a.frameW, b.height), RectF(box.centerX() - dw / 2, box.bottom - dh, box.centerX() + dw / 2, box.bottom), p)
+                c.drawBitmap(b, Rect(0, 0, a.frameW, a.frameH), RectF(box.centerX() - dw / 2, box.bottom - dh, box.centerX() + dw / 2, box.bottom), p)
                 if (a.frames > 1) { t.textSize = dp(9f); t.color = GOLD; c.drawText("×${a.frames}", w - dp(14f), dp(16f), t); t.color = 0xFFE0E0E8.toInt() }
             } else {
                 t.textSize = dp(24f); c.drawText(when { key == null -> title.take(1); key.startsWith("music") -> "♫"; key.startsWith("sounds") -> "♪"; else -> "?" }, box.centerX(), box.centerY() + dp(9f), t)
@@ -242,7 +261,10 @@ class MainActivity : Activity() {
                 cell(null, "NONE", view.room?.music == null) { setMusic(null) }
                 for (a in l.list(cat)) cell(a.key, a.name, view.room?.music == a.key) { setMusic(a.key) }
             }
-            else -> for (a in l.list(cat)) cell(a.key, RoomView.label(a.key).lowercase(), view.brush == a.key) { spriteTapped(a.key) }
+            else -> for (a in l.list(cat)) {
+                cell(a.key, RoomView.label(a.key).lowercase(), view.brush == a.key) { spriteTapped(a.key) }
+                palette.getChildAt(palette.childCount - 1).setOnLongClickListener { openStudio(a.key); true }
+            }
         }
         if (l.list(cat).isEmpty()) palette.addView(label("  Nothing here yet: add files to ${Library.folderOf(cat)}/ (see its README).", 12f, 0xFF9090A0.toInt()))
     }
@@ -281,7 +303,8 @@ class MainActivity : Activity() {
         inspector.put(button("−", GREY) { act { o.scale = SCALES.lastOrNull { it < o.scale - 0.01f } ?: o.scale } })
         inspector.put(label("${o.scale}x", 13f, 0xFFFFFFFF.toInt()))
         inspector.put(button("+", GREY) { act { o.scale = SCALES.firstOrNull { it > o.scale + 0.01f } ?: o.scale } })
-        inspector.put(button("FLIP", GREY) { act { o.flip = !o.flip } })
+        if ((lib?.get(o.sprite)?.dirs ?: 1) == 4) inspector.put(button("FACE " + arrayOf("▼", "◀", "▶", "▲")[o.dir], GREY) { act { o.dir = (o.dir + 1) % 4 } })
+        else inspector.put(button("FLIP", GREY) { act { o.flip = !o.flip } })
         inspector.put(button(if (o.solid) "SOLID ✓" else "SOLID ✗", if (o.solid) RED else GREY) { act { o.solid = !o.solid } })
         inspector.put(button(arrayOf("FLOOR", "STAND", "ABOVE")[o.layer.coerceIn(0, 2)], GREY) { act { o.layer = (o.layer + 1) % 3 } })
         inspector.put(button("EDIT…", BLUE) { editObj(o) })
@@ -398,9 +421,13 @@ class MainActivity : Activity() {
     private fun help() {
         AlertDialog.Builder(this).setTitle("How it works").setMessage(
             "BUILD\n• Pick a tab, then a picture in the palette.\n• PLACE: tap the room to put it down (drag to move it). Tiles and Walls are painted with your finger.\n" +
+            "• Long-press a palette picture to open it in the pixel studio (✎ PIXEL).\n" +
             "• SELECT: tap something to change it below the room: size, flip, solid, layer, text, sound. Drag to move.\n• ERASE: tap things to remove them (on the Tiles or Walls tab it clears tiles).\n" +
             "• ROOM opens the map: + makes a room next door. Walk off that edge to reach it.\n• Sounds: tap one to hear it; with something selected, it becomes that thing's sound.\n• Music: tap a track to make it this room's music.\n\n" +
             "PLAY\n• Drag anywhere to walk; tap to talk, read, shop or use.\n• Tap a palette picture to drop it in front of you.\n\n" +
+            "PIXEL STUDIO\n• NEW makes a character (4 directions, 24×24, a 3-frame walk), a monster, prop, tile or item at any size.\n" +
+            "• One finger draws; two fingers pinch to zoom and drag to pan. MIRROR paints both halves; ONION shows the frame before.\n" +
+            "• ▶ TO ◀ makes the left-facing row by mirroring the right. OUTLINE rims everything in the current colour.\n• SAVE puts it in your folder; the palette picks it up.\n\n" +
             "YOUR FILES\n• Put PNGs, sounds and music in the matching folders (each has a README). They show up within two seconds, even while you're here.\n" +
             "• Save over a file to update it everywhere. Files that can't be used are listed under WORLD → Problems.\n\nEverything saves by itself, and UNDO steps back.")
             .setPositiveButton("OK", null).show()
@@ -509,6 +536,7 @@ class MainActivity : Activity() {
     override fun onDestroy() { super.onDestroy(); lib?.release(); io.shutdown() }
     @Deprecated("Back")
     override fun onBackPressed() {
+        if (studio != null) { closeStudio(); return }
         if (::view.isInitialized && view.play) { toggleMode(); return }
         @Suppress("DEPRECATION") super.onBackPressed()
     }

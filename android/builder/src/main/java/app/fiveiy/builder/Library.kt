@@ -21,11 +21,13 @@ class Library(private val ctx: Context, val ws: Workspace) {
     class Asset(val cat: String, val name: String, val id: String, val size: Long, val modified: Long) {
         var bmp: Bitmap? = null
         var frames = 1
+        /** 4 for a four-direction sheet (rows: down, left, right, up), else 1. */
+        var dirs = 1
         var file: java.io.File? = null      // sounds: a private copy for the sound pool
         var soundId = 0
         val key get() = "$cat/$name"
         val frameW get() = bmp?.let { it.width / frames } ?: 16
-        val frameH get() = bmp?.height ?: 16
+        val frameH get() = bmp?.let { it.height / dirs } ?: 16
     }
 
     companion object {
@@ -122,6 +124,7 @@ class Library(private val ctx: Context, val ws: Workspace) {
                     ?: throw IllegalStateException("not a PNG Android can read")
                 val n = FRAMES.find(a.name)?.groupValues?.get(1)?.toIntOrNull()?.coerceIn(1, 64) ?: 1
                 a.frames = if (bmp.width % n == 0 && bmp.width / n > 0) n else 1
+                a.dirs = if ("_4dir" in a.name && bmp.height % 4 == 0) 4 else 1
                 a.bmp = bmp
             }
         }

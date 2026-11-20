@@ -31,7 +31,7 @@ class World(var name: String) {
                 for (k in 0 until objs.length()) {
                     val oo = objs.getJSONObject(k)
                     val ob = Obj(oo.optInt("id", w.nextId++), oo.getString("sprite"), oo.getDouble("x").toFloat(), oo.getDouble("y").toFloat())
-                    ob.scale = oo.optDouble("scale", 1.0).toFloat(); ob.flip = oo.optBoolean("flip", false)
+                    ob.scale = oo.optDouble("scale", 1.0).toFloat(); ob.flip = oo.optBoolean("flip", false); ob.dir = oo.optInt("dir", 0).coerceIn(0, 3)
                     ob.solid = oo.optBoolean("solid", ob.solid); ob.layer = oo.optInt("layer", ob.layer)
                     oo.optJSONArray("lines")?.let { a -> for (j in 0 until a.length()) ob.lines += a.getString(j) }
                     ob.sound = oo.optString("sound", "").ifEmpty { null }; ob.wander = oo.optBoolean("wander", false)
@@ -51,6 +51,8 @@ class World(var name: String) {
         val cat get() = sprite.substringBefore('/')
         var scale = 1f
         var flip = false
+        /** Which way it faces (four-direction sprites): 0 down, 1 left, 2 right, 3 up. */
+        var dir = 0
         var solid = cat == "props" || cat == "kiosks" || cat == "characters"
         /** 0 on the floor (under everything), 1 standing (sorted by depth), 2 overhead. */
         var layer = if (cat == "decor") 0 else 1
@@ -62,10 +64,10 @@ class World(var name: String) {
         var item: String? = null
         var price = 0
         var target: String? = null
-        fun copyTo(o: Obj) { o.scale = scale; o.flip = flip; o.solid = solid; o.layer = layer; o.lines += lines; o.sound = sound; o.wander = wander; o.kiosk = kiosk; o.item = item; o.price = price; o.target = target }
+        fun copyTo(o: Obj) { o.dir = dir; o.scale = scale; o.flip = flip; o.solid = solid; o.layer = layer; o.lines += lines; o.sound = sound; o.wander = wander; o.kiosk = kiosk; o.item = item; o.price = price; o.target = target }
         fun toJson() = JSONObject().apply {
             put("id", id); put("sprite", sprite); put("x", x.toDouble()); put("y", y.toDouble())
-            if (scale != 1f) put("scale", scale.toDouble()); if (flip) put("flip", true)
+            if (scale != 1f) put("scale", scale.toDouble()); if (flip) put("flip", true); if (dir != 0) put("dir", dir)
             put("solid", solid); put("layer", layer)
             if (lines.isNotEmpty()) put("lines", JSONArray(lines)); sound?.let { put("sound", it) }; if (wander) put("wander", true)
             if (cat == "kiosks") put("kiosk", kiosk); item?.let { put("item", it) }; if (price != 0) put("price", price); target?.let { put("target", it) }
@@ -119,7 +121,7 @@ class World(var name: String) {
         put("decor/banner", 72f, 30f).layer = 2; put("decor/banner", 168f, 30f).layer = 2
         put("decor/rug", 120f, 150f)
         put("kiosks/signpost", 120f, 76f).apply { kiosk = "sign"; lines += "WELCOME TO YOUR WORLD!"; lines += "BUILD: PICK A TAB BELOW, THEN TAP THE ROOM TO PLACE."; lines += "PLAY: DRAG TO WALK, TAP TO TALK OR USE." }
-        put("characters/elder_f2", 70f, 120f).apply { lines += "AH, A BUILDER."; lines += "WALK OFF AN EDGE INTO A ROOM NEXT DOOR. MAKE ONE ON THE MAP."; wander = true; sound = "sounds/talk_blip" }
+        put("characters/elder_4dir_f3", 70f, 120f).apply { lines += "AH, A BUILDER."; lines += "WALK OFF AN EDGE INTO A ROOM NEXT DOOR. MAKE ONE ON THE MAP."; wander = true; sound = "sounds/talk_blip" }
         put("kiosks/shop_stall", 190f, 128f).apply { kiosk = "shop"; item = "items/potion"; price = 3; lines += "A POTION, THREE COINS."; sound = "sounds/buy" }
         for (k in 0 until 3) put("items/coin_f4", 100f + k * 20f, 112f)
         put("props/brazier_f2", 24f, 160f); put("props/brazier_f2", 216f, 160f)

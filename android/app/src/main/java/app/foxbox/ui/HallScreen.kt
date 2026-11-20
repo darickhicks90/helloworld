@@ -1236,7 +1236,7 @@ class HallScreen(c: Context) : PixelView(c) {
         if (crack == 2 && (time * 3).toInt() % 3 == 0) box(119f, 20f, 121f, 22f, GOLD)
         if (room.kind == 6) for ((gx, gy) in GOLD_GLINTS) if (((time * 2).toInt() + gx.toInt()) % 4 == 0) { box(gx - 1, gy - 9, gx + 1, gy - 7, WHITE); box(gx - 2, gy - 8, gx + 2, gy - 8.5f, WHITE) }
     }
-    private val GOLD_GLINTS = listOf(60f to 120f, 176f to 128f, 92f to 152f, 150f to 146f, 196f to 92f)
+    private val GOLD_GLINTS = listOf(60f to 120f, 212f to 150f, 92f to 152f, 150f to 146f, 196f to 92f)
 
     private fun drawProp(pp: Prop, time: Float) {
         val f = pp.foot; val b = pp.body; val v = f.left.toInt() * 31 + f.top.toInt() * 17
@@ -1316,7 +1316,7 @@ class HallScreen(c: Context) : PixelView(c) {
                 for (k in 0 until 3) { box(f.left + 7, b.top - 2 + k, f.left + 10, b.top - 1.5f + k, MID); box(f.left + 13, b.top - 2 + k, f.left + 15, b.top - 1.5f + k, MID) }
                 box(f.right - 9, b.top - 7, f.right - 7, b.top - 1, 0xFFF0EEE4.toInt()); box(f.right - 10, b.top - 1, f.right - 6, b.top, MID)
                 val fl = (time * 8 + v).toInt() % 3
-                p.color = 0x30FFC060; sc.drawRect(f.right - 13, b.top - 14, f.right - 3, b.top - 4, p)
+                p.color = 0x26FFC060; sc.drawCircle(f.right - 8, b.top - 8, 6.5f, p)
                 box(f.right - 9, b.top - 10 - (fl % 2), f.right - 7, b.top - 7, 0xFFF8B030.toInt()); box(f.right - 8.5f, b.top - 9, f.right - 7.5f, b.top - 7, 0xFFFFF4C0.toInt())
                 box(f.right - 20, b.top - 2, f.right - 13, b.top, 0xFFE8D8A8.toInt()); box(f.right - 20, b.top - 2, f.right - 19, b.top, 0xFFC8B888.toInt())
             }
@@ -1324,7 +1324,7 @@ class HallScreen(c: Context) : PixelView(c) {
                 box(f.left + 3, f.top, f.right - 3, f.bottom, DARK); box(f.left + 1, f.bottom - 2, f.right - 1, f.bottom, DARK)
                 box(f.left, b.top + 4, f.right, f.top + 2, DARK); box(f.left + 1, b.top + 5, f.right - 1, f.top + 1, MID); box(f.left + 1, b.top + 5, f.right - 1, b.top + 6, PALE)
                 val k = (time * 8).toInt() % 2
-                p.color = 0x28FFA040; sc.drawRect(f.left - 6, b.top - 14, f.right + 6, f.top + 2, p)
+                p.color = 0x22FFA040; sc.drawCircle(f.centerX(), b.top - 2, 13f, p); p.color = 0x22FFC060; sc.drawCircle(f.centerX(), b.top - 2, 7f, p)
                 box(f.left + 1, b.top + 3, f.right - 1, b.top + 5, 0xFFC83018.toInt()); box(f.left + 3, b.top + 3, f.left + 5, b.top + 4, 0xFFFFB040.toInt())
                 box(f.left + 2, b.top - 2 - k, f.right - 2, b.top + 3, 0xFFF07820.toInt()); box(f.left + 4, b.top - 6 + k, f.right - 4, b.top + 1, 0xFFFFC040.toInt()); box(f.left + 5, b.top - 4, f.right - 5, b.top, 0xFFFFF4C0.toInt())
                 for (i in 0 until 3) { val ph = (time * 0.9f + i * 0.33f + v * 0.01f) % 1f; val sx = f.centerX() + sin(time * 3 + i) * 3; box(sx, b.top - 6 - ph * 14, sx + 1, b.top - 5 - ph * 14, 0xFFFFB040.toInt()) }

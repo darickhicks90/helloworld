@@ -89,9 +89,9 @@ internal class HallRoomArt {
                 for (k in 0 until 9) { px(x, y, vein); x += if ((v shr k) and 1 == 0) 1 else 0; y += if ((v shr (k + 3)) and 1 == 0) 1 else -1; x = x.coerceIn(x0 + 2, x0 + 14); y = y.coerceIn(y0 + 2, y0 + 14); x++ ; if (x > x0 + 14) break }
             }
             // hairline cracks and chipped corners
-            if ((v / 13) % (if (crypt) 5 else 13) == 0) {
+            if ((v / 13) % (if (crypt) 8 else 21) == 0) {
                 var x = x0 + 4 + v % 6; var y = y0 + 4 + (v / 5) % 6
-                for (k in 0 until 6) { px(x, y, if (crypt) DARK else MID); if (k % 2 == 0) x++ else y++ }
+                for (k in 0 until 6) { px(x, y, if (crypt) 0xFFA4A4B4.toInt() else MID); if (k % 2 == 0) x++ else y++ }
             }
             if ((v / 17) % 11 == 0) { px(x0 + 1, y0 + 1, grout); px(x0 + 2, y0 + 1, grout); px(x0 + 1, y0 + 2, grout) }
             // moss creeping along the crypt's grout
@@ -214,7 +214,7 @@ internal class HallRoomArt {
         box(l + 2, t + 1, r - 2, t + 4, WATER_D); box(l + 1, t + 2, l + 3, b - 2, WATER_D)
         box(l + 3, t + 4, r - 2, t + 5, 0xFFA8C0DC.toInt())
         box(l + 3, b - 3, r - 3, b - 1, 0xFFD8EAF8.toInt())
-        if (kind == 1 || kind == 2 || kind == 6) {
+        if (kind == 1 || kind == 2) {
             val v = h(l, t, kind)
             for (i in 0 until 2) {
                 val x = l + 5 + (v shr (i * 4)) % maxOf(1, r - l - 12); val y = t + 6 + (v shr (i * 5 + 2)) % maxOf(1, b - t - 10)
@@ -384,7 +384,7 @@ internal class HallRoomArt {
     }
 
     private val CANDLES5 = listOf(84 to 70, 156 to 70, 84 to 150, 156 to 150)
-    private val GOLD_PILES = listOf(60 to 120, 176 to 128, 92 to 152, 150 to 146, 196 to 92)
+    private val GOLD_PILES = listOf(60 to 120, 212 to 150, 92 to 152, 150 to 146, 196 to 92)
 
     // =====================================================================================
     // every frame: flames, dust in the light, the water moving
@@ -393,8 +393,8 @@ internal class HallRoomArt {
     private fun flame(cv: Canvas, x: Float, y: Float, time: Float, seed: Int, big: Boolean = false) {
         val f = ((time * 9f).toInt() + seed) % 3
         val r = if (big) 12f else 9f
-        glow.color = 0x22FFC060; cv.drawRect(x - r, y - r * 0.7f, x + r, y + r * 0.7f, glow)
-        glow.color = 0x22FFD890; cv.drawRect(x - r * 0.55f, y - r * 0.45f, x + r * 0.55f, y + r * 0.45f, glow)
+        glow.color = 0x1CFFC060; cv.drawCircle(x, y - 1, r, glow)
+        glow.color = 0x22FFD890; cv.drawCircle(x, y - 1, r * 0.55f, glow)
         glow.color = 0xFFE05020.toInt(); cv.drawRect(x - 2, y - 2 - f, x + 2, y + 2, glow)
         glow.color = 0xFFF8B030.toInt(); cv.drawRect(x - 1, y - 3 - (f + 1) % 3, x + 1, y + 1, glow)
         glow.color = 0xFFFFF4C0.toInt(); cv.drawRect(x - 1, y - 1, x, y + 1, glow)
@@ -410,7 +410,7 @@ internal class HallRoomArt {
         torches.forEachIndexed { i, (x, y) -> flame(cv, x + 0.5f, y.toFloat(), time, i) }
         if (s.kind == 5) CANDLES5.forEachIndexed { i, (x, y) ->
             val f = ((time * 7f).toInt() + i) % 3
-            glow.color = 0x1CFFC060; cv.drawRect(x - 7f, y - 11f, x + 7f, y + 1f, glow)
+            glow.color = 0x1CFFC060; cv.drawCircle(x.toFloat(), y - 6f, 6.5f, glow)
             glow.color = 0xFFF8B030.toInt(); cv.drawRect(x - 0.5f - (if (f == 1) 0.5f else 0f), y - 8f - f * 0.5f, x + 0.5f, y - 5f, glow)
             glow.color = 0xFFFFF4C0.toInt(); cv.drawRect(x - 0.5f, y - 6f, x + 0.5f, y - 5f, glow)
         }

@@ -134,13 +134,13 @@ def grow(S, E, path, flip=False):
 # source arms (shoulder → wrist), and the new paths
 SL, WL = (86, 64), (57, 112)
 SR, WR = (mx(86), 64), (mx(57), 112)
-NEW_L = [(94, 62), (66, 94), (47, 89)]            # forward arm: elbow down, forearm out to the wrist by the haft
-NEW_R = [(158, 62), (186, 98), (181, 125)]        # back hand: elbow out, forearm in to the hip
+NEW_L = [(94, 62), (78, 104), (61, 81)]            # forward arm: elbow down, forearm out to the wrist by the haft
+NEW_R = [(158, 62), (186, 98), (180, 132)]        # back hand: elbow out, forearm in to the hip
 arm_l = grow(SL, WL, NEW_L)
 arm_r = grow(SR, WR, NEW_R)
 
 # ---- the axe, painted at his pixel scale
-HL, HR = (40, 87), (180, 133)                      # the two fists on the haft
+HL, HR = (62, 78), (180, 133)                      # the two fists on the haft
 ux, uy = HR[0] - HL[0], HR[1] - HL[1]; Lh = math.hypot(ux, uy); ux, uy = ux / Lh, uy / Lh
 nx_, ny_ = -uy, ux
 butt = (HR[0] + ux * 16, HR[1] + uy * 16)
@@ -217,34 +217,86 @@ for y in range(-40, 50):
 for (a, b) in ((16, -4), (17, -3), (18, -2), (17, -1), (16, 0), (17, 1), (18, 2), (17, 3), (16, 4)):
     put(head[0] - ux * a + nx_ * b, head[1] - uy * a + ny_ * b, (210, 116, 52))
 
-# ---- fists closed round the haft
-SKIN = [(98, 53, 48), (134, 80, 60), (168, 108, 76), (196, 138, 98), (217, 166, 124)]
-def fist(c, wrist):
-    """A fist round the haft at `c`, carrying on from the forearm (which ends at `wrist`): the back of
-    the hand toward us, knuckles on the far side of the haft, fingers wrapped over it, thumb on top."""
-    lay = layer(); fp = lay.load()
-    cx, cy = c
-    dx, dy = cx - wrist[0], cy - wrist[1]; L = math.hypot(dx, dy); ax, ay = dx / L, dy / L   # along the hand
-    bx, by = -ay, ax                                                                          # across it
-    for y in range(-12, 13):
-        for x in range(-12, 13):
-            u = x * ax + y * ay; v = x * bx + y * by          # u: wrist (-) → knuckles (+); v: across
-            # a mitten shape: narrow at the wrist, widest over the knuckles, rounded off
-            half = 5.2 + 1.6 * max(0.0, min(1.0, (u + 7) / 10))
-            if u < -7 or u > 7.5 or abs(v) > half or (u > 4.5 and (u - 4.5) ** 2 / 9 + v * v / (half * half) > 1): continue
-            light = -0.08 * (x + y) + 0.12 * u
-            k = 2 + (1 if light > 0.45 else 0) + (1 if light > 1.1 else 0) - (1 if light < -0.7 else 0)
-            # finger creases across the hand near the knuckles, the knuckle row catching the light
-            if 1.5 < u < 7 and abs(v) < half - 1 and round(v + half) % 3 == 0: k = 1
-            if 4.5 < u < 6 and round(v + half) % 3 == 1: k = min(4, k + 1)
-            X, Y = round(cx + x) + PAD_L, round(cy + y) + PAD_T
-            fp[X, Y] = SKIN[max(0, min(4, k))] + (255,)
-    # the thumb lying along the top of the haft
-    tx, ty = cx - ux * 4 - nx_ * 5, cy - uy * 4 - ny_ * 5
-    for t in range(0, 7):
-        for w in (-1, 0, 1):
-            X, Y = round(tx + ux * t + nx_ * w) + PAD_L, round(ty + uy * t + ny_ * w) + PAD_T
-            fp[X, Y] = (SKIN[3] if w < 1 else SKIN[2]) + (255,)
+# ---- hands closed round the haft (see the grip notes in the study): four fingers curl over the
+# front of the haft, each its own rounded finger with a crease between, the knuckle bend catching the
+# light, dark nails at the tips; the hand behind carries straight on from the forearm, in his own fur
+NAIL = [(52, 40, 44), (84, 70, 72), (122, 108, 108)]
+def palette_near(img, c, r=10):
+    px_ = img.load(); cols = []
+    for y in range(-r, r + 1):
+        for x in range(-r, r + 1):
+            X, Y = round(c[0] + x) + PAD_L, round(c[1] + y) + PAD_T
+            if 0 <= X < CW and 0 <= Y < CH:
+                p_ = px_[X, Y]
+                if p_[3] and sum(p_[:3]) > 200: cols.append(p_[:3])
+    cols.sort(key=sum); n = len(cols)
+    return [cols[min(n - 1, int(n * q))] for q in (0.05, 0.25, 0.5, 0.75, 0.95)]
+def grip(img, c, wrist, palm_up, sc=1.0):
+    """palm_up: fingers come over the haft from the far side and tuck toward the wrist (front hand);
+    otherwise the back of the hand sits on the wrist side and the fingers curl away from it (rear hand).
+    Every pixel is labelled (hand, thumb, finger 1-4) and shaded in his own lit fur, then a dark crease
+    is drawn wherever two parts meet and round each finger where it lies over the haft."""
+    F = palette_near(img, wrist, 9)
+    CREASE = tuple(int(v * 0.55) for v in F[0])
+    lay = layer(); lp = lay.load()
+    s_ = 1 if (wrist[0] - c[0]) * nx_ + (wrist[1] - c[1]) * ny_ > 0 else -1     # +b: toward the wrist
+    def ab(X, Y):
+        x, y = X - c[0], Y - c[1]; return (x * ux + y * uy) / sc, (x * nx_ + y * ny_) * s_ / sc
+    hb = 3.5 if palm_up else 4.5
+    knuck, tip = (-5.5, 4.0) if palm_up else (5.5, -4.5)
+    widths = [3.4, 3.2, 3.0, 2.6]; fings = []; a0 = -6.4
+    for i, wd in enumerate(widths):
+        tp = tip - ((1.0 if tip > knuck else -1.0) if i == 3 else 0)
+        fings.append((a0 + wd / 2, wd, tp)); a0 += wd
+    t0, t1 = ((-9.0, 5.0), (-5.0, -1.5)) if palm_up else ((-9.0, -0.5), (-5.5, -5.5))
+    def seg_d(a, b):
+        dx, dy = t1[0] - t0[0], t1[1] - t0[1]; L2 = dx * dx + dy * dy
+        f = max(0, min(1, ((a - t0[0]) * dx + (b - t0[1]) * dy) / L2))
+        return math.hypot(a - t0[0] - dx * f, b - t0[1] - dy * f), f
+    def label(a, b):
+        fl = None
+        for i, (ac, wd, tp) in enumerate(fings):
+            lo, hi = min(knuck, tp), max(knuck, tp)
+            if not (lo - 0.5 <= b <= hi + 0.5): continue
+            e = min(1.0, abs(b - (lo + hi) / 2) / ((hi - lo) / 2 + 0.5))
+            if abs(a - ac) <= wd / 2 * (1 - e ** 5) ** 0.3: fl = 10 + i; break
+        d, f = seg_d(a, b); th = d <= 1.5
+        if palm_up and th: return 2
+        if fl is not None: return fl
+        if th: return 2
+        if (a / 8.0) ** 2 + ((b - hb) / 6.0) ** 2 <= 1: return 1
+        return 0
+    R = round(14 * sc); lab = {}
+    for Y in range(round(c[1]) - R, round(c[1]) + R + 1):
+        for X in range(round(c[0]) - R, round(c[0]) + R + 1):
+            lab[(X, Y)] = label(*ab(X, Y))
+    for (X, Y), l in lab.items():
+        if not l: continue
+        a, b = ab(X, Y); up = (c[1] - Y) / sc
+        if l == 1:
+            k = 2 + (1 if up > 2 else 0) - (1 if up < -3 else 0)
+            r_ = random.random(); k += (1 if r_ < 0.18 else -1 if r_ > 0.8 else 0)       # his fur's speckle
+            col = F[max(0, min(4, k))]
+        elif l == 2:
+            d, f = seg_d(a, b)
+            col = F[3] if up >= c[1] - Y and d < 0.8 else F[2]
+            if f > 0.78: col = NAIL[1] if d < 0.8 else NAIL[0]
+        else:
+            ac, wd, tp = fings[l - 10]; fa = a - ac
+            k = 3 if abs(fa) < wd / 2 - 1.0 else 2
+            if up > 1: k += 1
+            if abs(b - knuck) < 1.8: k = min(4, k + 1)                     # the knuckle bend
+            if random.random() < 0.12: k -= 1
+            col = F[min(4, k)]
+            if abs(b - tp) < 1.4 and abs(fa) < wd / 2 - 0.4: col = NAIL[1] if abs(fa) > 0.5 else NAIL[2]
+        # creases: where a finger meets another part, or lies over the haft / the open air
+        if l >= 2:
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                m = lab.get((X + dx, Y + dy), 0)
+                if m != l and not (l == 2 and m == 1) and not (l >= 10 and m == 1 and abs(b - knuck) < 2.5 and not palm_up):
+                    if m == 0 or (m > l if l >= 10 else True) or m == 1:
+                        col = CREASE; break
+        lp[X + PAD_L, Y + PAD_T] = col + (255,)
     return lay
 
 # his body first (legs, torso, arms), with any gaps at the joints closed up...
@@ -280,9 +332,10 @@ for y in range(feet_bottom - 3, feet_bottom + 1):
         r, g, b, al = fp[x, y]
         if al and r + g + b >= 150: fp[x, y] = (int(r * 0.82), int(g * 0.82), int(b * 0.86), al)
 # ...then the axe in front of his arms, and his fists round it
+body_lit = figure
 figure = Image.alpha_composite(figure, axe)
-figure = Image.alpha_composite(figure, fist(HL, NEW_L[-1]))
-figure = Image.alpha_composite(figure, fist(HR, NEW_R[-1]))
+figure = Image.alpha_composite(figure, grip(body_lit, HL, NEW_L[-2], True, 1.45))
+figure = Image.alpha_composite(figure, grip(body_lit, HR, NEW_R[-2], False, 1.2))
 # one clean outline round the whole figure, then tidy specks
 fp = figure.load()
 edge = [(x, y) for y in range(CH) for x in range(CW) if fp[x, y][3] == 0 and any(0 <= x + a < CW and 0 <= y + b < CH and fp[x + a, y + b][3] > 128 for a, b in ((1, 0), (-1, 0), (0, 1), (0, -1)))]

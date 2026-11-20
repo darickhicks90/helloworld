@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.SketchSolve" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:statusBarColor">#3b2516</item>
+        <item name="android:navigationBarColor">#3b2516</item>
+        <item name="android:colorAccent">#2b4c7e</item>
+    </style>
+</resources>

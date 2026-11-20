@@ -44,7 +44,9 @@ enum class Loot(val label: String, val mode: Int, val about: String, val rarity:
     /** In the treasure chest: two legendary charms for the Vital Spark. */
     STARHEART("STARHEART", LOOT_FIELD, "SPARK CHAINS TO 6; NOVAS BURST", Rarity.LEGENDARY, dropped = false),
     THUNDER_CROWN("THUNDER CROWN", LOOT_FIELD, "EVERY 4TH SPARK: SKY LIGHTNING", Rarity.LEGENDARY, dropped = false),
-    GLEANERS_LAMP("GLEANER'S LAMP", LOOT_FIELD, "YOUR FIREFLY FETCHES LOOT", Rarity.LEGENDARY),
+    GLEANERS_LAMP("GLEANER'S LAMP", LOOT_FIELD, "YOUR LIGHT FETCHES LOOT", Rarity.LEGENDARY),
+    /** Hers, taken when she falls. */
+    BLOSSOM_DAGGER("BLOSSOM DAGGER", LOOT_FIELD, "SPARK HITS HEAL YOU A LITTLE", Rarity.LEGENDARY, dropped = false),
     // ---- exotics: each trades one of your abilities for something stranger
     RUNECASTER("RUNECASTER", LOOT_FIELD, "BLINK OPENS A BOOK OF 6 RUNES", Rarity.EXOTIC),
     FLAMEDANCER("FLAMEDANCER", LOOT_FIELD, "SPRINT: LONG, BURNING FIREWALL", Rarity.EXOTIC),
@@ -108,6 +110,8 @@ object RuneShapes {
     val ARCH = listOf(0.05f to 0.92f, 0.5f to 0.08f, 0.95f to 0.92f)
     val BOLT = listOf(0.72f to 0.02f, 0.25f to 0.52f, 0.7f to 0.5f, 0.28f to 0.98f)
     val COIL = listOf(0.1f to 0.1f, 0.9f to 0.1f, 0.9f to 0.9f, 0.2f to 0.9f, 0.2f to 0.35f, 0.65f to 0.35f, 0.65f to 0.65f)
+    /** Her blessing: a leaf (closed), point up, point down. */
+    val LEAF = listOf(0.5f to 0.02f, 0.88f to 0.4f, 0.5f to 0.98f, 0.12f to 0.4f, 0.5f to 0.02f)
     fun closed(r: List<Pair<Float, Float>>) = r.first() == r.last()
 }
 
@@ -121,6 +125,10 @@ object RuneShapes {
 class HallBattle(
     private val pose: Bitmap?, private val poses: List<Rect>,
     private val font: Paint, private val bag: Bag, private val host: Host,
+    /** The second foe (the Blossom): her own attacks, plant-like effects, and "she". */
+    private val queen: Boolean = false,
+    /** Where her raised (blessing) hand is in the picture, as fractions of it. */
+    private val handX: Float = 0.9f, private val handY: Float = 0.03f,
 ) {
     interface Host {
         var playerHp: Int
@@ -154,7 +162,11 @@ class HallBattle(
 
     private class Attack(val name: String, val sigil: List<Pair<Float, Float>>, val dmg: Int, val fx: Int, val pose: Int)
     // twice as heavy as before
-    private val attacks = listOf(
+    private val attacks = if (queen) listOf(
+        Attack("THORN DAGGER", RuneShapes.TRI, 46, FX_CLAW, 1),
+        Attack("PETAL STORM", RuneShapes.ZIG, 38, FX_ROAR, 3),
+        Attack("VINE SURGE", RuneShapes.HOUR, 50, FX_QUAKE, 2),
+    ) else listOf(
         Attack("CLAW RAKE", RuneShapes.TRI, 44, FX_CLAW, 1),
         Attack("FIVE-EYED ROAR", RuneShapes.ZIG, 36, FX_ROAR, 3),
         Attack("GROUND QUAKE", RuneShapes.HOUR, 52, FX_QUAKE, 2),
@@ -176,6 +188,8 @@ class HallBattle(
     val wantsRune get() = st == St.DEF1 || st == St.DEF2
 
     private fun say(s: String, then: () -> Unit) { text = s; st = St.TEXT; t = 0f; after = then }
+    /** Her duel speaks of "her". */
+    private fun her(s: String) = if (!queen) s else s.replace("THE CREATURE", "THE BLOSSOM").replace(Regex("\\bHE\\b"), "SHE").replace(Regex("\\bHIS\\b"), "HER").replace(Regex("\\bHIM\\b"), "HER")
 
     private data class Opt(val label: String, val act: () -> Unit)
     private fun options(): List<Opt> {
@@ -400,12 +414,12 @@ class HallBattle(
                 }
             }
             St.DEF1, St.DEF2 -> {
-                val s = if (st == St.DEF1) "TRACE HIS SIGIL TO SOFTEN!" else "EASY: BLOCK   HARD: PARRY!"
+                val s = if (st == St.DEF1) her("TRACE HIS SIGIL TO SOFTEN!") else "EASY: BLOCK   HARD: PARRY!"
                 c.drawText(s, 10f, 146f, font)
                 val lim = if (st == St.DEF1) limit1 else limit2
                 bar(c, 10f, 154f, 220f, 1f - t / lim, 0xFFF8E070.toInt())
             }
-            else -> wrap(text, 27).take(3).forEachIndexed { i, s -> c.drawText(s, 10f, 142f + i * 11f, font) }
+            else -> wrap(her(text), 27).take(3).forEachIndexed { i, s -> c.drawText(s, 10f, 142f + i * 11f, font) }
         }
         if (st == St.DEF1) runeBox(c, 64f, 54f, 112f, atk.sigil, atk.name, 0xFFE04848.toInt(), strokeNorm, time)
         if (st == St.DEF2) {
@@ -434,7 +448,7 @@ class HallBattle(
     }
 
     /** Crisp pixels, toned down a little to sit in the dimmed hall. */
-    private val hp = Paint().apply { isFilterBitmap = false; isAntiAlias = false }
+    private val hp = Paint().apply { isFilterBitmap = queen; isAntiAlias = false }
     private var feetCache: Pair<Int, Int>? = null
     /** Where his feet are in the picture (the left and right of the bottom rows). */
     private fun feet(b: Bitmap, r: Rect): Pair<Int, Int> = feetCache ?: run {
@@ -462,7 +476,7 @@ class HallBattle(
             val big = fx in FX_CLAW..FX_QUAKE && fxT < 0.5f
             val lunge = if (big) sin(Math.PI.toFloat() * (fxT / 0.5f)) else 0f
             val wind = if (st == St.ATTACK) 0.03f * sin(time * 18f) else 0f
-            val hTarget = 108f * (1f + 0.12f * lunge + wind)
+            val hTarget = (if (queen) 120f else 108f) * (1f + 0.12f * lunge + wind)
             val sc = hTarget / s.height()
             val (fl, fr) = feet(bmp, s)
             // stood by his feet (not the picture's middle, which the axe pulls left), on the hall floor
@@ -474,6 +488,14 @@ class HallBattle(
             for (fx_ in floatArrayOf(left + (fl + 10) * sc, left + (fr - 10) * sc)) c.drawOval(X(fx_ - 10f), Y(baseY - 2f), X(fx_ + 10f), Y(baseY + 1f), fxp)
             dst.set(X(left), Y(baseY - hTarget), X(left + s.width() * sc), Y(baseY))
             c.drawBitmap(bmp, s, dst, hp)
+            if (queen) {
+                // the blessing hand glows; brighter as she readies a blow
+                val gx = dst.left + dst.width() * handX; val gy = dst.top + dst.height() * handY
+                val pulse = 0.5f + 0.5f * sin(time * 3f) + (if (st == St.ATTACK) 0.6f else 0f)
+                fxp.style = Paint.Style.FILL
+                for ((rr, a) in listOf(26f to 0.18f, 16f to 0.3f, 8f to 0.55f)) { fxp.color = ((a * pulse.coerceAtMost(1.2f) * 200).toInt().coerceIn(0, 255) shl 24) or 0xFFF0A0; c.drawCircle(gx, gy, rr * k, fxp) }
+                for (i in 0 until 6) { val a = time * 1.5f + i * 1.047f; fxp.color = 0xCCFFFFFF.toInt(); c.drawCircle(gx + cos(a) * 20f * k, gy + sin(a) * 12f * k, 1.2f * k, fxp) }
+            }
             if (bossHurtT > 0f) { fxp.color = 0x55FFFFFF; c.drawRect(dst, fxp) }
         }
         drawFx(c, ::X, ::Y, k, time)
@@ -495,7 +517,7 @@ class HallBattle(
                 for (i in 0 until 3) {
                     val prog = ((e - i * 0.06f) / 0.25f).coerceIn(0f, 1f)
                     val x0 = 20f + i * 16f; val y0 = 60f; val x1 = x0 + 60f; val y1 = y0 + 70f
-                    fxp.strokeWidth = 7f * k; fxp.color = (((a * 255).toInt()) shl 24) or 0xE04848
+                    fxp.strokeWidth = 7f * k; fxp.color = (((a * 255).toInt()) shl 24) or (if (queen) 0x58B848 else 0xE04848)
                     c.drawLine(X(x0), Y(y0), X(x0 + (x1 - x0) * prog), Y(y0 + (y1 - y0) * prog), fxp)
                     fxp.strokeWidth = 2.5f * k; fxp.color = (((a * 255).toInt()) shl 24) or 0xFFFFFF
                     c.drawLine(X(x0), Y(y0), X(x0 + (x1 - x0) * prog), Y(y0 + (y1 - y0) * prog), fxp)
@@ -503,13 +525,18 @@ class HallBattle(
                 fxp.style = Paint.Style.FILL
             }
             FX_ROAR -> if (e < 1.1f) {
+                if (queen) for (i in 0 until 26) {
+                    val px = (i * 47 % 240).toFloat() + sin(e * 6f + i) * 10f; val py = -10f + (e * 200f + i * 23) % 190f
+                    fxp.style = Paint.Style.FILL; fxp.color = (((1f - e / 1.1f) * 255).toInt() shl 24) or (if (i % 3 == 0) 0xFFFFFF else 0xF080B0)
+                    c.drawOval(X(px), Y(py), X(px + 4f), Y(py + 2.5f), fxp)
+                }
                 // rings of sound from his mouth, and a purple pulse over everything
-                fxp.color = (((0.35f * (1f - e / 1.1f)) * 255).toInt() shl 24) or 0x7A2AA0
+                fxp.color = (((0.35f * (1f - e / 1.1f)) * 255).toInt() shl 24) or (if (queen) 0xF080B0 else 0x7A2AA0)
                 c.drawRect(X(0f), Y(0f), X(240f), Y(176f), fxp)
                 fxp.style = Paint.Style.STROKE
                 for (i in 0 until 4) {
                     val rr = (e * 220f - i * 30f); if (rr <= 0f) continue
-                    fxp.strokeWidth = (4f - i * 0.6f) * k; fxp.color = (((1f - e / 1.1f) * 220).toInt() shl 24) or 0xF0D0FF
+                    fxp.strokeWidth = (4f - i * 0.6f) * k; fxp.color = (((1f - e / 1.1f) * 220).toInt() shl 24) or (if (queen) 0xFFE8F4 else 0xF0D0FF)
                     c.drawCircle(X(168f), Y(40f), rr * k, fxp)
                 }
                 fxp.style = Paint.Style.FILL
@@ -517,7 +544,7 @@ class HallBattle(
             FX_QUAKE -> if (e < 1.2f) {
                 // the floor splits and rocks fall
                 val a = 1f - e / 1.2f
-                fxp.style = Paint.Style.STROKE; fxp.strokeWidth = 2.5f * k; fxp.color = ((a * 255).toInt() shl 24) or 0x2A2030
+                fxp.style = Paint.Style.STROKE; fxp.strokeWidth = (if (queen) 4f else 2.5f) * k; fxp.color = ((a * 255).toInt() shl 24) or (if (queen) 0x3A8A3A else 0x2A2030)
                 path.reset(); path.moveTo(X(170f), Y(122f))
                 var x = 170f; var y = 122f
                 for (i in 0 until 7) { x -= 18f + (i * 37 % 11); y += if (i % 2 == 0) 6f else -3f; path.lineTo(X(x), Y(y)) }
@@ -525,7 +552,7 @@ class HallBattle(
                 fxp.style = Paint.Style.FILL
                 for (i in 0 until 14) {
                     val rx = (i * 53 % 230).toFloat() + 5f; val ry = -10f + (e * 260f + i * 17) % 190f
-                    fxp.color = ((a * 255).toInt() shl 24) or (if (i % 2 == 0) 0x6A5A50 else 0x8A7A6A)
+                    fxp.color = ((a * 255).toInt() shl 24) or (if (queen) (if (i % 2 == 0) 0xF080B0 else 0xFFF0F6) else (if (i % 2 == 0) 0x6A5A50 else 0x8A7A6A))
                     c.drawRect(X(rx), Y(ry), X(rx + 4f + i % 3), Y(ry + 4f + i % 2), fxp)
                 }
             }

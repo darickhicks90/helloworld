@@ -2384,6 +2384,7 @@ class HallScreen(c: Context) : PixelView(c) {
         if (phase == Phase.INTRO) { phase = Phase.FIGHT; msg = "FIGHT!"; msgT = 1.4f; spellT = 6f; bossShotT = 2f; summonT = 1f; if (friend == null) spawnFriend() }
     }
 
+    override fun onAttachedToWindow() { super.onAttachedToWindow(); sfx.prepare() }
     override fun onDetachedFromWindow() { super.onDetachedFromWindow(); sfx.release() }
 
     @SuppressLint("ClickableViewAccessibility")

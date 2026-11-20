@@ -2,8 +2,7 @@ package app.foxbox.ui
 
 import android.content.Context
 import android.media.AudioAttributes
-import android.media.AudioFormat
-import android.media.AudioTrack
+import android.media.SoundPool
 import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
@@ -14,8 +13,9 @@ import kotlin.math.sin
 
 /**
  * The great hall's sound effects and rumbles. Every sound is synthesised once (little chiptune
- * blips, noise bursts, arpeggios) into its own static AudioTrack, so playing one is just a rewind;
- * the vibrations are short waveforms for hits, slams and fanfares.
+ * blips, noise bursts, arpeggios), written as a small WAV in the cache and loaded into a SoundPool
+ * (a few voices at most, so the music engine keeps its own); the vibrations are short waveforms
+ * for hits, slams and fanfares.
  */
 class HallSfx(private val ctx: Context) {
     enum class S {
@@ -24,37 +24,57 @@ class HallSfx(private val ctx: Context) {
         BLINK, BOSS_RUNE, COUNTER, SLAM, PERISH, BURN, ORB, DUEL, SHATTER, FETCH,
     }
     private val rate = 22050
-    private val tracks = HashMap<S, AudioTrack>()
-    private var ready = false
+    @Volatile private var pool: SoundPool? = null
+    private val ids = HashMap<S, Int>()
+    private val loaded = HashSet<Int>()
     var muted = false
 
-    private fun build() {
-        if (ready) return
-        ready = true
-        for (s in S.values()) runCatching {
-            val pcm = render(s)
-            val t = AudioTrack.Builder()
-                .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_GAME).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
-                .setAudioFormat(AudioFormat.Builder().setSampleRate(rate).setEncoding(AudioFormat.ENCODING_PCM_16BIT).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
-                .setTransferMode(AudioTrack.MODE_STATIC).setBufferSizeInBytes(pcm.size * 2).build()
-            t.write(pcm, 0, pcm.size)
-            tracks[s] = t
-        }
+    private fun build(): SoundPool {
+        pool?.let { return it }
+        val sp = SoundPool.Builder().setMaxStreams(6)
+            .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_GAME).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
+            .build()
+        pool = sp
+        sp.setOnLoadCompleteListener { _, id, status -> if (status == 0) synchronized(loaded) { loaded += id } }
+        // render and load off the main thread
+        Thread {
+            val dir = java.io.File(ctx.cacheDir, "hall_sfx").apply { mkdirs() }
+            for (s in S.values()) runCatching {
+                if (pool !== sp) return@Thread
+                val f = java.io.File(dir, "v1_" + s.name.lowercase() + ".wav")
+                if (!f.exists() || f.length() < 64) writeWav(f, render(s))
+                val id = sp.load(f.path, 1)
+                synchronized(ids) { if (pool === sp) ids[s] = id }
+            }
+        }.apply { isDaemon = true }.start()
+        return sp
     }
 
     fun play(s: S, vol: Float = 1f) {
         if (muted) return
         runCatching {
-            build()
-            val t = tracks[s] ?: return
-            if (t.playState == AudioTrack.PLAYSTATE_PLAYING) t.stop()
-            t.reloadStaticData()
-            t.setVolume(0.5f * vol)
-            t.play()
+            val sp = build()
+            val id = synchronized(ids) { ids[s] } ?: return
+            if (!synchronized(loaded) { id in loaded }) return
+            val v = 0.6f * vol
+            sp.play(id, v, v, if (s == S.LEGENDARY || s == S.EXOTIC || s == S.LEVEL_UP || s == S.SLAM) 2 else 1, 0, 1f)
         }
     }
 
-    fun release() { tracks.values.forEach { runCatching { it.release() } }; tracks.clear(); ready = false }
+    /** Warm up (render and load) before the first sound is needed. */
+    fun prepare() { runCatching { build() } }
+
+    fun release() { runCatching { pool?.release() }; pool = null; synchronized(ids) { ids.clear() }; synchronized(loaded) { loaded.clear() } }
+
+    private fun writeWav(f: java.io.File, pcm: ShortArray) {
+        val data = pcm.size * 2
+        val b = java.nio.ByteBuffer.allocate(44 + data).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        b.put("RIFF".toByteArray()); b.putInt(36 + data); b.put("WAVE".toByteArray())
+        b.put("fmt ".toByteArray()); b.putInt(16); b.putShort(1); b.putShort(1); b.putInt(rate); b.putInt(rate * 2); b.putShort(2); b.putShort(16)
+        b.put("data".toByteArray()); b.putInt(data)
+        for (v in pcm) b.putShort(v)
+        f.writeBytes(b.array())
+    }
 
     // ---- vibration
     private val vib: Vibrator? by lazy {

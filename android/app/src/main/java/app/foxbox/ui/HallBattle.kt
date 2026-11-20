@@ -46,7 +46,7 @@ enum class Loot(val label: String, val mode: Int, val about: String, val rarity:
     THUNDER_CROWN("THUNDER CROWN", LOOT_FIELD, "EVERY 4TH SPARK: SKY LIGHTNING", Rarity.LEGENDARY, dropped = false),
     GLEANERS_LAMP("GLEANER'S LAMP", LOOT_FIELD, "YOUR FIREFLY FETCHES LOOT", Rarity.LEGENDARY),
     // ---- exotics: each trades one of your abilities for something stranger
-    RUNECASTER("RUNECASTER", LOOT_FIELD, "BLINK BECOMES 3 RUNE SPELLS", Rarity.EXOTIC),
+    RUNECASTER("RUNECASTER", LOOT_FIELD, "BLINK OPENS A BOOK OF 6 RUNES", Rarity.EXOTIC),
     FLAMEDANCER("FLAMEDANCER", LOOT_FIELD, "SPRINT: LONG, BURNING FIREWALL", Rarity.EXOTIC),
     // ---- for the duel
     EMBERBRAND("EMBERBRAND", LOOT_DUEL, "STRIKES SET HIM BURNING", Rarity.RARE),

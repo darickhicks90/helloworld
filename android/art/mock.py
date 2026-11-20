@@ -18,7 +18,7 @@ d.rectangle((104, 86, 136, H), fill=PALE); d.rectangle((106, 86, 134, H), fill=W
 d.rectangle((84, 80, 156, 86), fill=MID); d.rectangle((88, 74, 152, 80), fill=PALE); d.rectangle((92, 34, 148, 74), fill=WHITE)
 for px in (44, 180):
     d.rectangle((px - 2, 10, px + 18, 14), fill=MID); d.rectangle((px, 14, px + 16, 76), fill=WHITE); d.rectangle((px - 2, 76, px + 18, 80), fill=MID)
-over = Image.new("RGBA", (W, H), (16, 16, 32, 0x66)); hall = Image.alpha_composite(hall.convert("RGBA"), over)
+over = Image.new("RGBA", (W, H), (16, 16, 32, 0x30)); hall = Image.alpha_composite(hall.convert("RGBA"), over)
 big = hall.resize((W * K, H * K), Image.NEAREST)
 fig = Image.open(sys.argv[1]).convert("RGBA")
 # where his feet are in the picture
@@ -29,12 +29,11 @@ hT = 108 * K; s_ = hT / fh; wT = int(fw * s_)
 footX, baseY = 182 * K, 126 * K
 left = footX - footC * s_
 sh = Image.new("RGBA", big.size, (0, 0, 0, 0)); sd = ImageDraw.Draw(sh)
-sd.ellipse((footX - 34 * K, baseY - 4 * K, footX + 34 * K, baseY + 4 * K), fill=(0, 0, 0, 60))
-for fx in (left + (fl + 10) * s_, left + (fr - 10) * s_): sd.ellipse((fx - 9 * K, baseY - 2 * K, fx + 9 * K, baseY + 2 * K), fill=(0, 0, 0, 90))
+sd.ellipse((footX - 30 * K, baseY - 3 * K, footX + 30 * K, baseY + 3 * K), fill=(112, 112, 136, 110))
+for fx in (left + (fl + 10) * s_, left + (fr - 10) * s_): sd.ellipse((fx - 10 * K, baseY - 2 * K, fx + 10 * K, baseY + 1 * K), fill=(70, 70, 92, 150))
 big = Image.alpha_composite(big, sh)
 f2 = fig.resize((wT, hT), Image.NEAREST)
 # toned to the dimmed hall
-r, g, b, a = f2.split(); r = r.point(lambda v: int(v * 0.9)); g = g.point(lambda v: int(v * 0.9)); b = b.point(lambda v: int(v * 0.96)); f2 = Image.merge("RGBA", (r, g, b, a))
 big.alpha_composite(f2, (int(left), int(baseY - hT)))
 dd = ImageDraw.Draw(big)
 def window(l, t, r, b):

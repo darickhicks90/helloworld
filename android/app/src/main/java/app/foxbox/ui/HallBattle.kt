@@ -347,7 +347,7 @@ class HallBattle(
     /** The little screen: the hall (dimmed) and the traveller. The creature, the effects and the windows go on top (drawHiRes). */
     fun draw(c: Canvas, time: Float) {
         host.backdrop(time)
-        box(c, 0f, 0f, 240f, 176f, 0x66101020)               // the hall dims around the duel
+        box(c, 0f, 0f, 240f, 176f, 0x30101020)               // the hall dims around the duel
         box(c, 0f, 120f, 240f, 176f, 0x33000000)
         if (!(heroHurtT > 0f && (time * 20).toInt() % 2 == 0)) {
             box(c, 26f, 122f, 74f, 126f, 0x55000000)
@@ -410,7 +410,7 @@ class HallBattle(
     }
 
     /** Crisp pixels, toned down a little to sit in the dimmed hall. */
-    private val hp = Paint().apply { isFilterBitmap = false; isAntiAlias = false; colorFilter = android.graphics.LightingColorFilter(0xE6E6F5.toInt(), 0) }
+    private val hp = Paint().apply { isFilterBitmap = false; isAntiAlias = false }
     private var feetCache: Pair<Int, Int>? = null
     /** Where his feet are in the picture (the left and right of the bottom rows). */
     private fun feet(b: Bitmap, r: Rect): Pair<Int, Int> = feetCache ?: run {
@@ -445,9 +445,9 @@ class HallBattle(
             val footX = 182f - 40f * lunge; val baseY = 126f + 4f * lunge
             val left = footX - (fl + fr) / 2f * sc
             fxp.style = Paint.Style.FILL
-            fxp.color = 0x3C000000; c.drawOval(X(footX - 34f), Y(baseY - 4f), X(footX + 34f), Y(baseY + 4f), fxp)
-            fxp.color = 0x5A000000
-            for (fx_ in floatArrayOf(left + (fl + 10) * sc, left + (fr - 10) * sc)) c.drawOval(X(fx_ - 9f), Y(baseY - 2f), X(fx_ + 9f), Y(baseY + 2f), fxp)
+            fxp.color = 0x6E707088; c.drawOval(X(footX - 30f), Y(baseY - 3f), X(footX + 30f), Y(baseY + 3f), fxp)
+            fxp.color = 0x9646465C.toInt()
+            for (fx_ in floatArrayOf(left + (fl + 10) * sc, left + (fr - 10) * sc)) c.drawOval(X(fx_ - 10f), Y(baseY - 2f), X(fx_ + 10f), Y(baseY + 1f), fxp)
             dst.set(X(left), Y(baseY - hTarget), X(left + s.width() * sc), Y(baseY))
             c.drawBitmap(bmp, s, dst, hp)
             if (bossHurtT > 0f) { fxp.color = 0x55FFFFFF; c.drawRect(dst, fxp) }

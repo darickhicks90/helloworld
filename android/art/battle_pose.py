@@ -134,8 +134,8 @@ def grow(S, E, path, flip=False):
 # source arms (shoulder → wrist), and the new paths
 SL, WL = (86, 64), (57, 112)
 SR, WR = (mx(86), 64), (mx(57), 112)
-NEW_L = [(88, 60), (66, 94), (42, 88)]            # forward hand: elbow down, forearm out to the haft
-NEW_R = [(162, 60), (186, 98), (178, 127)]        # back hand: elbow out, forearm in to the hip
+NEW_L = [(94, 62), (66, 94), (47, 89)]            # forward arm: elbow down, forearm out to the wrist by the haft
+NEW_R = [(158, 62), (186, 98), (181, 125)]        # back hand: elbow out, forearm in to the hip
 arm_l = grow(SL, WL, NEW_L)
 arm_r = grow(SR, WR, NEW_R)
 
@@ -219,27 +219,70 @@ for (a, b) in ((16, -4), (17, -3), (18, -2), (17, -1), (16, 0), (17, 1), (18, 2)
 
 # ---- fists closed round the haft
 SKIN = [(98, 53, 48), (134, 80, 60), (168, 108, 76), (196, 138, 98), (217, 166, 124)]
-def fist(c, flipped):
-    lay = layer(); fp = lay.load(); fd = ImageDraw.Draw(lay)
-    cx, cy = c[0] + PAD_L, c[1] + PAD_T
-    # a rounded fist across the haft, knuckles toward us
-    for y in range(-8, 9):
-        for x in range(-8, 9):
-            if (x / 8.2) ** 2 + (y / 8.6) ** 2 > 1: continue
-            light = -x * 0.25 - y * 0.35 + (1 if flipped else 0) * x * 0.2
-            k = 2 + (1 if light > 0.6 else 0) + (1 if light > 1.6 else 0) - (1 if light < -1.2 else 0)
-            fp[cx + x, cy + y] = SKIN[max(0, min(4, k))] + (255,)
-    for i in range(4):                                   # four fingers curled round, creases between
-        yy = cy - 5 + i * 3
-        fd.line((cx - 6 if not flipped else cx + 1, yy, cx - 1 if not flipped else cx + 6, yy), fill=SKIN[0] + (255,))
-        fd.point((cx - 6 if not flipped else cx + 6, yy + 1), fill=SKIN[1] + (255,))
-    fd.line((cx + (2 if not flipped else -6), cy - 7, cx + (6 if not flipped else -2), cy - 3), fill=SKIN[4] + (255,))   # the thumb over the top
-    fd.line((cx + (2 if not flipped else -6), cy - 6, cx + (6 if not flipped else -2), cy - 2), fill=SKIN[3] + (255,))
+def fist(c, wrist):
+    """A fist round the haft at `c`, carrying on from the forearm (which ends at `wrist`): the back of
+    the hand toward us, knuckles on the far side of the haft, fingers wrapped over it, thumb on top."""
+    lay = layer(); fp = lay.load()
+    cx, cy = c
+    dx, dy = cx - wrist[0], cy - wrist[1]; L = math.hypot(dx, dy); ax, ay = dx / L, dy / L   # along the hand
+    bx, by = -ay, ax                                                                          # across it
+    for y in range(-12, 13):
+        for x in range(-12, 13):
+            u = x * ax + y * ay; v = x * bx + y * by          # u: wrist (-) → knuckles (+); v: across
+            # a mitten shape: narrow at the wrist, widest over the knuckles, rounded off
+            half = 5.2 + 1.6 * max(0.0, min(1.0, (u + 7) / 10))
+            if u < -7 or u > 7.5 or abs(v) > half or (u > 4.5 and (u - 4.5) ** 2 / 9 + v * v / (half * half) > 1): continue
+            light = -0.08 * (x + y) + 0.12 * u
+            k = 2 + (1 if light > 0.45 else 0) + (1 if light > 1.1 else 0) - (1 if light < -0.7 else 0)
+            # finger creases across the hand near the knuckles, the knuckle row catching the light
+            if 1.5 < u < 7 and abs(v) < half - 1 and round(v + half) % 3 == 0: k = 1
+            if 4.5 < u < 6 and round(v + half) % 3 == 1: k = min(4, k + 1)
+            X, Y = round(cx + x) + PAD_L, round(cy + y) + PAD_T
+            fp[X, Y] = SKIN[max(0, min(4, k))] + (255,)
+    # the thumb lying along the top of the haft
+    tx, ty = cx - ux * 4 - nx_ * 5, cy - uy * 4 - ny_ * 5
+    for t in range(0, 7):
+        for w in (-1, 0, 1):
+            X, Y = round(tx + ux * t + nx_ * w) + PAD_L, round(ty + uy * t + ny_ * w) + PAD_T
+            fp[X, Y] = (SKIN[3] if w < 1 else SKIN[2]) + (255,)
     return lay
 
+# his body first (legs, torso, arms), with any gaps at the joints closed up...
 figure = layer()
-for part in (legs, torso, arm_r, axe, arm_l, fist(HL, False), fist(HR, True)):
+for part in (legs, torso, arm_r, arm_l):
     figure = Image.alpha_composite(figure, part)
+fp = figure.load()
+for _ in range(3):
+    fill = []
+    for y in range(1, CH - 1):
+        for x in range(1, CW - 1):
+            if fp[x, y][3]: continue
+            nb = [fp[x + a, y + b] for a in (-1, 0, 1) for b in (-1, 0, 1) if (a or b) and fp[x + a, y + b][3]]
+            if len(nb) >= 5: fill.append((x, y, nb))
+    for (x, y, nb) in fill:
+        fp[x, y] = tuple(sum(c[i] for c in nb) // len(nb) for i in range(3)) + (255,)
+# ...lit like the big white hall: the night's shadows lifted, a soft light from above on his top edges,
+# a little darker where his feet meet the floor
+for y in range(CH):
+    for x in range(CW):
+        r, g, b, al = fp[x, y]
+        if not al: continue
+        if r + g + b < 150: continue                                   # keep the ink
+        lift = lambda v: int(255 - (255 - v) * 0.84)
+        r, g, b = lift(r), lift(g), lift(b)
+        m = (r + g + b) / 3; r, g, b = int(r * 0.9 + m * 0.1), int(g * 0.9 + m * 0.1), int(b * 0.9 + m * 0.1 + 4)
+        top = sum(1 for k in (1, 2, 3) if y - k >= 0 and fp[x, y - k][3] == 0)
+        if top: r, g, b = min(255, r + 14 * top), min(255, g + 13 * top), min(255, b + 12 * top)
+        fp[x, y] = (r, g, b, al)
+feet_bottom = max(y for y in range(CH) for x in range(CW) if fp[x, y][3])
+for y in range(feet_bottom - 3, feet_bottom + 1):
+    for x in range(CW):
+        r, g, b, al = fp[x, y]
+        if al and r + g + b >= 150: fp[x, y] = (int(r * 0.82), int(g * 0.82), int(b * 0.86), al)
+# ...then the axe in front of his arms, and his fists round it
+figure = Image.alpha_composite(figure, axe)
+figure = Image.alpha_composite(figure, fist(HL, NEW_L[-1]))
+figure = Image.alpha_composite(figure, fist(HR, NEW_R[-1]))
 # one clean outline round the whole figure, then tidy specks
 fp = figure.load()
 edge = [(x, y) for y in range(CH) for x in range(CW) if fp[x, y][3] == 0 and any(0 <= x + a < CW and 0 <= y + b < CH and fp[x + a, y + b][3] > 128 for a, b in ((1, 0), (-1, 0), (0, 1), (0, -1)))]

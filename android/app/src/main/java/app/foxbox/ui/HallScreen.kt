@@ -117,10 +117,10 @@ class HallScreen(c: Context) : PixelView(c) {
     private val duelPose: Bitmap? = runCatching { c.assets.open("images/duel_stance.png").use { BitmapFactory.decodeStream(it) } }.getOrNull()
     private val duelRects: List<Rect> = duelPose?.let { listOf(Rect(0, 0, it.width, it.height)) } ?: emptyList()
     /** The second foe, the Blossom: her hall sheet (72 x 72 cells like his) and her duel pose. */
-    /** The wood's trees: sixteen painted variants, 40 x 56 each, roots on row 54 (oak, lime, twisted olive, spruce, fir, pine, autumn, birch, blossom). */
+    /** The wood's trees: twelve bold variants, 64 x 64 each, roots on row 61 (greens, teal-greens, olive, one autumn). */
     private val treeSheet: Bitmap? = runCatching { c.assets.open("images/wild_trees.png").use { BitmapFactory.decodeStream(it) } }.getOrNull()
     /** Which variant a tree is, by where it stands: oaks, limes and conifers often; autumn, birch and blossom now and then. */
-    private val TREE_PICK = intArrayOf(0, 1, 2, 15, 0, 3, 4, 7, 8, 9, 10, 11, 5, 6, 1, 2, 9, 7, 12, 13, 14, 3, 10, 15)
+    private val TREE_PICK = intArrayOf(0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 0, 1, 6, 7, 3, 9, 2, 10, 11)
     private val blossomSheet: Bitmap? = runCatching { c.assets.open("images/hall_blossom.png").use { BitmapFactory.decodeStream(it) } }.getOrNull()
     private val blossomPose: Bitmap? = runCatching { c.assets.open("images/duel_blossom.png").use { BitmapFactory.decodeStream(it) } }.getOrNull()
     private val blossomRects: List<Rect> = blossomPose?.let { listOf(Rect(0, 0, it.width, it.height)) } ?: emptyList()
@@ -1194,7 +1194,7 @@ class HallScreen(c: Context) : PixelView(c) {
         }
         // the beast: it rises when you reach the heart of the wood
         if (wl.bossLevel && !beastWon && beast == null && here == wl.exit) {
-            beast = WildBeast(wildSeed xor depth.toLong(), depth).also { it.x = 120f; it.y = 104f }
+            beast = WildBeast(wildSeed xor depth.toLong(), depth).also { it.x = 120f; it.y = 104f; it.name = "BLOSSOM OF THE WOOD" }
             beastRoom = roomId; shakeT = 0.9f; hurtFlashT = 0.35f
             say("THE ${beast!!.name} AWAKENS!", 2.6f); sfx.play(HallSfx.S.SLAM); sfx.play(HallSfx.S.BOSS_RUNE); sfx.rumbleSlam()
         }
@@ -1209,7 +1209,7 @@ class HallScreen(c: Context) : PixelView(c) {
     }
     private val beastHost = object : WildBeast.Host {
         override fun hurt(n: Int) { this@HallScreen.hurt(n) }
-        override fun shoot(x: Float, y: Float, a: Float, speed: Float) { shots += Shot(x, y, cos(a) * speed * SLOW, sin(a) * speed * SLOW, true, false).also { it.spore = true } }
+        override fun shoot(x: Float, y: Float, a: Float, speed: Float) { shots += Shot(x, y, cos(a) * speed * SLOW, sin(a) * speed * SLOW, true, false).also { it.petal = true } }
         override fun summon(x: Float, y: Float) { if (minions.count { it.room == roomId && !it.ally } < 6) spawnMinion((x.coerceIn(16f, W - 16f)) to (y.coerceIn(44f, H - 12f))) }
         override fun roots(x0: Float, y0: Float, x1: Float, y1: Float) { lashes += Lash(x0, y0, x1.coerceIn(8f, W - 8f), y1.coerceIn(36f, H - 6f), roomId) }
         override fun shake(t: Float) { shakeT = maxOf(shakeT, t) }
@@ -1528,7 +1528,7 @@ class HallScreen(c: Context) : PixelView(c) {
             override fun buzz() { performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP) }
             override val power get() = powerK
             override fun backdrop(time: Float) { drawRoom(time); room.props.forEach { drawProp(it, time) } }
-        }, queen = her, handX = 0.80f, handY = 0.136f)
+        }, queen = her, handX = 0.877f, handY = 0.05f)
         sfx.play(HallSfx.S.DUEL); sfx.rumbleBig()
     }
 
@@ -2435,6 +2435,25 @@ class HallScreen(c: Context) : PixelView(c) {
             if ((time * 3 + i).toInt() % 3 == 0) { box(x - 4, y - 6, x - 3, y - 3, WHITE); box(x - 5.5f, y - 4.5f, x - 1.5f, y - 4.5f + 1, WHITE) }
         }
     }
+    /** The heart of the wood's guardian: the Blossom herself, in her own frames (blessing, casting, hurt, a fast last stand). */
+    private fun drawWoodBlossom(b: WildBeast, time: Float) {
+        val bmp = blossomSheet ?: run { b.draw(sc, p, time); return }
+        val frame = when {
+            b.dead -> 5
+            b.hurtT > 0f && (time * 20).toInt() % 2 == 0 -> if (b.hp < b.maxHp / 3) 8 else 5
+            b.hp < b.maxHp / 3 -> 6 + ((time * 8f).toInt() % 4)
+            b.winding -> 3
+            else -> { val cyc = time % 6f; if (cyc > 5.5f) 4 else if (cyc > 5.1f) 1 else (time * 1.5f).toInt() % 3 }
+        }
+        val x = b.x; val y = b.y
+        p.color = 0x50000000; sc.drawOval(x - 16, y - 3, x + 16, y + 3, p)
+        if (b.dead) bmpP.alpha = ((1f - b.deathT / 2f) * 255).toInt().coerceIn(0, 255)
+        src.set(frame * 72, 0, frame * 72 + 72, 72); dst.set(x - 36, y - 72, x + 36, y)
+        sc.drawBitmap(bmp, src, dst, bmpP)
+        bmpP.alpha = 255
+        if (b.winding) for (i in 0 until 8) { val a = time * 4f + i * 0.785f; box(x + cos(a) * 18 - 1, y - 40 + sin(a) * 10 - 1, x + cos(a) * 18 + 1, y - 40 + sin(a) * 10 + 1, if (i % 2 == 0) 0xFFF080B0.toInt() else WHITE) }
+        if (b.dead) for (i in 0 until 16) { val k = (b.deathT * 30f + i * 5f) % 50f; box(x - 12 + (i * 37 % 24), y - 10 - k, x - 10 + (i * 37 % 24), y - 8 - k, if (i % 2 == 0) WHITE else 0xFFF8C8DC.toInt()) }
+    }
     /** A locked gate across a way out: a stout wooden gate, bound in iron, with a keyhole. */
     private fun drawGate(d: Int, time: Float) {
         val wood = 0xFF7A5232.toInt(); val woodD = 0xFF4A301A.toInt(); val iron = 0xFF505064.toInt()
@@ -2723,7 +2742,7 @@ class HallScreen(c: Context) : PixelView(c) {
         val cx = f.centerX(); val bot = f.bottom
         treeSheet?.let { ts ->
             val k = TREE_PICK[Math.floorMod(v + depth * 7, TREE_PICK.size)]
-            src.set(k * 40, 0, k * 40 + 40, 56); dst.set(cx - 20f, bot - 54f, cx + 20f, bot + 2f)
+            src.set(k * 64, 0, k * 64 + 64, 64); dst.set(cx - 32f, bot - 61f, cx + 32f, bot + 3f)
             sc.drawBitmap(ts, src, dst, bmpP)
             return
         }
@@ -3248,7 +3267,7 @@ class HallScreen(c: Context) : PixelView(c) {
                 6 -> drawSpirit(time)
                 7 -> drawFriend(time)
                 8 -> drawSeed(seeds[e.idx], time)
-                9 -> beast?.draw(sc, p, time)
+                9 -> beast?.let { drawWoodBlossom(it, time) }
                 10 -> drawNpc(npcs[e.idx], time)
                 else -> drawDrop(drops[e.idx], time)
             }
@@ -3908,8 +3927,6 @@ class HallScreen(c: Context) : PixelView(c) {
         drawArcs()
         drawFly(time)
         art.vignette(sc)
-        // a dingy gloom over everything (not the HUD): enough to feel grimy, not dark
-        p.color = if (inWild) 0x3A0A1410 else 0x34100C14; sc.drawRect(0f, 0f, W.toFloat(), H.toFloat(), p)
         if (flashT > 0f) { p.color = (((flashT / 0.25f) * 0x80).toInt().coerceIn(0, 255) shl 24) or 0xFFFFFF; sc.drawRect(0f, 0f, W.toFloat(), H.toFloat(), p) }
         if (hurtFlashT > 0f) {
             // a red edge round the screen when you're hurt

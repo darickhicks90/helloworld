@@ -483,7 +483,7 @@ class HallBattle(
     /** The little screen: the hall (dimmed) and the traveller. The creature, the effects and the windows go on top (drawHiRes). */
     fun draw(c: Canvas, time: Float) {
         host.backdrop(time)
-        box(c, 0f, 0f, 240f, 176f, 0x50101020)               // the hall dims (and grows grimy) around the duel
+        box(c, 0f, 0f, 240f, 176f, 0x30101020)               // the hall dims around the duel
         box(c, 0f, 120f, 240f, 176f, 0x33000000)
         if (!(heroHurtT > 0f && (time * 20).toInt() % 2 == 0)) {
             box(c, 26f, 122f, 74f, 126f, 0x55000000)
@@ -574,7 +574,7 @@ class HallBattle(
             val big = fx in FX_CLAW..FX_QUAKE && fxT < 0.5f
             val lunge = if (big) sin(Math.PI.toFloat() * (fxT / 0.5f)) else 0f
             val wind = if (st == St.ATTACK) 0.03f * sin(time * 18f) else 0f
-            val hTarget = (if (queen) 132f else 124f) * (1f + 0.12f * lunge + wind)
+            val hTarget = (if (queen) 128f else 108f) * (1f + 0.12f * lunge + wind)
             val sc = hTarget / s.height()
             val (fl, fr) = feet(bmp, s)
             // stood by his feet (not the picture's middle, which the axe pulls left), on the hall floor

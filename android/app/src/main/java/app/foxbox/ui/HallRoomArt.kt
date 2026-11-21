@@ -443,10 +443,10 @@ internal class HallRoomArt {
     // The Wildwood: soft grass with tufts and flowers, dirt paths from each way out to the middle,
     // a wall of canopy and trunks along the top, hedges down the sides, ponds with reeds and lilies.
     // =====================================================================================
-    private val G1 = 0xFF7CB84C.toInt(); private val G2 = 0xFF6CA642.toInt(); private val G3 = 0xFF94CC5E.toInt(); private val G4 = 0xFF4E8A34.toInt()
+    private val G1 = 0xFF5E9A34.toInt(); private val G2 = 0xFF4E8A30.toInt(); private val G3 = 0xFF7AB02E.toInt(); private val G4 = 0xFF2E6232.toInt()
     private val DIRT = 0xFFCCAA72.toInt(); private val DIRT_D = 0xFFA8844E.toInt(); private val DIRT_L = 0xFFE0C490.toInt()
-    private val CAN_D = 0xFF1E4224.toInt(); private val CAN = 0xFF2E6232.toInt(); private val CAN_L = 0xFF4A8A3E.toInt(); private val CAN_H = 0xFF78B456.toInt()
-    private val BARK = 0xFF5A3C26.toInt(); private val BARK_D = 0xFF3A2414.toInt()
+    private val CAN_D = 0xFF16343A.toInt(); private val CAN = 0xFF2E6E3E.toInt(); private val CAN_L = 0xFF5E9A30.toInt(); private val CAN_H = 0xFFB6D446.toInt()
+    private val BARK = 0xFF6E3A2E.toInt(); private val BARK_D = 0xFF2A1418.toInt()
 
     private fun forest(s: Spec) {
         box(0, 0, W, H, G1)
@@ -482,7 +482,7 @@ internal class HallRoomArt {
         for (k in 0 until 22) {
             val x = k * 11 + (h(k, 2, s.id) % 7) - 3; val y = 4 + (h(k, 4, s.id) % 10); val r = 9 + (h(k, 5, s.id) % 5)
             if (s.doors[2] && x in 98..142) continue
-            p.color = 0xFF10261A.toInt(); c.drawCircle(x.toFloat(), y.toFloat(), r + 1f, p)
+            p.color = 0xFF12161A.toInt(); c.drawCircle(x.toFloat(), y.toFloat(), r + 1f, p)
             p.color = CAN; c.drawCircle(x.toFloat(), y.toFloat(), r.toFloat(), p)
             p.color = CAN_L; c.drawCircle(x - r * 0.25f, y - r * 0.3f, r * 0.6f, p)
             p.color = CAN_H; c.drawCircle(x - r * 0.4f, y - r * 0.45f, r * 0.22f, p)
@@ -575,7 +575,7 @@ internal class HallRoomArt {
             while (x < r + 2) {
                 val v = h(x, y, id)
                 val rr = 3 + v % 3; val deep = (y - t) / maxOf(1f, (b - t).toFloat())
-                p.color = 0xFF10261A.toInt(); c.drawCircle(x.toFloat(), y.toFloat(), rr + 0.8f, p)
+                p.color = 0xFF12161A.toInt(); c.drawCircle(x.toFloat(), y.toFloat(), rr + 0.8f, p)
                 p.color = if (deep > 0.7f) CAN_D else CAN; c.drawCircle(x.toFloat(), y.toFloat(), rr.toFloat(), p)
                 p.color = CAN_L; c.drawCircle(x - rr * 0.3f, y - rr * 0.35f, rr * 0.55f, p)
                 if (v % 3 == 0) px(x - rr / 2, y - rr / 2, CAN_H)

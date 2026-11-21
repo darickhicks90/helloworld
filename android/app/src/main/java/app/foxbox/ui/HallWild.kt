@@ -367,7 +367,7 @@ internal class WildBeast(seed: Long, val depth: Int) {
     private val pal: IntArray
     private val eyeCol: Int
     private val accent: Int
-    val name: String
+    var name: String
     /** 0 spore ring, 1 aimed volley, 2 roots, 3 lunge, 4 brood, 5 sweep. */
     private val moves: List<Int>
     val size: Float
@@ -414,6 +414,7 @@ internal class WildBeast(seed: Long, val depth: Int) {
 
     // ---- behaviour
     private var st = 0           // 0 roam, 1 wind-up, 2 act, 3 recover
+    val winding get() = st == 1
     private var stT = 2.5f
     private var move = 0
     private var vx = 0f; private var vy = 0f

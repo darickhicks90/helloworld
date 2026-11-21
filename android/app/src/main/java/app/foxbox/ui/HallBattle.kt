@@ -139,6 +139,8 @@ class HallBattle(
         fun hitBoss(n: Int): Boolean
         fun score(stroke: List<FloatArray>, rune: List<Pair<Float, Float>>): Float
         fun buzz()
+        /** Your striking power (less with a big party along). */
+        val power: Float get() = 1f
         /** The hall behind the duel. */
         fun backdrop(time: Float)
     }
@@ -183,6 +185,34 @@ class HallBattle(
     }
     private var fx = 0; private var fxT = 0f
     private fun effect(k: Int) { fx = k; fxT = 0f }
+
+    // ---- particles, floating numbers and flashes: something is always glittering in a duel
+    /** kind 0: a square spark; 1: a soft glow; 2: a streak along its path; 3: a twinkling star. */
+    private class Pt(var x: Float, var y: Float, var vx: Float, var vy: Float, var life: Float, val col: Int, val size: Float, val g: Float, val kind: Int) { val max = life }
+    private val pts = ArrayList<Pt>()
+    private class Pop(val text: String, val x: Float, var y: Float, val col: Int, val big: Boolean) { var life = 1.2f }
+    private val pops = ArrayList<Pop>()
+    private var flash = 0f; private var flashCol = 0xFFFFFF
+    private var ambT = 0f
+    /** Where things are, in the little screen's units: his chest and the traveller. */
+    private val BX = 180f; private val BY = 72f; private val HX = 50f; private val HY = 96f
+    private fun spray(x: Float, y: Float, n: Int, speed: Float, cols: IntArray, kind: Int = 0, g: Float = 80f, life: Float = 0.6f, size: Float = 2f, up: Float = 0f) {
+        repeat(n) {
+            val a = rnd.nextFloat() * 6.2832f; val v = speed * (0.35f + rnd.nextFloat() * 0.65f)
+            pts += Pt(x, y, cos(a) * v, sin(a) * v - up, life * (0.6f + rnd.nextFloat() * 0.5f), cols[rnd.nextInt(cols.size)], size * (0.6f + rnd.nextFloat() * 0.7f), g, kind)
+        }
+        if (pts.size > 420) pts.subList(0, pts.size - 420).clear()
+    }
+    private fun pop(text: String, x: Float, y: Float, col: Int, big: Boolean = false) { pops += Pop(text, x, y, col, big) }
+    private fun flashOf(col: Int, a: Float) { flashCol = col; flash = maxOf(flash, a) }
+    private val SPARK = intArrayOf(0xFFFFFFFF.toInt(), 0xFFF8E070.toInt(), 0xFFF8B030.toInt())
+    private val FIRE = intArrayOf(0xFFF8D050.toInt(), 0xFFF88030.toInt(), 0xFFE04020.toInt())
+    private val FROST = intArrayOf(0xFFFFFFFF.toInt(), 0xFFA8E8FF.toInt(), 0xFF68C8F0.toInt())
+    private val HEALC = intArrayOf(0xFF78F088.toInt(), 0xFFC8FFC8.toInt(), 0xFFFFFFFF.toInt())
+    private val BLOOD = intArrayOf(0xFFE04848.toInt(), 0xFFF87878.toInt(), 0xFFFFFFFF.toInt())
+    private val VENOM = intArrayOf(0xFF9AE050.toInt(), 0xFF60B030.toInt(), 0xFFD0F890.toInt())
+    private val SHIELD = intArrayOf(0xFF8FD3F4.toInt(), 0xFFFFFFFF.toInt(), 0xFF4878E0.toInt())
+    private val bossCols get() = if (queen) intArrayOf(0xFFF080B0.toInt(), 0xFFFFE0F0.toInt(), 0xFF68C058.toInt()) else intArrayOf(0xFFB060E0.toInt(), 0xFFF0D0FF.toInt(), 0xFF6040A0.toInt())
     private var bossPose = 0
 
     val wantsRune get() = st == St.DEF1 || st == St.DEF2
@@ -197,19 +227,50 @@ class HallBattle(
         out += Opt("STRIKE") { strike(1f) }
         if (worn(Loot.ECHO_BELL)) out += Opt("ECHO STRIKE") { strike(0.7f, twice = true) }
         if (worn(Loot.STORMCALLER) && !thunderUsed) out += Opt("THUNDER") {
-            thunderUsed = true; effect(FX_BOLT); val d = rnd.nextInt(34, 46); hit(d, "THUNDER FALLS ON HIM! $d")
+            thunderUsed = true; effect(FX_BOLT); flashOf(0xFFFFF0, 0.8f); spray(BX, BY - 20, 40, 150f, intArrayOf(0xFFFFFFFF.toInt(), 0xFFF8F070.toInt(), 0xFF8FD3F4.toInt()), kind = 2, g = 0f, life = 0.7f); val d = rnd.nextInt(34, 46); hit(d, "THUNDER FALLS ON HIM! $d")
         }
         if (bag.herbs > 0) out += Opt("HERB x${bag.herbs}") { bag.herbs--; heal(Loot.HERB.let { 35 }); say("YOU CHEW A HERB. +35") { attack() } }
-        out += Opt("GUARD") { guard = true; say("YOU BRACE YOURSELF.") { attack() } }
+        out += Opt("GUARD") { guard = true; spray(HX, HY, 16, 40f, SHIELD, kind = 3, g = 0f, life = 0.7f); say("YOU BRACE YOURSELF.") { attack() } }
+        out += Opt("RUN") { run() }
         return out
     }
 
-    private fun heal(n: Int) { host.playerHp = minOf(host.playerMax, host.playerHp + n); effect(FX_HEAL) }
+    private fun heal(n: Int) {
+        host.playerHp = minOf(host.playerMax, host.playerHp + n); effect(FX_HEAL)
+        spray(HX, HY + 10, 22, 30f, HEALC, kind = 3, g = -50f, life = 1f, size = 2.5f); pop("+$n", HX + 4, HY - 20, 0xFF78F088.toInt())
+    }
+    /** Flee: about half the time you slip away (more often when he's hurt or you're guarding); otherwise he cuts you off. */
+    private var runs = 0
+    private fun run() {
+        val chance = 0.45f + (if (host.bossHp < host.bossMax / 2) 0.15f else 0f) - runs * 0.1f
+        runs++
+        spray(HX, HY + 26, 18, 50f, intArrayOf(0xFFD8D0C0.toInt(), 0xFFB0A890.toInt(), 0xFFFFFFFF.toInt()), kind = 1, g = -20f, life = 0.8f, size = 4f)
+        if (rnd.nextFloat() < chance) {
+            for (i in 0 until 14) pts += Pt(HX + rnd.nextFloat() * 30f, HY - 20f + rnd.nextFloat() * 50f, -260f, 0f, 0.4f, 0xFFFFFFFF.toInt(), 1.5f, 0f, 2)
+            flashOf(0xFFFFFF, 0.3f); pop("ESCAPED!", HX + 6, HY - 30, 0xFFF8E070.toInt(), true)
+            finish("YOU SLIP AWAY BACK INTO THE HALL!")
+        } else {
+            spray(HX + 20, HY - 10, 12, 60f, BLOOD, kind = 2, g = 0f, life = 0.5f); pop("BLOCKED!", HX + 6, HY - 30, 0xFFE04848.toInt(), true)
+            shake = 0.3f; host.buzz()
+            say(her("HE CUTS OFF YOUR ESCAPE!")) { attack() }
+        }
+    }
 
     private fun strike(k: Float, twice: Boolean = false) {
         var total = 0
-        repeat(if (twice) 2 else 1) { total += ((rnd.nextInt(10, 15) + if (worn(Loot.FIVE_EYED_AXE)) 15 else 0) * k).toInt() }
+        repeat(if (twice) 2 else 1) { total += ((rnd.nextInt(10, 15) + if (worn(Loot.FIVE_EYED_AXE)) 15 else 0) * k * host.power).toInt() }
         val tags = ArrayList<String>()
+        val crit = rnd.nextFloat() < 0.15f
+        if (crit) {
+            total = (total * 1.6f).toInt(); tags += "CRITICAL"
+            flashOf(0xFFFFFF, 0.6f); spray(BX, BY, 30, 160f, SPARK, kind = 3, g = 0f, life = 0.9f, size = 3f); pop("CRITICAL!", BX - 30, BY - 50, 0xFFF8E070.toInt(), true)
+        }
+        // a slash across him, sparks off the blade, a ring of light
+        for (i in 0 until 10) { val u = i / 9f; pts += Pt(BX - 34 + u * 68, BY - 30 + u * 56, 0f, 0f, 0.35f + u * 0.1f, 0xFFFFFFFF.toInt(), 3f, 0f, 1) }
+        spray(BX, BY, 26, 120f, SPARK, kind = 2, g = 120f, life = 0.6f)
+        if (twice) spray(BX + 10, BY - 14, 16, 100f, SPARK, kind = 2, g = 120f, life = 0.5f)
+        if (worn(Loot.EMBERBRAND)) spray(BX, BY, 24, 70f, FIRE, kind = 1, g = -60f, life = 0.9f, size = 3f)
+        if (worn(Loot.FROSTFANG)) spray(BX, BY, 20, 90f, FROST, kind = 3, g = 0f, life = 0.8f)
         when {
             worn(Loot.EMBERBRAND) -> { burn = 3; tags += "HE'S BURNING"; effect(FX_FIRE) }
             worn(Loot.FROSTFANG) -> effect(FX_ICE)
@@ -221,6 +282,8 @@ class HallBattle(
 
     private fun hit(d: Int, line: String) {
         bossHurtT = 0.6f; shake = 0.25f; host.buzz()
+        pop("-$d", BX + 6, BY - 34, 0xFFFFFFFF.toInt(), d >= 30)
+        spray(BX, BY + 6, 10, 60f, bossCols, kind = 0, g = 140f, life = 0.7f)
         val over = host.hitBoss(d)
         say(line) { if (over) finish("THE DUEL BREAKS OFF!") else attack() }
     }
@@ -228,11 +291,15 @@ class HallBattle(
     /** His turn: burns and poison tick, then (unless he's frozen) he winds up a blow. */
     private fun attack() {
         var tick = 0
-        if (burn > 0) { burn--; tick += 6 }
-        if (poison > 0) { poison--; tick += 8 }
+        if (burn > 0) { burn--; tick += 6; spray(BX, BY + 10, 18, 50f, FIRE, kind = 1, g = -70f, life = 0.9f, size = 3f) }
+        if (poison > 0) { poison--; tick += 8; spray(BX, BY + 10, 14, 40f, VENOM, kind = 1, g = -40f, life = 1f, size = 3f) }
+        if (tick > 0) {
+            pop("-$tick", BX + 10, BY - 30, 0xFFF8A030.toInt())
+        }
         if (tick > 0 && host.hitBoss(tick)) return finish("THE DUEL BREAKS OFF!")
         if (frozen) {
             frozen = false; round++
+            spray(BX, BY, 30, 80f, FROST, kind = 3, g = 0f, life = 1f, size = 3f); flashOf(0xA8E8FF, 0.35f)
             return say((if (tick > 0) "HE SMOULDERS ($tick). " else "") + "HE'S FROZEN AND CAN'T MOVE!") { nextTurn() }
         }
         atk = attacks[rnd.nextInt(attacks.size)]
@@ -263,7 +330,20 @@ class HallBattle(
         val taken = when (how) { 0 -> base; 1 -> (base * softK).toInt(); else -> 0 }
         bossPose = atk.pose
         effect(atk.fx)
-        if (taken > 0) { host.playerHp = maxOf(0, host.playerHp - taken); heroHurtT = 0.7f; shake = if (atk.fx == FX_QUAKE) 0.7f else 0.4f; host.buzz() }
+        when (atk.fx) {
+            FX_CLAW -> spray(HX + 10, HY - 10, 20, 140f, bossCols, kind = 2, g = 60f, life = 0.5f)
+            FX_ROAR -> spray(BX - 12, BY - 30, 36, 160f, bossCols, kind = if (queen) 1 else 3, g = 0f, life = 1f, size = 3f)
+            else -> spray(HX + 20, HY + 28, 30, 140f, intArrayOf(0xFF8A7A6A.toInt(), 0xFF6A5A50.toInt(), 0xFFD8D0C0.toInt()), kind = 0, g = 260f, life = 0.9f, size = 3f, up = 120f)
+        }
+        if (taken > 0) {
+            host.playerHp = maxOf(0, host.playerHp - taken); heroHurtT = 0.7f; shake = if (atk.fx == FX_QUAKE) 0.7f else 0.4f; host.buzz()
+            spray(HX, HY, 26, 120f, BLOOD, kind = 2, g = 160f, life = 0.6f); spray(HX, HY, 14, 60f, bossCols, kind = 1, g = 0f, life = 0.7f, size = 3f)
+            pop("-$taken", HX + 8, HY - 32, 0xFFE04848.toInt(), taken >= 40); flashOf(0xE02020, if (how == 0) 0.45f else 0.25f)
+        }
+        when (how) {
+            2 -> { spray((HX + BX) / 2 - 30, HY - 10, 30, 110f, SHIELD, kind = 3, g = 0f, life = 0.8f, size = 3f); pop("BLOCK!", HX + 8, HY - 32, 0xFF8FD3F4.toInt(), true); flashOf(0x8FD3F4, 0.3f) }
+            3 -> { spray((HX + BX) / 2, HY - 20, 40, 170f, SPARK, kind = 2, g = 0f, life = 0.7f); spray(BX, BY, 20, 90f, SPARK, kind = 3, g = 0f, life = 0.8f, size = 3f); pop("PARRY!", (HX + BX) / 2 - 16, HY - 44, 0xFFF8B030.toInt(), true); flashOf(0xFFFFFF, 0.55f) }
+        }
         if (how == 2 && worn(Loot.AEGIS_SHARD)) host.playerHp = minOf(host.playerMax, host.playerHp + 8)
         val back = if (how == 3) (if (worn(Loot.MIRROR_CHARM)) atk.dmg else 14) else 0
         if (how == 3 && worn(Loot.VENOM_THORN)) poison = 3
@@ -296,7 +376,7 @@ class HallBattle(
         when (st) {
             St.DEF1 -> {
                 val k = host.score(s, atk.sigil); lastScore = k; scoreT = 1.2f
-                if (k >= NEED) { st = St.DEF2; t = 0f; lastScore = -1f; host.buzz() }
+                if (k >= NEED) { st = St.DEF2; t = 0f; lastScore = -1f; host.buzz(); spray(120f, 90f, 30, 110f, intArrayOf(0xFFE04848.toInt(), 0xFFFFFFFF.toInt(), 0xFFF8E070.toInt()), kind = 3, g = 0f, life = 0.7f, size = 3f); pop("SOFTENED", 92f, 64f, 0xFFF8E070.toInt()) }
             }
             St.DEF2 -> {
                 val e = host.score(s, easy); val h = host.score(s, hard)
@@ -308,7 +388,25 @@ class HallBattle(
     }
 
     fun update(dt: Float) {
-        t += dt; heroHurtT -= dt; bossHurtT -= dt; shake -= dt; scoreT -= dt; fxT += dt
+        t += dt; heroHurtT -= dt; bossHurtT -= dt; shake -= dt; scoreT -= dt; fxT += dt; flash -= dt * 1.6f
+        val pi = pts.iterator()
+        while (pi.hasNext()) { val q = pi.next(); q.life -= dt; if (q.life <= 0f) { pi.remove(); continue }; q.vy += q.g * dt; q.x += q.vx * dt; q.y += q.vy * dt; q.vx *= 1f - 1.5f * dt }
+        pops.removeAll { it.life -= dt; it.y -= 22f * dt; it.life <= 0f }
+        // the air of the duel: drifting motes (petals for her), never still
+        ambT -= dt
+        if (ambT <= 0f) {
+            ambT = 0.09f
+            val c = bossCols
+            pts += Pt(rnd.nextFloat() * 240f, if (queen) -4f else 130f, (rnd.nextFloat() - 0.5f) * 20f, if (queen) 26f + rnd.nextFloat() * 20f else -16f - rnd.nextFloat() * 16f, 3.5f, c[rnd.nextInt(c.size)] and 0x00FFFFFF or (0x90 shl 24), if (queen) 2.5f else 1.5f, 0f, if (queen) 1 else 3)
+            // his aura, licking up round him
+            pts += Pt(BX - 30f + rnd.nextFloat() * 60f, BY + 40f, 0f, -30f - rnd.nextFloat() * 30f, 0.9f, c[rnd.nextInt(c.size)] and 0x00FFFFFF or (0x70 shl 24), 3f, 0f, 1)
+        }
+        // winding up: power drawn into him from all round
+        if (st == St.ATTACK && rnd.nextFloat() < 0.8f) {
+            val a = rnd.nextFloat() * 6.2832f; val c = bossCols
+            pts += Pt(BX + cos(a) * 60f, BY + sin(a) * 50f, -cos(a) * 120f, -sin(a) * 100f, 0.45f, c[rnd.nextInt(c.size)], 2f, 0f, 2)
+        }
+        if (st == St.INTRO && t < 0.1f && pts.size < 50) { flashOf(0xFFFFFF, 0.7f); for (i in 0 until 40) { val a = i * 0.157f; pts += Pt(120f, 88f, cos(a) * 300f, sin(a) * 220f, 0.5f, 0xFFFFFFFF.toInt(), 1.5f, 0f, 2) } }
         when (st) {
             St.INTRO -> if (t > 2.2f) { st = St.MENU; cursor = 0 }
             St.ATTACK -> if (t > 1.5f) { st = St.DEF1; t = 0f; lastScore = -1f }
@@ -499,6 +597,7 @@ class HallBattle(
             if (bossHurtT > 0f) { fxp.color = 0x55FFFFFF; c.drawRect(dst, fxp) }
         }
         drawFx(c, ::X, ::Y, k, time)
+        drawParticles(c, ::X, ::Y, k, time)
         // the windows and runes, over everything
         c.save(); c.translate(r.left, r.top); c.scale(k, k)
         drawUi(c, time, strokeNorm)
@@ -592,6 +691,41 @@ class HallBattle(
             }
             else -> {}
         }
+    }
+
+    private fun drawParticles(c: Canvas, X: (Float) -> Float, Y: (Float) -> Float, k: Float, time: Float) {
+        fxp.style = Paint.Style.FILL
+        for (q in pts) {
+            val f = (q.life / q.max).coerceIn(0f, 1f)
+            val a = ((q.col ushr 24) * f).toInt().coerceIn(0, 255)
+            fxp.color = (a shl 24) or (q.col and 0xFFFFFF)
+            val s = q.size * k
+            when (q.kind) {
+                0 -> c.drawRect(X(q.x) - s / 2, Y(q.y) - s / 2, X(q.x) + s / 2, Y(q.y) + s / 2, fxp)
+                1 -> { c.drawCircle(X(q.x), Y(q.y), s * (0.6f + f * 0.6f), fxp) }
+                2 -> { fxp.style = Paint.Style.STROKE; fxp.strokeWidth = maxOf(1f, s * 0.6f); c.drawLine(X(q.x), Y(q.y), X(q.x - q.vx * 0.04f), Y(q.y - q.vy * 0.04f), fxp); fxp.style = Paint.Style.FILL }
+                else -> {
+                    // a twinkle: a little cross that winks
+                    val r = s * (if (((time * 14).toInt() + q.x.toInt()) % 2 == 0) 1.6f else 1f)
+                    c.drawRect(X(q.x) - r, Y(q.y) - s * 0.3f, X(q.x) + r, Y(q.y) + s * 0.3f, fxp)
+                    c.drawRect(X(q.x) - s * 0.3f, Y(q.y) - r, X(q.x) + s * 0.3f, Y(q.y) + r, fxp)
+                }
+            }
+        }
+        if (flash > 0f) { fxp.color = ((flash.coerceAtMost(1f) * 150).toInt() shl 24) or flashCol; c.drawRect(X(0f), Y(0f), X(240f), Y(176f), fxp) }
+        // the numbers, bouncing up and fading
+        val oldSize = font.textSize; val oldCol = font.color
+        for (pp in pops) {
+            val bounce = if (pp.life > 0.95f) (1.2f - pp.life) * 4f else 1f
+            val ts = (if (pp.big) 14f else 10f) * k * (0.7f + 0.3f * bounce.coerceAtMost(1f))
+            font.textSize = ts
+            val a = (pp.life / 0.4f).coerceIn(0f, 1f)
+            font.color = ((a * 255).toInt() shl 24) or 0x101018
+            c.drawText(pp.text, X(pp.x) + k, Y(pp.y) + k, font)
+            font.color = ((a * 255).toInt() shl 24) or (pp.col and 0xFFFFFF)
+            c.drawText(pp.text, X(pp.x), Y(pp.y), font)
+        }
+        font.textSize = oldSize; font.color = oldCol
     }
 
     private fun burst(c: Canvas, x: Float, y: Float, k: Float, e: Float, core: Int, edge: Int) {

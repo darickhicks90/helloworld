@@ -32,6 +32,9 @@ internal class HallRoomArt {
         // prop kinds (as in HallScreen)
         const val PILLAR = 0; const val ROCK = 1; const val SHRUB = 2; const val STATUE = 3; const val FOUNTAIN = 4
         const val TABLE = 5; const val BRAZIER = 6; const val TOMB = 7; const val CHEST = 8
+        const val TREE = 9
+        /** A screen of the Wildwood. */
+        const val FOREST = 10
     }
 
     private val p = Paint().apply { isAntiAlias = false; isFilterBitmap = false }
@@ -55,6 +58,7 @@ internal class HallRoomArt {
 
     // =====================================================================================
     private fun bake(s: Spec) {
+        if (s.kind == FOREST) { forest(s); return }
         val crypt = s.kind == 5
         floor(s, crypt)
         when (s.kind) { 0 -> carpet(104, 86, 136, H, 0xFF9A2434.toInt(), 0xFF6E1626.toInt()); 4 -> carpet(104, 31, 136, H - 3, 0xFF2E4A8C.toInt(), 0xFF1E3366.toInt()); 3 -> rug(104, 128, 158, 166) }
@@ -402,6 +406,7 @@ internal class HallRoomArt {
 
     fun overlay(cv: Canvas, time: Float) {
         val s = spec ?: return
+        if (s.kind == FOREST) { forestLife(cv, time, s); return }
         // torch flames
         val torches = when (s.kind) {
             0 -> listOf(96 to 8, 144 to 8); 1 -> listOf(72 to 8, 168 to 8); 2 -> listOf(118 to 8); 4 -> listOf(72 to 8, 168 to 8); 6 -> listOf(60 to 8, 180 to 8)
@@ -430,6 +435,125 @@ internal class HallRoomArt {
             cv.drawRect(w.left + 4, y1, w.left + w.width() * 0.45f, y1 + 1, glow); cv.drawRect(w.left + w.width() * 0.5f, y2, w.right - 4, y2 + 1, glow)
             val g = ((time * 1.7f).toInt() + w.left.toInt()) % 5
             if (g < 2) { glow.color = 0xFFFFFFFF.toInt(); val gx = w.left + 6 + abs(sin(time * 0.3f + w.top)) * (w.width() - 12); cv.drawRect(gx, w.bottom - 4, gx + 1, w.bottom - 3, glow) }
+        }
+    }
+
+    // =====================================================================================
+    // The Wildwood: soft grass with tufts and flowers, dirt paths from each way out to the middle,
+    // a wall of canopy and trunks along the top, hedges down the sides, ponds with reeds and lilies.
+    // =====================================================================================
+    private val G1 = 0xFF7CB84C.toInt(); private val G2 = 0xFF6CA642.toInt(); private val G3 = 0xFF94CC5E.toInt(); private val G4 = 0xFF4E8A34.toInt()
+    private val DIRT = 0xFFCCAA72.toInt(); private val DIRT_D = 0xFFA8844E.toInt(); private val DIRT_L = 0xFFE0C490.toInt()
+    private val CAN_D = 0xFF1E4224.toInt(); private val CAN = 0xFF2E6232.toInt(); private val CAN_L = 0xFF4A8A3E.toInt(); private val CAN_H = 0xFF78B456.toInt()
+    private val BARK = 0xFF5A3C26.toInt(); private val BARK_D = 0xFF3A2414.toInt()
+
+    private fun forest(s: Spec) {
+        box(0, 0, W, H, G1)
+        // dappled patches of lighter and darker grass
+        for (ty in 0 until H / 8 + 1) for (tx in 0 until W / 8) {
+            val v = h(tx, ty, s.id)
+            when (v % 9) { 0, 1 -> box(tx * 8, ty * 8, tx * 8 + 8, ty * 8 + 8, G2); 2 -> box(tx * 8 + 2, ty * 8 + 2, tx * 8 + 7, ty * 8 + 6, G3) }
+            if (v % 9 == 0) for (k in 0 until 4) px(tx * 8 + (v shr (k + 3)) % 8, ty * 8 + (v shr (k + 7)) % 8, G1)
+        }
+        // the paths
+        val cx = 120; val cy = 104
+        fun path(l: Int, t: Int, r: Int, b: Int) { box(l - 1, t - 1, r + 1, b + 1, DIRT_D); box(l, t, r, b, DIRT) }
+        path(cx - 16, cy - 12, cx + 16, cy + 14)
+        if (s.doors[0]) path(0, 90, cx, 116)
+        if (s.doors[1]) path(cx, 90, W, 116)
+        if (s.doors[2]) path(106, 24, 134, cy)
+        if (s.doors[3]) path(106, cy, 134, H)
+        // pebbles and wheel-ruts in the dirt
+        for (i in 0 until 60) {
+            val v = h(i, 7, s.id); val x = v % W; val y = 30 + (v shr 8) % (H - 30)
+            val onPath = (s.doors[0] && x < cx && y in 91..115) || (s.doors[1] && x > cx && y in 91..115) || (s.doors[2] && y < cy && x in 107..133) || (s.doors[3] && y > cy && x in 107..133) || (x in cx - 15..cx + 15 && y in cy - 11..cy + 13)
+            if (onPath) { px(x, y, if (v % 3 == 0) DIRT_L else DIRT_D); if (v % 5 == 0) px(x + 1, y, DIRT_L) }
+        }
+        // tufts and flowers on the grass
+        for (i in 0 until 150) {
+            val v = h(i, 3, s.id); val x = 6 + v % (W - 12); val y = 34 + (v shr 9) % (H - 40)
+            val onPath = (x in cx - 18..cx + 18 && y in cy - 14..cy + 16) || (s.doors[0] && x < cx && y in 88..118) || (s.doors[1] && x > cx && y in 88..118) || (s.doors[2] && y < cy && x in 104..136) || (s.doors[3] && y > cy && x in 104..136)
+            if (onPath) continue
+            when (v % 11) {
+                0 -> { px(x, y, 0xFFF8F0F0.toInt()); px(x + 1, y, 0xFFF8F0F0.toInt()); px(x, y - 1, 0xFFF8F0F0.toInt()); px(x + 1, y - 1, 0xFFF8E060.toInt()) }
+                1 -> { px(x, y, 0xFFE878A0.toInt()); px(x + 1, y - 1, 0xFFE878A0.toInt()); px(x, y - 1, 0xFFF8D0E0.toInt()) }
+                2 -> { px(x, y, 0xFF8090F0.toInt()); px(x, y - 1, 0xFFB0C0FF.toInt()) }
+                else -> { px(x, y, G4); px(x + 2, y, G4); px(x + 1, y - 1, G3); px(x + 1, y, G2) }
+            }
+        }
+        for (w in s.pools) pond(w, s.id)
+        for ((k, f) in s.props) shadow(k, f)
+        // the canopy along the top: a wall of round crowns over trunks
+        box(0, 0, W, 31, CAN_D)
+        for (k in 0 until 16) {
+            val x = k * 16 + (h(k, 1, s.id) % 8) - 4
+            if (s.doors[2] && x in 92..148) continue
+            box(x + 6, 18, x + 11, 31, BARK_D); box(x + 7, 18, x + 10, 31, BARK); px(x + 7, 22, BARK_D)
+        }
+        for (k in 0 until 22) {
+            val x = k * 11 + (h(k, 2, s.id) % 7) - 3; val y = 4 + (h(k, 4, s.id) % 10); val r = 9 + (h(k, 5, s.id) % 5)
+            if (s.doors[2] && x in 98..142) continue
+            p.color = CAN; c.drawCircle(x.toFloat(), y.toFloat(), r.toFloat(), p)
+            p.color = CAN_L; c.drawCircle(x - r * 0.25f, y - r * 0.3f, r * 0.6f, p)
+            p.color = CAN_H; c.drawCircle(x - r * 0.4f, y - r * 0.45f, r * 0.22f, p)
+        }
+        if (s.doors[2]) {
+            // a dark way through the trees
+            box(100, 0, 140, 31, 0xFF142A16.toInt()); box(106, 0, 134, 31, DIRT_D); box(110, 0, 130, 31, 0xFF8A6A40.toInt())
+            for (k in 0 until 4) box(106, k * 7, 134, k * 7 + 2, 0x30000000)
+        }
+        // the canopy's shadow on the grass
+        for (k in 0 until 5) box(0, 31 + k, W, 32 + k, intArrayOf(0x40000000, 0x30000000, 0x20000000, 0x12000000, 0x08000000)[k])
+        // hedges down the sides and along the bottom
+        for (side in 0..1) {
+            val x0 = if (side == 0) 0 else W - 6
+            for (y in 28 until H step 7) {
+                if (s.doors[side] && y in 80..120) continue
+                p.color = CAN; c.drawCircle(x0 + 3f, y.toFloat(), 5f, p); p.color = CAN_L; c.drawCircle(x0 + 2f, y - 1.5f, 2.5f, p)
+            }
+        }
+        for (x in 0 until W step 7) {
+            if (s.doors[3] && x in 98..138) continue
+            p.color = CAN; c.drawCircle(x.toFloat(), H.toFloat(), 5f, p); p.color = CAN_L; c.drawCircle(x - 1f, H - 2f, 2.5f, p)
+        }
+    }
+
+    private fun pond(w: RectF, id: Int) {
+        val l = w.left; val t = w.top; val r = w.right; val b = w.bottom
+        p.color = 0xFF5A7A3A.toInt(); c.drawOval(l - 3, t - 2, r + 3, b + 3, p)
+        p.color = 0xFF3A6A8A.toInt(); c.drawOval(l, t, r, b, p)
+        p.color = 0xFF5A94B8.toInt(); c.drawOval(l + 3, t + 4, r - 2, b - 1, p)
+        p.color = 0xFF8CC0DC.toInt(); c.drawOval(l + (r - l) * 0.35f, b - 6, r - 6, b - 3, p)
+        val v = h(l.toInt(), t.toInt(), id)
+        // lilies and reeds
+        for (i in 0 until 3) {
+            val x = (l + 6 + (v shr (i * 4)) % maxOf(1, (r - l - 14).toInt())).toInt(); val y = (t + 5 + (v shr (i * 5 + 2)) % maxOf(1, (b - t - 10).toInt())).toInt()
+            box(x, y, x + 5, y + 3, LEAF_D); box(x + 1, y, x + 4, y + 2, 0xFF7CB84C.toInt()); if (i == 0) { px(x + 2, y - 1, 0xFFF8B0D0.toInt()); px(x + 3, y - 1, WHITE) }
+        }
+        for (i in 0 until 4) { val x = (l - 2 + i * 3).toInt(); box(x, (b - 8 - i % 2 * 3).toInt(), x + 1, b.toInt() + 1, 0xFF4E7A30.toInt()); px(x, (b - 9 - i % 2 * 3).toInt(), 0xFF8A5A30.toInt()) }
+    }
+
+    /** Leaves drifting down, fireflies, and the odd sunbeam. */
+    private fun forestLife(cv: Canvas, time: Float, s: Spec) {
+        for (i in 0 until 7) {
+            val ph = (time * 0.07f + i * 0.143f + (s.id % 7) * 0.05f) % 1f
+            val x = (i * 37 + s.id * 13) % W + sin(time * 1.3f + i) * 10f; val y = 20f + ph * (H - 20f)
+            glow.color = if (i % 3 == 0) 0xFFE8B040.toInt() else if (i % 3 == 1) 0xFF9AC850.toInt() else 0xFFD07030.toInt()
+            val flip = (time * 3f + i).toInt() % 2
+            cv.drawRect(x, y, x + 2f - flip, y + 1f + flip, glow)
+        }
+        for (i in 0 until 5) {
+            val x = 20f + (i * 53 + s.id * 7) % 200 + sin(time * 0.8f + i * 1.7f) * 14f; val y = 50f + (i * 29 + s.id * 3) % 100 + cos(time * 0.6f + i) * 8f
+            val on = ((time * 1.5f + i * 0.7f) % 2f) < 1.2f
+            if (!on) continue
+            glow.color = 0x30F8F070; cv.drawCircle(x, y, 3f, glow)
+            glow.color = 0xFFF8F8A0.toInt(); cv.drawRect(x, y, x + 1f, y + 1f, glow)
+        }
+        // shafts of light through the canopy
+        for (k in 0 until 2) {
+            val x = 40f + ((s.id * 61 + k * 97) % 160)
+            glow.color = 0x10FFF8C0
+            for (y in 31 until H step 2) cv.drawRect(x + (y - 31) * 0.35f, y.toFloat(), x + 14f + (y - 31) * 0.35f, y + 1f, glow)
         }
     }
 

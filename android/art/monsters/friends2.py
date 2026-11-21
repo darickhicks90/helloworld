@@ -81,26 +81,40 @@ def tove(f):
     for x in (9,12,17,20): put(g,x+(st if x in (9,17) else -st),21,'q')
     return [''.join(r) for r in g]
 def grumble(f):
-    # tall and thin: a standing stone grown over with moss, long arms of stacked rock
+    # tall and thin, all hard edges: a standing stone of split slabs, grown over with moss
     W,H=22,34; s=S(W,H); st=[0,1][f]
-    s.blob(8,31+st*0.3,2.6,2.4,'mnop',0); s.blob(14,31-st*0.3,2.6,2.4,'mnop',0)
-    s.blob(8.5,26,2,4,'mnop',0); s.blob(13.5,26,2,4,'mnop',0)
-    s.tri([(6,22),(7,8),(11,4),(15,8),(16,22),(11,24)],'mnop',1)   # the slab of a body
-    s.blob(11,5,4.2,4.4,'mnop',2)                                 # the head-stone
-    # long arms: stacked stones hanging nearly to its knees
-    for i,(y,r) in enumerate([(10,2.2),(14,2),(18,2),(22.5,2.8)]):
-        s.blob(3.5-(st if i==3 else 0)*0.5,y,r,r*0.9,'mnop',3); s.blob(18.5+(st if i==3 else 0)*0.5,y,r,r*0.9,'mnop',3)
-    # moss: a cap and long beards of it
-    s.blob(11,1.8,4.5,1.6,'abcd',4); s.tri([(7,3),(9,3),(8.5,12)],'abcd',4); s.tri([(13,3),(15,3),(14,9)],'abcd',4)
-    s.blob(7,14,2,3,'abcd',4); s.blob(15,19,1.8,2.6,'abcd',4); s.blob(3.5,9,2,1.2,'abcd',4); s.blob(18.5,9,2,1.2,'abcd',4)
+    def quad(cx,cy,w,h,ramp,layer,lean=0.0):
+        s.tri([(cx-w/2+lean,cy-h/2),(cx+w/2+lean,cy-h/2),(cx+w/2,cy+h/2),(cx-w/2,cy+h/2)],ramp,layer)
+    # blocky feet and shins
+    s.tri([(5.5,30+st*0.3),(10.5,30+st*0.3),(11,33),(5,33)],'mnop',0); s.tri([(11.5,30-st*0.3),(16.5,30-st*0.3),(17,33),(11,33)],'mnop',0)
+    quad(8.5,26,3.6,8,'mnop',0,0.4); quad(13.5,26,3.6,8,'mnop',0,-0.4)
+    # the body: a tall cut slab, wider at the shoulders, chamfered corners
+    s.tri([(5,9),(7,7),(15,7),(17,9),(16,21),(14,24),(8,24),(6,21)],'mnop',1)
+    # the head: a faceted block with a jutting brow
+    s.tri([(7,4),(9,1),(13,1),(15,4),(14.5,8),(7.5,8)],'mnop',2)
+    s.tri([(6.5,4.5),(15.5,4.5),(14.5,6),(7.5,6)],'mnop',3)
+    # long arms: stacked angular stones, the fist a heavy wedge
+    for i,(y,h) in enumerate([(10,3.6),(14,3.4),(18,3.4)]):
+        quad(3.2,y,3.4,h-0.6,'mnop',3+2*(i%2),0.5 if i%2 else -0.5); quad(18.8,y,3.4,h-0.6,'mnop',3+2*(i%2),-0.5 if i%2 else 0.5)
+    fx=st*0.5
+    s.tri([(1-fx,20.5),(5.5-fx,20.5),(6-fx,25),(3-fx,26.5),(0.5-fx,24)],'mnop',6)
+    s.tri([(16.5+fx,20.5),(21+fx,20.5),(21.5+fx,24),(19+fx,26.5),(16+fx,25)],'mnop',6)
+    # moss: a flat cap and hanging strips, cut straight
+    s.tri([(8,0.5),(14,0.5),(15,2.5),(7,2.5)],'abcd',7)
+    s.tri([(7,2.5),(8.2,2.5),(8,5),(7.2,5)],'abcd',7); s.tri([(14,2.5),(15,2.5),(14.8,4.5),(14.2,4.5)],'abcd',7)
+    s.tri([(6,12),(8.5,12),(8,17),(6,16)],'abcd',4); s.tri([(14,17),(16,17),(15.5,21),(14,20)],'abcd',4)
+    s.tri([(1.5,8),(5,8),(4.5,9.5),(2,9.5)],'abcd',8); s.tri([(17,8),(20.5,8),(20,9.5),(17.5,9.5)],'abcd',8)
     g=grid(s)
-    put(g,9,5,'s'); put(g,10,5,'r'); put(g,12,5,'r'); put(g,13,5,'s'); put(g,9,6,'q'); put(g,13,6,'q')
-    # carved runes glowing down its chest
-    for (x,y) in [(11,11),(10,12),(12,12),(11,13),(11,16),(10,17),(11,18),(12,17),(11,21)]: put(g,x,y,'r')
-    for (x,y) in [(8,9),(13,14),(9,20),(14,22),(4,12),(18,16),(3,20),(19,21)]: put(g,x,y,'m'); put(g,x+1,y,'p')
-    for (x,y) in [(7,4),(14,2),(6,16),(15,18),(8,8),(3,8),(19,8)]: put(g,x,y,'d')
-    for (x,y) in [(7,15),(15,20)]: put(g,x,y,'L')
-    for (x,y) in [(16,4),(5,23)]: put(g,x,y,'E')            # a few tiny flowers in the moss
+    # deep-set glowing eyes under the brow
+    put(g,9,6,'s'); put(g,10,6,'r'); put(g,12,6,'r'); put(g,13,6,'s'); put(g,9,7,'q'); put(g,13,7,'q')
+    # a carved rune line down its chest, straight cuts
+    for y in range(10,22): put(g,11,y,'r' if y%3 else 'q')
+    for (x,y) in [(10,12),(12,12),(10,16),(12,16),(10,20),(12,20)]: put(g,x,y,'r')
+    # crisp cracks and lit edges on the slab
+    for y in range(9,20): put(g,6 if y<15 else 7,y,'p')
+    for (x,y) in [(14,10),(15,11),(14,12),(8,19),(9,20),(13,22)]: put(g,x,y,'m')
+    for (x,y) in [(7,4),(14,2),(8,8),(3,8),(19,8)]: put(g,x,y,'d')
+    for (x,y) in [(16,4),(5,23)]: put(g,x,y,'E')
     return [''.join(r) for r in g]
 def ember(f):
     # a salamander with a crest of live flame

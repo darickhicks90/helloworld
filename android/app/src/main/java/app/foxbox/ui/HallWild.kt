@@ -36,6 +36,8 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
     val bridges = Array(n) { ArrayList<IntArray>() }
     /** The fort (no fighting), and the monsters in it: room, x, y, role, kind. */
     var fort = -1
+    /** Every screen of the fort (a block of up to 3 x 2, open inside, walled round). */
+    val fortRooms = HashSet<Int>()
     val npcs = ArrayList<IntArray>()
     /** Fog banks: screens lying under fog (each bank two to four screens), where shades drift. */
     val fog = HashSet<Int>()
@@ -45,8 +47,13 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
         const val TREE = 9; const val STUMP = 10; const val LOG = 11; const val MUSHROOM = 12; const val EXIT = 13; const val THICKET = 14
         const val GRAVE = 15; const val RUIN_PILLAR = 16; const val RUIN_WALL = 17; const val DEADTREE = 18
         const val TENT = 19; const val CAMPFIRE = 20; const val STALL = 21; const val PALISADE = 22
-        /** Fort folk: 0 the toad (herbs), 1 the moth-witch (spirit blooms), 2 a mercenary (its kind in [4]). */
-        const val NPC_TOAD = 0; const val NPC_MOTH = 1; const val NPC_MERC = 2
+        // village things in the fort
+        const val WELL = 23; const val CRATES = 24; const val BARREL = 25; const val HAY = 26; const val LANTERN = 27
+        const val BENCH = 28; const val CART = 29; const val SIGNPOST = 30; const val FLOWERBED = 31; const val LAUNDRY = 32
+        // the grander ruins: a paved plaza (walkable), standing columns, an arch, a statue, fallen drums
+        const val PLAZA = 33; const val COLUMN = 34; const val ARCH = 35; const val RUIN_STATUE = 36; const val FALLEN_COLUMN = 37
+        /** Fort folk: 0 the toad (herbs), 1 the moth-witch (spirit blooms), 2 a mercenary (its kind in [4]), 3 a guard, 4 townsfolk. */
+        const val NPC_TOAD = 0; const val NPC_MOTH = 1; const val NPC_MERC = 2; const val NPC_GUARD = 3; const val NPC_FOLK = 4
         /** Where rivers cross a screen: a band along y = 151 and one along x = 52, meeting at the corner pond. */
         const val RIV_Y = 150; const val RIV_X = 52; const val RIV_HALF = 9
         val DX = intArrayOf(-1, 1, 0, 0); val DY = intArrayOf(0, 0, -1, 1); val OPP = intArrayOf(1, 0, 3, 2)
@@ -111,18 +118,36 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
         }
         // 6. scenery for each screen, a fort near the start, rivers from pond to pond
         for (r in 0 until n) furnish(r)
-        val fortC = (0 until n).filter { it != start && it != exit && region[it] == 0 && keys.none { k -> k[0] == it } }
-        fort = (fortC.filter { doors[it].length >= 2 }.ifEmpty { fortC }).let { if (it.isEmpty()) -1 else it[rnd.nextInt(it.size)] }
-        if (fort >= 0) furnishFort(fort)
+        // the fort: the biggest block of screens (3 x 2 at best) all in one region, never the start or exit
+        run {
+            var best: List<Int>? = null; var bestScore = -1e9f
+            for ((bw, bh) in listOf(3 to 2, 2 to 3, 2 to 2, 2 to 1, 1 to 2, 1 to 1)) {
+                for (oy in 0..h - bh) for (ox in 0..w - bw) {
+                    val block = ArrayList<Int>(); for (y in oy until oy + bh) for (x in ox until ox + bw) block += y * w + x
+                    if (block.any { it == start || it == exit }) continue
+                    val reg = region[block[0]]; if (block.any { region[it] != reg }) continue
+                    val score = -reg * 10f - block.minOf { dist[it] } * 0.5f + rnd.nextFloat()
+                    if (score > bestScore) { bestScore = score; best = block }
+                }
+                if (best != null) break
+            }
+            best?.let { b ->
+                fortRooms += b; fort = b[b.size / 2]
+                // open the fort inside: no hedges between its screens
+                for (r in b) for (d in 0 until 4) { val o = nb(r, d); if (o in fortRooms) open(r, d) }
+                for (r in 0 until n) doors[r] = (0 until 4).filter { sides[r][it] }.joinToString("") { "WENS"[it].toString() }
+                furnishFort(b)
+            }
+        }
         repeat(if (depth >= 3) 2 else 1) { river() }
         for (k in keys) { val spot = clearSpot(k[0]); k[1] = spot.first; k[2] = spot.second }
         for (r in 0 until n) names[r] = A[rnd.nextInt(A.size)] + " " + B[rnd.nextInt(B.size)]
         for ((r, nm) in special) names[r] = nm
         names[start] = "THE WOOD'S EDGE"; names[exit] = if (bossLevel) "THE HEART OF THE WOOD" else "THE ROOT DOOR"
-        if (fort >= 0) names[fort] = listOf("THE STOCKADE", "BRAMBLE FORT", "THE WARDEN'S CAMP", "MOSSWALL KEEP")[rnd.nextInt(4)]
+        if (fort >= 0) { val fn = listOf("THE STOCKADE", "BRAMBLE FORT", "THE WARDEN'S CAMP", "MOSSWALL KEEP")[rnd.nextInt(4)]; for (r in fortRooms) names[r] = fn }
         // 7. fog banks, drawn last so the rest of the wood comes out the same
         repeat(if (depth >= 2) 2 else 1) {
-            val no = HashSet<Int>().apply { add(start); add(exit); if (fort >= 0) add(fort); if (fort >= 0) for (d in 0 until 4) nb(fort, d).let { if (it >= 0) add(it) } }
+            val no = HashSet<Int>().apply { add(start); add(exit); for (f in fortRooms) { add(f); for (d in 0 until 4) nb(f, d).let { if (it >= 0) add(it) } } }
             val cands = (0 until n).filter { it !in no && it !in fog }
             if (cands.isEmpty()) return@repeat
             val bank = arrayListOf(cands[rnd.nextInt(cands.size)])
@@ -200,29 +225,76 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
         repeat(2) { place(r, DEADTREE, 10, 6) }
         repeat(2) { place(r, ROCK, 14, 8) }
     }
-    /** Broken pillars, crumbling walls overgrown with moss, rubble. */
+    /**
+     * The ruins of something great: a paved plaza (walkable), a colonnade along it, a broken arch,
+     * a statue looking out over it, columns fallen in drums, crumbling walls and rubble round about.
+     */
     private fun ruins(r: Int) {
-        repeat(5) { place(r, RUIN_PILLAR, 12, 8, pad = 8) }
-        repeat(3) { val w0 = 24 + rnd.nextInt(30); place(r, RUIN_WALL, w0, 8, pad = 6) }
-        repeat(4) { place(r, ROCK, 14, 8) }
+        // the colonnade first (the plaza goes down last so nothing else is kept off it)
+        for (row in 0..1) {
+            val y = if (row == 0) 56 else 140
+            var x = 26
+            while (x < 214) { if (rnd.nextFloat() < 0.8f) { val tall = rnd.nextFloat() < 0.65f; if (free(r, x, y, x + 10, y + 7, 1)) props[r] += intArrayOf(if (tall) COLUMN else RUIN_PILLAR, x, y, x + 10, y + 7) }; x += 24 }
+        }
+        place(r, ARCH, 34, 8, pad = 4, area = intArrayOf(20, 40, 220, 80)) || place(r, ARCH, 34, 8, pad = 4)
+        place(r, RUIN_STATUE, 14, 9, pad = 6)
+        repeat(2) { place(r, FALLEN_COLUMN, 30, 8, pad = 4) }
+        repeat(2) { val w0 = 24 + rnd.nextInt(30); place(r, RUIN_WALL, w0, 8, pad = 6) }
+        repeat(3) { place(r, ROCK, 14, 8) }
         repeat(2) { place(r, TREE, 12, 6) }
+        props[r] += intArrayOf(PLAZA, 30, 64, 210, 140)
     }
-    /** The fort: a palisade with gaps for the ways in, tents, a campfire, a stall, and its folk. */
-    private fun furnishFort(r: Int) {
-        props[r].clear(); pools[r].clear()
-        val sd = sides[r]
-        fun wall(l: Int, t: Int, rr: Int, b: Int) { props[r] += intArrayOf(PALISADE, l, t, rr, b) }
-        if (sd[2]) { wall(8, 34, 98, 42); wall(142, 34, 232, 42) } else wall(8, 34, 232, 42)
-        if (sd[3]) { wall(8, 162, 98, 170); wall(142, 162, 232, 170) } else wall(8, 162, 232, 170)
-        if (sd[0]) { wall(8, 42, 16, 78); wall(8, 130, 16, 162) } else wall(8, 42, 16, 162)
-        if (sd[1]) { wall(224, 42, 232, 78); wall(224, 130, 232, 162) } else wall(224, 42, 232, 162)
-        props[r] += intArrayOf(TENT, 24, 54, 58, 70); props[r] += intArrayOf(TENT, 182, 54, 216, 70)
-        props[r] += intArrayOf(CAMPFIRE, 62, 140, 74, 146)
-        props[r] += intArrayOf(STALL, 160, 140, 198, 148)
-        npcs += intArrayOf(r, 179, 138, NPC_TOAD, 0)
-        npcs += intArrayOf(r, 40, 150, NPC_MOTH, 0)
+    /**
+     * The fort: a palisade round the whole block (gaps where the ways in are, a guard at each), and
+     * inside a little village: the merchants' tents and stall round a fire, a well, carts, crates,
+     * barrels, hay, benches, lanterns, flower beds, washing on a line; townsfolk going about.
+     */
+    private fun furnishFort(block: List<Int>) {
+        val xs = block.map { it % w }; val ys = block.map { it / w }
+        val minX = xs.min(); val maxX = xs.max(); val minY = ys.min(); val maxY = ys.max()
         val kinds = listOf(0, 1, 3, 0, 1, 3, 2).shuffled(rnd)
-        npcs += intArrayOf(r, 66, 98, NPC_MERC, kinds[0]); npcs += intArrayOf(r, 176, 98, NPC_MERC, kinds[1])
+        val heart = fort
+        for (r in block) {
+            props[r].clear(); pools[r].clear()
+            val sd = sides[r]; val cx = r % w; val cy = r / w
+            fun wall(l: Int, t: Int, rr: Int, b: Int) { props[r] += intArrayOf(PALISADE, l, t, rr, b) }
+            fun guard(x: Int, y: Int) { npcs += intArrayOf(r, x, y, NPC_GUARD, listOf(2, 1, 2, 3)[rnd.nextInt(4)]) }
+            // the outer walls only: north, south, west, east, each with a gap (and a guard) where a way leads out
+            if (cy == minY) { if (sd[2]) { wall(0, 34, 98, 42); wall(142, 34, 240, 42); guard(92, 56); guard(148, 56) } else wall(0, 34, 240, 42) }
+            if (cy == maxY) { if (sd[3]) { wall(0, 162, 98, 170); wall(142, 162, 240, 170); guard(92, 156); guard(148, 156) } else wall(0, 162, 240, 170) }
+            if (cx == minX) { if (sd[0]) { wall(0, 42, 8, 78); wall(0, 130, 8, 162); guard(22, 76); guard(22, 136) } else wall(0, 42, 8, 162) }
+            if (cx == maxX) { if (sd[1]) { wall(232, 42, 240, 78); wall(232, 130, 240, 162); guard(218, 76); guard(218, 136) } else wall(232, 42, 240, 162) }
+            if (r == heart) {
+                // the market: two tents, the stall, the fire, and the folk who trade
+                props[r] += intArrayOf(TENT, 24, 54, 58, 70); props[r] += intArrayOf(TENT, 182, 54, 216, 70)
+                props[r] += intArrayOf(CAMPFIRE, 62, 140, 74, 146)
+                props[r] += intArrayOf(STALL, 160, 140, 198, 148)
+                props[r] += intArrayOf(LANTERN, 84, 62, 88, 66); props[r] += intArrayOf(LANTERN, 152, 62, 156, 66)
+                npcs += intArrayOf(r, 179, 138, NPC_TOAD, 0)
+                npcs += intArrayOf(r, 40, 150, NPC_MOTH, 0)
+                npcs += intArrayOf(r, 66, 98, NPC_MERC, kinds[0]); npcs += intArrayOf(r, 176, 98, NPC_MERC, kinds[1])
+                continue
+            }
+            // every other screen: a corner of the village
+            val pick = (r * 7 + rnd.nextInt(5)) % 4
+            when (pick) {
+                0 -> { place(r, WELL, 18, 10, pad = 8); repeat(2) { place(r, BENCH, 16, 5) }; repeat(3) { place(r, FLOWERBED, 20, 6, pad = 3) }; repeat(2) { place(r, LANTERN, 4, 4) } }
+                1 -> { place(r, CART, 26, 10, pad = 6); repeat(3) { place(r, CRATES, 12, 8, pad = 2) }; repeat(4) { place(r, BARREL, 7, 6, pad = 2) }; repeat(2) { place(r, HAY, 14, 8, pad = 3) } }
+                2 -> { place(r, TENT, 34, 16); repeat(2) { place(r, LAUNDRY, 3, 3, pad = 30) }; place(r, CAMPFIRE, 12, 6); repeat(2) { place(r, BENCH, 16, 5) }; place(r, BARREL, 7, 6) }
+                else -> { repeat(4) { place(r, FLOWERBED, 20, 6, pad = 3) }; place(r, SIGNPOST, 6, 4); repeat(2) { place(r, HAY, 14, 8) }; place(r, TREE, 12, 6); repeat(2) { place(r, LANTERN, 4, 4) } }
+            }
+            if (rnd.nextFloat() < 0.5f) { place(r, CRATES, 12, 8); place(r, BARREL, 7, 6) }
+            if (rnd.nextFloat() < 0.4f) npcs += intArrayOf(r, 120, 104, NPC_MERC, kinds[2 + rnd.nextInt(3)])
+            // townsfolk, going about their business
+            repeat(2 + rnd.nextInt(2)) {
+                for (k in 0 until 20) {
+                    val x = 30 + rnd.nextInt(180); val y = 56 + rnd.nextInt(96)
+                    if (props[r].none { p -> x + 8 > p[1] && x - 8 < p[3] && y + 4 > p[2] && y - 8 < p[4] }) { npcs += intArrayOf(r, x, y, NPC_FOLK, rnd.nextInt(6)); break }
+                }
+            }
+        }
+        // a few folk in the market too
+        repeat(2) { npcs += intArrayOf(heart, 100 + rnd.nextInt(40), 118 + rnd.nextInt(20), NPC_FOLK, rnd.nextInt(6)) }
     }
     /** The ways through a screen (always kept open; a river crossing one gets a bridge). */
     private fun lanes(r: Int): List<IntArray> {
@@ -236,7 +308,7 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
     }
     /** A river from a pond to another pond some five screens away, under the hedges between screens. */
     private fun river() {
-        val bad = HashSet<Int>().apply { if (fort >= 0) add(fort) }
+        val bad = HashSet<Int>().apply { addAll(fortRooms) }
         val a = (0 until n).filter { it !in bad && rivers[it].isEmpty() }.let { if (it.isEmpty()) return else it[rnd.nextInt(it.size)] }
         // the grid's own neighbours (rivers don't need doors)
         val dist = IntArray(n) { -1 }; val par = IntArray(n) { -1 }; dist[a] = 0
@@ -258,7 +330,7 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
             else if (ins >= 0 && outs >= 0 && setOf(ins, outs) == setOf(2, 3)) segs += vseg(28, 176)
             else { if (ins >= 0) segs += toCorner(ins); if (outs >= 0) segs += toCorner(outs) }
             // the ponds it runs between, in the corner
-            if (i == 0 || i == path.size - 1) pools[r] += intArrayOf(14, 134, 92, 170)
+            if (i == 0 || i == path.size - 1) pondAt(r, 12, 130, 94, 172)
             // cut a bridge wherever it crosses a way through
             for (sg in segs) {
                 var parts = listOf(sg)
@@ -291,7 +363,7 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
     private fun lake(r: Int) {
         var best: IntArray? = null; var bestA = 0
         for (tries in 0 until 160) {
-            val w0 = 50 + rnd.nextInt(170); val h0 = 24 + rnd.nextInt(70)
+            val w0 = 70 + rnd.nextInt(160); val h0 = 36 + rnd.nextInt(76)
             if (w0 * h0 <= bestA) continue
             val l = 8 + rnd.nextInt(maxOf(1, 224 - w0)); val t = 36 + rnd.nextInt(maxOf(1, 132 - h0))
             if (l + w0 > 232 || t + h0 > 168) continue
@@ -300,7 +372,20 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
             if (props[r].any { l + w0 > it[1] && l < it[3] && t + h0 > it[2] && t < it[4] }) continue
             best = intArrayOf(l, t, l + w0, t + h0); bestA = w0 * h0
         }
-        best?.let { pools[r] += it }
+        best?.let { pondAt(r, it[0], it[1], it[2], it[3]) }
+    }
+    /**
+     * A pond filling this box: a main oval and a few overlapping lobes pushing into its corners, so
+     * the shore wanders like a real one. Each lobe is an oval inscribed in its own box (in [pools]).
+     */
+    private fun pondAt(r: Int, l: Int, t: Int, rr: Int, b: Int) {
+        val w0 = rr - l; val h0 = b - t
+        pools[r] += intArrayOf(l + w0 / 10, t + h0 / 10, rr - w0 / 10, b - h0 / 10)
+        repeat(3 + rnd.nextInt(3)) {
+            val lw = (w0 * (0.35f + rnd.nextFloat() * 0.3f)).toInt(); val lh = (h0 * (0.4f + rnd.nextFloat() * 0.35f)).toInt()
+            val lx = l + rnd.nextInt(maxOf(1, w0 - lw + 1)); val ly = t + rnd.nextInt(maxOf(1, h0 - lh + 1))
+            pools[r] += intArrayOf(lx, ly, lx + lw, ly + lh)
+        }
     }
     /** A narrow passage: thicket everywhere but a winding way, about 28 wide, between the open sides. */
     private fun passage(r: Int) {
@@ -332,7 +417,7 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
     /** A clear spot for a key: off the paths if possible, never in anything. */
     private fun clearSpot(r: Int): Pair<Int, Int> {
         val wet = rivers[r] + pools[r]
-        fun clear(x: Int, y: Int) = props[r].none { p -> x + 6 > p[1] && x - 6 < p[3] && y + 6 > p[2] && y - 6 < p[4] } && wet.none { p -> x + 7 > p[0] && x - 7 < p[2] && y + 7 > p[1] && y - 7 < p[3] }
+        fun clear(x: Int, y: Int) = props[r].none { p -> p[0] != PLAZA && x + 6 > p[1] && x - 6 < p[3] && y + 6 > p[2] && y - 6 < p[4] } && wet.none { p -> x + 7 > p[0] && x - 7 < p[2] && y + 7 > p[1] && y - 7 < p[3] }
         val ln = lanes(r)
         repeat(80) {
             val l = ln[rnd.nextInt(ln.size)]
@@ -341,7 +426,7 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
         }
         repeat(60) {
             val x = 24 + rnd.nextInt(192); val y = 52 + rnd.nextInt(108)
-            if (free(r, x - 6, y - 6, x + 6, y + 6, 4) || (it > 40 && props[r].none { p -> x + 6 > p[1] && x - 6 < p[3] && y + 6 > p[2] && y - 6 < p[4] } && pools[r].none { p -> x + 6 > p[0] && x - 6 < p[2] && y + 6 > p[1] && y - 6 < p[3] })) return x to y
+            if (free(r, x - 6, y - 6, x + 6, y + 6, 4) || (it > 40 && props[r].none { p -> p[0] != PLAZA && x + 6 > p[1] && x - 6 < p[3] && y + 6 > p[2] && y - 6 < p[4] } && pools[r].none { p -> x + 6 > p[0] && x - 6 < p[2] && y + 6 > p[1] && y - 6 < p[3] })) return x to y
         }
         return 120 to 104
     }

@@ -35,7 +35,7 @@ internal class HallRoomArt {
         // prop kinds (as in HallScreen)
         const val PILLAR = 0; const val ROCK = 1; const val SHRUB = 2; const val STATUE = 3; const val FOUNTAIN = 4
         const val TABLE = 5; const val BRAZIER = 6; const val TOMB = 7; const val CHEST = 8
-        const val TREE = 9; const val THICKET = 14; const val PALISADE = 22
+        const val TREE = 9; const val THICKET = 14; const val PALISADE = 22; const val PLAZA = 33; const val FLOWERBED = 31
         /** A screen of the Wildwood. */
         const val FOREST = 10
     }
@@ -469,11 +469,10 @@ internal class HallRoomArt {
                 else -> { px(x, y, G4); px(x + 2, y, G4); px(x + 1, y - 1, G3); px(x + 1, y, G2) }
             }
         }
-        for (w in s.rivers) riverBank(w)
-        for (w in s.rivers) riverWater(w)
-        for (w in s.pools) pond(w, s.id)
+        for ((k, f) in s.props) if (k == PLAZA) plaza(f, s.id)
+        water(s)
         for (b in s.bridges) bridge(b)
-        for ((k, f) in s.props) when (k) { THICKET -> thicket(f, s.id); PALISADE -> palisade(f); else -> shadow(k, f) }
+        for ((k, f) in s.props) when (k) { THICKET -> thicket(f, s.id); PALISADE -> palisade(f); PLAZA, FLOWERBED -> {}; else -> shadow(k, f) }
         if (s.open) return
         // the canopy along the top: a wall of round crowns over trunks
         box(0, 0, W, 31, CAN_D)
@@ -514,6 +513,86 @@ internal class HallRoomArt {
         }
     }
 
+    /**
+     * All the water in a screen as one body: rivers and pond lobes melt into each other. Each
+     * pixel gets a depth (how far inside the nearest water it is, a little wobble added), and
+     * from that: muddy shore, a pale lip, shallows, then the deep.
+     */
+    private fun water(s: Spec) {
+        val bm = baked ?: return
+        val ponds = s.pools; val rivs = s.rivers
+        val runs = ArrayList<RectF>(rivs)
+        for (b in s.bridges) { if (b.width() >= b.height()) runs += RectF(b.left, b.top + 2, b.right, b.bottom - 2) else runs += RectF(b.left + 2, b.top, b.right - 2, b.bottom) }
+        if (ponds.isEmpty() && runs.isEmpty()) return
+        var x0 = W; var y0 = H; var x1 = 0; var y1 = 0
+        for (w in ponds + runs) { x0 = minOf(x0, w.left.toInt() - 8); y0 = minOf(y0, w.top.toInt() - 8); x1 = maxOf(x1, w.right.toInt() + 8); y1 = maxOf(y1, w.bottom.toInt() + 8) }
+        x0 = x0.coerceIn(0, W); x1 = x1.coerceIn(0, W); y0 = y0.coerceIn(0, H); y1 = y1.coerceIn(0, H)
+        val MUD = 0xFF4A6A30.toInt(); val MUD_L = 0xFF5A7A3A.toInt(); val LIP = 0xFF6CA2C2.toInt(); val SH = 0xFF4E84A6.toInt(); val MIDW = 0xFF3A6A8A.toInt(); val DEEP = 0xFF24485E.toInt()
+        for (y in y0 until y1) for (x in x0 until x1) {
+            val X = x + 0.5f; val Y = y + 0.5f
+            var d = -99f
+            for (w in ponds) {
+                val rx = w.width() / 2; val ry = w.height() / 2; if (rx <= 0f || ry <= 0f) continue
+                val dx = (X - w.centerX()) / rx; val dy = (Y - w.centerY()) / ry
+                d = maxOf(d, (1f - kotlin.math.sqrt(dx * dx + dy * dy)) * minOf(rx, ry))
+            }
+            for (w in runs) {
+                val horiz = w.width() >= w.height()
+                val dd = if (horiz) { if (X < w.left - 6 || X > w.right + 6) -99f else minOf(Y - w.top, w.bottom - Y) - maxOf(0f, w.left - X, X - w.right) }
+                         else { if (Y < w.top - 6 || Y > w.bottom + 6) -99f else minOf(X - w.left, w.right - X) - maxOf(0f, w.top - Y, Y - w.bottom) }
+                d = maxOf(d, dd)
+            }
+            if (d < -5f) continue
+            // a wandering shore
+            d += ((h(x / 3, y / 3, s.id) % 100) / 100f - 0.5f) * 1.6f + kotlin.math.sin(x * 0.21f + y * 0.13f) * 0.8f
+            val col = when {
+                d < -3f -> if ((h(x, y, 7) % 3) == 0) MUD else 0
+                d < -1f -> if ((x + y) % 5 == 0) MUD_L else MUD
+                d < 0.6f -> LIP
+                d < 3.5f -> SH
+                d < 7.5f -> MIDW
+                else -> DEEP
+            }
+            if (col != 0) bm.setPixel(x, y, col)
+        }
+        // reeds and rushes on the shore, lilies out on the ponds
+        for (i in 0 until 60) {
+            val v = h(i, 11, s.id); val x = x0 + v % maxOf(1, x1 - x0); val y = y0 + (v shr 10) % maxOf(1, y1 - y0)
+            val on = bm.getPixel(x.coerceIn(0, W - 1), y.coerceIn(0, H - 1))
+            if (on == MUD || on == MUD_L) {
+                if (v % 3 == 0) { for (q in 0 until 3) { box(x + q * 2, y - 5 - (q % 2) * 2, x + q * 2 + 1, y + 1, 0xFF3E6A28.toInt()); if (q == 1) box(x + q * 2, y - 7, x + q * 2 + 1, y - 4, 0xFF7A4A24.toInt()) } }
+            } else if (on == MIDW && v % 4 == 0) {
+                box(x, y, x + 5, y + 3, LEAF_D); box(x + 1, y, x + 4, y + 2, 0xFF7CB84C.toInt()); if (v % 8 == 0) { px(x + 2, y - 1, 0xFFF8B0D0.toInt()); px(x + 3, y - 1, WHITE) }
+            } else if (on == DEEP && v % 5 == 0) { px(x, y, 0xFF3A6A8A.toInt()); px(x + 1, y, 0xFF6CA2C2.toInt()) }
+        }
+    }
+    /** An old paved plaza: big worn flagstones, cracked, grass in the joints, broken at its edges. */
+    private fun plaza(f: RectF, id: Int) {
+        val l = f.left.toInt(); val t = f.top.toInt(); val r = f.right.toInt(); val b = f.bottom.toInt()
+        val st = intArrayOf(0xFFB8B2A2.toInt(), 0xFFA8A292.toInt(), 0xFFC4BEAE.toInt(), 0xFF9C9686.toInt())
+        var row = 0; var y = t
+        while (y < b) {
+            var x = l - (if (row % 2 == 1) 7 else 0)
+            while (x < r) {
+                val v = h(x, y, id)
+                val edge = x < l + 6 || x + 14 > r - 6 || y < t + 5 || y + 10 > b - 5
+                if (!(edge && v % 3 == 0)) {
+                    val x0 = maxOf(x, l); val x1 = minOf(x + 13, r)
+                    if (x1 > x0) {
+                        box(x0, y, x1, y + 9, st[v % 4]); box(x0, y, x1, y + 1, 0xFFD8D2C2.toInt()); box(x0, y + 8, x1, y + 9, 0xFF847E70.toInt())
+                        if (v % 5 == 0) { px(x0 + 3, y + 3, 0xFF847E70.toInt()); px(x0 + 4, y + 4, 0xFF847E70.toInt()); px(x0 + 5, y + 4, 0xFF847E70.toInt()) }
+                        if (v % 7 == 0) { px(x0 + 1, y + 8, 0xFF5E9A34.toInt()); px(x0 + 2, y + 8, 0xFF7AB02E.toInt()) }
+                    }
+                }
+                x += 14
+            }
+            y += 10; row++
+        }
+        // a worn ring in the middle where a fountain or altar once stood
+        p.color = 0xFF8E887A.toInt(); c.drawOval(f.centerX() - 22, f.centerY() - 10, f.centerX() + 22, f.centerY() + 10, p)
+        p.color = 0xFFB8B2A2.toInt(); c.drawOval(f.centerX() - 18, f.centerY() - 7, f.centerX() + 18, f.centerY() + 7, p)
+        p.color = 0xFFCEC8B8.toInt(); c.drawOval(f.centerX() - 8, f.centerY() - 3, f.centerX() + 8, f.centerY() + 3, p)
+    }
     /** A river: muddy banks with reeds, deep water in the middle, lighter at the edges. */
     private fun riverBank(w: RectF) {
         val horiz = w.width() >= w.height()
@@ -636,7 +715,7 @@ internal class HallRoomArt {
             }
         }
         // mist lying on the water, drifting and breathing
-        for ((wi, w) in s.pools.withIndex()) for (i in 0 until 9) {
+        for ((wi, w) in s.pools.withIndex()) for (i in 0 until 5) {
             val ph = (time * 0.04f + i * 0.111f + wi * 0.37f) % 1f
             val fx = w.left - 14f + ph * (w.width() + 28f); val fy = w.top + (i * 37 % 100) / 100f * w.height() + sin(time * 0.5f + i) * 3f
             val a = (0x16 + 0x10 * sin(time * 0.7f + i * 1.3f)).toInt().coerceIn(6, 40)
@@ -644,7 +723,7 @@ internal class HallRoomArt {
             glow.color = ((a / 2) shl 24) or 0xE8F0F4; cv.drawOval(fx - 22f, fy - 6f, fx + 22f, fy + 6f, glow)
         }
         // fireflies wandering about, gathering over the water
-        val flies = 14 + s.pools.size * 8
+        val flies = 14 + minOf(s.pools.size, 3) * 8
         for (i in 0 until flies) {
             val w = if (i >= 14 && s.pools.isNotEmpty()) s.pools[(i - 14) % s.pools.size] else null
             val bx = w?.centerX() ?: (16f + (i * 53 + s.id * 7) % 208); val by = w?.centerY() ?: (44f + (i * 29 + s.id * 3) % 118)

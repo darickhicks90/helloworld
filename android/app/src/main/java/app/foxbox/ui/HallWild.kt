@@ -93,8 +93,8 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
         run {
             val want = 6 + rnd.nextInt(4)
             // a fort-sized block near the start is kept alive
-            val sx = start % w; val ox = (sx - 1 + rnd.nextInt(-1, 2)).coerceIn(0, w - 3)
-            val keepAlive = fortKeep; for (y in h - 3 until h - 1) for (x in ox until ox + 3) keepAlive += y * w + x
+            val sx = start % w; val ox = (sx + rnd.nextInt(-1, 1)).coerceIn(0, w - 2)
+            val keepAlive = fortKeep; if (!bossLevel) for (y in h - 3 until h - 1) for (x in ox until ox + 2) keepAlive += y * w + x
             var made = 0; var tries = 0
             while (made < want && tries++ < 200) {
                 val c = rnd.nextInt(n); if (c == start || dead[c] || c in keepAlive) continue
@@ -161,9 +161,9 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
         // 6. scenery for each screen, a fort near the start, rivers from pond to pond
         for (r in 0 until n) furnish(r)
         // the fort: the biggest block of screens (3 x 2 at best) all in one region, never the start or exit
-        run {
+        if (!bossLevel) run {
             var best: List<Int>? = null; var bestScore = -1e9f
-            for ((bw, bh) in listOf(3 to 2, 2 to 3, 2 to 2, 2 to 1, 1 to 2, 1 to 1)) {
+            for ((bw, bh) in listOf(2 to 2, 2 to 1, 1 to 2, 1 to 1)) {
                 for (oy in 0..h - bh) for (ox in 0..w - bw) {
                     val block = ArrayList<Int>(); for (y in oy until oy + bh) for (x in ox until ox + bw) block += y * w + x
                     if (block.any { it == start || it == exit || dead[it] }) continue
@@ -216,12 +216,14 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
         val w0 = ways[r]; w0.clear()
         shaped[r] = true
         val open = BooleanArray(GX * GY); val cr = core[r]; java.util.Arrays.fill(cr, false)
+        /** Tight passages: squeezing between the clearings (most screens). */
+        val tight = size != 2 && rnd.nextFloat() < 0.7f
         fun carve(x: Float, y: Float, rad: Float, isCore: Boolean) {
             val g0 = ((x - rad) / CW).toInt().coerceAtLeast(0); val g1 = ((x + rad) / CW).toInt().coerceAtMost(GX - 1)
             val h0 = ((y - rad) / CH).toInt().coerceAtLeast(0); val h1 = ((y + rad) / CH).toInt().coerceAtMost(GY - 1)
             for (gy in h0..h1) for (gx in g0..g1) { val cx = gx * CW + CW / 2f; val cy = gy * CH + CH / 2f
                 val dd = (cx - x) * (cx - x) + (cy - y) * (cy - y)
-                if (dd < rad * rad) { open[gy * GX + gx] = true; if (isCore && dd < (rad * 0.6f) * (rad * 0.6f)) cr[gy * GX + gx] = true } }
+                if (dd < rad * rad) { open[gy * GX + gx] = true; if (isCore && dd < maxOf(rad * 0.6f, 10.5f) * maxOf(rad * 0.6f, 10.5f)) cr[gy * GX + gx] = true } }
         }
         fun ellipse(x: Float, y: Float, rx: Float, ry: Float) {
             for (gy in 0 until GY) for (gx in 0 until GX) { val dx = (gx * CW + CW / 2f - x) / rx; val dy = (gy * CH + CH / 2f - y) / ry
@@ -232,12 +234,12 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
         fun passage(ax: Float, ay: Float, bx: Float, by: Float, bendK: Float) {
             val mx = (ax + bx) / 2; val my = (ay + by) / 2; val dx = bx - ax; val dy = by - ay; val L = kotlin.math.hypot(dx, dy).coerceAtLeast(1f)
             val cx = mx - dy / L * bendK; val cy = my + dx / L * bendK
-            val wA = 11f + rnd.nextFloat() * 6f; val wB = 11f + rnd.nextFloat() * 9f; val ph = rnd.nextFloat() * 6f
+            val wA = (if (tight) 8f else 11f) + rnd.nextFloat() * (if (tight) 3f else 6f); val wB = (if (tight) 8f else 11f) + rnd.nextFloat() * (if (tight) 4f else 9f); val ph = rnd.nextFloat() * 6f
             val steps = (L / 2f).toInt().coerceAtLeast(8)
             for (i in 0..steps) {
                 val t = i / steps.toFloat(); val u = 1 - t
                 val x = u * u * ax + 2 * u * t * cx + t * t * bx; val y = u * u * ay + 2 * u * t * cy + t * t * by
-                val rad = wA + (wB - wA) * t + 3f * kotlin.math.sin(t * 7f + ph)
+                val rad = maxOf(11f, wA + (wB - wA) * t + 3f * kotlin.math.sin(t * 7f + ph))
                 carve(x, y, rad, true)
                 if (i % 4 == 0) w0 += intArrayOf((x - rad * 0.7f).toInt(), (y - rad * 0.7f).toInt(), (x + rad * 0.7f).toInt(), (y + rad * 0.7f).toInt())
             }
@@ -279,9 +281,22 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
         }
         keep?.let { k -> val c = cl.minByOrNull { kotlin.math.hypot(it[0] - (k[0] + k[2]) / 2f, it[1] - (k[1] + k[3]) / 2f) }!!; passage((k[0] + k[2]) / 2f, (k[1] + k[3]) / 2f, c[0], c[1], 20f) }
         keep?.let { k -> for (gy in 0 until GY) for (gx in 0 until GX) { val cx = gx * CW + CW / 2f; val cy = gy * CH + CH / 2f; if (cx > k[0] && cx < k[2] && cy > k[1] && cy < k[3]) { open[gy * GX + gx] = true; cr[gy * GX + gx] = true } }; w0 += k }
-        if (size == 2) java.util.Arrays.fill(open, true)
+        if (size == 2) {
+            java.util.Arrays.fill(open, true)
+            // bits of cover: small stands of trees and rocks round the edge of the fight, none in the middle or the ways in
+            repeat(6 + rnd.nextInt(3)) {
+                for (k in 0 until 12) {
+                    val a = rnd.nextFloat() * 6.283f; val dd = 0.55f + rnd.nextFloat() * 0.35f
+                    val x = 120f + kotlin.math.cos(a) * 100f * dd; val y = 100f + kotlin.math.sin(a) * 62f * dd; val rad = 7f + rnd.nextFloat() * 5f
+                    if (w0.any { q -> x + rad > q[0] - 6 && x - rad < q[2] + 6 && y + rad > q[1] - 6 && y - rad < q[3] + 6 }) continue
+                    if (listOf(0f to 104f, 240f to 104f, 120f to 0f, 120f to 176f).any { (ex, ey) -> kotlin.math.hypot(x - ex, y - ey) < 40f }) continue
+                    for (gy in 0 until GY) for (gx in 0 until GX) if (kotlin.math.hypot(gx * CW + CW / 2f - x, (gy * CH + CH / 2f - y) * 1.2f) < rad) { open[gy * GX + gx] = false; cr[gy * GX + gx] = false }
+                    break
+                }
+            }
+        }
         // round the edges off: twice, a cell goes with the majority round it (the core stays open)
-        repeat(2) {
+        if (size != 2) repeat(2) {
             val o2 = open.copyOf()
             for (gy in 0 until GY) for (gx in 0 until GX) {
                 var c = 0; for (oy in -1..1) for (ox in -1..1) { val x = gx + ox; val y = gy + oy; if (x < 0 || y < 0 || x >= GX || y >= GY || open[y * GX + x]) c++ }
@@ -294,13 +309,14 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
         val total = GX * GY
         fun closed() = open.count { !it }
         var guard = 0
-        while (closed() > total * 0.28f && guard++ < 60) {
-            val i = (0 until total).filter { !open[it] && listOf(-1, 1, -GX, GX).any { o -> it + o in 0 until total && open[it + o] } }.let { if (it.isEmpty()) -1 else it[rnd.nextInt(it.size)] }
+        while (closed() > total * 0.3f && guard++ < 220) {
+            val i = (0 until total).filter { i0 -> !open[i0] && listOf(-1, 1, -GX, GX).any { o -> i0 + o in 0 until total && open[i0 + o] } &&
+                cl.any { c -> val dx = ((i0 % GX) * CW + CW / 2f - c[0]) / (c[2] + 60f); val dy = ((i0 / GX) * CH + CH / 2f - c[1]) / (c[3] + 45f); dx * dx + dy * dy < 1f } }.let { if (it.isEmpty()) -1 else it[rnd.nextInt(it.size)] }
             if (i < 0) break
             carve((i % GX) * CW + CW / 2f, (i / GX) * CH + CH / 2f, 12f + rnd.nextFloat() * 10f, false)
         }
         guard = 0
-        while (closed() < total * 0.12f && guard++ < 30) {
+        while (size != 2 && closed() < total * 0.12f && guard++ < 30) {
             val x = 20f + rnd.nextInt(200); val y = 24f + rnd.nextInt(128); val rad = 10f + rnd.nextFloat() * 12f
             var hitsCore = false
             for (gy in 0 until GY) for (gx in 0 until GX) { val dd = kotlin.math.hypot(gx * CW + CW / 2f - x, gy * CH + CH / 2f - y); if (dd < rad + 8f && cr[gy * GX + gx]) hitsCore = true }

@@ -20,6 +20,7 @@ internal class HallRoomArt {
     class Spec(
         val id: Int, val kind: Int, val doors: BooleanArray, val throne: Boolean,
         val props: List<Pair<Int, RectF>>, val pools: List<RectF>, val crack: Int, val dais: RectF,
+        val rivers: List<RectF> = emptyList(), val bridges: List<RectF> = emptyList(),
     )
 
     private companion object {
@@ -32,7 +33,7 @@ internal class HallRoomArt {
         // prop kinds (as in HallScreen)
         const val PILLAR = 0; const val ROCK = 1; const val SHRUB = 2; const val STATUE = 3; const val FOUNTAIN = 4
         const val TABLE = 5; const val BRAZIER = 6; const val TOMB = 7; const val CHEST = 8
-        const val TREE = 9; const val THICKET = 14
+        const val TREE = 9; const val THICKET = 14; const val PALISADE = 22
         /** A screen of the Wildwood. */
         const val FOREST = 10
     }
@@ -466,8 +467,11 @@ internal class HallRoomArt {
                 else -> { px(x, y, G4); px(x + 2, y, G4); px(x + 1, y - 1, G3); px(x + 1, y, G2) }
             }
         }
+        for (w in s.rivers) riverBank(w)
+        for (w in s.rivers) riverWater(w)
         for (w in s.pools) pond(w, s.id)
-        for ((k, f) in s.props) if (k == THICKET) thicket(f, s.id) else shadow(k, f)
+        for (b in s.bridges) bridge(b)
+        for ((k, f) in s.props) when (k) { THICKET -> thicket(f, s.id); PALISADE -> palisade(f); else -> shadow(k, f) }
         // the canopy along the top: a wall of round crowns over trunks
         box(0, 0, W, 31, CAN_D)
         for (k in 0 until 16) {
@@ -507,6 +511,60 @@ internal class HallRoomArt {
         }
     }
 
+    /** A river: muddy banks with reeds, deep water in the middle, lighter at the edges. */
+    private fun riverBank(w: RectF) {
+        val horiz = w.width() >= w.height()
+        p.color = 0xFF4A6A30.toInt(); c.drawRect(w.left - (if (horiz) 0 else 3), w.top - (if (horiz) 3 else 0), w.right + (if (horiz) 0 else 3), w.bottom + (if (horiz) 3 else 0), p)
+    }
+    private fun riverWater(w: RectF) {
+        val l = w.left.toInt(); val t = w.top.toInt(); val r = w.right.toInt(); val b = w.bottom.toInt()
+        val horiz = r - l >= b - t
+        box(l, t, r, b, 0xFF3A6A8A.toInt())
+        if (horiz) { box(l, t + 3, r, b - 3, 0xFF24485E.toInt()); box(l, t, r, t + 1, 0xFF6CA2C2.toInt()); box(l, b - 1, r, b, 0xFF5A88A8.toInt()) }
+        else { box(l + 3, t, r - 3, b, 0xFF24485E.toInt()); box(l, t, l + 1, b, 0xFF6CA2C2.toInt()); box(r - 1, t, r, b, 0xFF5A88A8.toInt()) }
+        // reeds along the banks
+        val n = maxOf(r - l, b - t) / 14
+        for (k in 0 until n) {
+            val v = h(k, l + t, 5)
+            if (horiz) { val x = l + k * 14 + v % 8; box(x, t - 5, x + 1, t + 1, 0xFF3E6A28.toInt()); box(x + 2, b - 1, x + 3, b + 4, 0xFF3E6A28.toInt()); if (v % 3 == 0) box(x, t - 6, x + 1, t - 4, 0xFF7A4A24.toInt()) }
+            else { val y = t + k * 14 + v % 8; box(l - 4, y, l + 1, y + 1, 0xFF3E6A28.toInt()); box(r - 1, y + 2, r + 4, y + 3, 0xFF3E6A28.toInt()) }
+        }
+    }
+    /** A plank bridge with rails, the water running under it. */
+    private fun bridge(b: RectF) {
+        val l = b.left.toInt(); val t = b.top.toInt(); val r = b.right.toInt(); val bt = b.bottom.toInt()
+        val horiz = r - l >= bt - t     // the river runs this way; the planks run across it
+        val wood = 0xFF8A6238.toInt(); val woodD = 0xFF5A3A20.toInt(); val woodL = 0xFFB08850.toInt()
+        box(l, t, r, bt, woodD)
+        if (horiz) {
+            // a bridge over a river running left-right: planks laid left-right, rails top and bottom... walking crosses up-down
+            var x = l + 1; while (x < r - 1) { box(x, t + 1, minOf(x + 4, r - 1), bt - 1, wood); box(x, t + 1, minOf(x + 4, r - 1), t + 2, woodL); x += 5 }
+            box(l - 1, t - 2, l + 2, bt + 2, woodD); box(r - 2, t - 2, r + 1, bt + 2, woodD)
+            box(l - 1, t - 3, l + 2, t - 1, woodL); box(r - 2, t - 3, r + 1, t - 1, woodL)
+        } else {
+            var y = t + 1; while (y < bt - 1) { box(l + 1, y, r - 1, minOf(y + 3, bt - 1), wood); box(l + 1, y, r - 1, y + 1, woodL); y += 4 }
+            box(l - 2, t - 1, r + 2, t + 2, woodD); box(l - 2, bt - 2, r + 2, bt + 1, woodD)
+            box(l - 3, t - 1, l - 1, t + 2, woodL); box(r + 1, t - 1, r + 3, t + 2, woodL)
+        }
+        for (k in 0 until 3) box(l, bt + k, r, bt + k + 1, intArrayOf(0x40000000, 0x26000000, 0x10000000)[k])
+    }
+    /** A palisade of sharpened logs, lashed with rope. */
+    private fun palisade(f: RectF) {
+        val l = f.left.toInt(); val t = f.top.toInt(); val r = f.right.toInt(); val b = f.bottom.toInt()
+        val horiz = r - l >= b - t
+        val wood = 0xFF7A5232.toInt(); val woodD = 0xFF4A301A.toInt(); val woodL = 0xFFA07448.toInt()
+        if (horiz) {
+            var x = l; while (x < r) {
+                box(x, t - 8, x + 4, b, woodD); box(x + 1, t - 7, x + 3, b - 1, wood); box(x + 1, t - 7, x + 2, b - 1, woodL)
+                box(x + 1, t - 10, x + 3, t - 8, woodD); box(x + 2, t - 11, x + 3, t - 10, woodD)
+                x += 4
+            }
+            box(l, t - 3, r, t - 2, 0xFFC8B078.toInt())
+        } else {
+            var y = t; while (y < b) { box(l, y, r, y + 4, woodD); box(l + 1, y + 1, r - 1, y + 3, wood); box(l + 1, y + 1, r - 1, y + 2, woodL); y += 4 }
+        }
+        for (k in 0 until 2) box(l, b + k, r, b + k + 1, intArrayOf(0x40000000, 0x20000000)[k])
+    }
     /** Dense thicket: a wall of leaf clusters, darker toward the ground, shadow along its foot. */
     private fun thicket(f: RectF, id: Int) {
         val l = f.left.toInt(); val t = f.top.toInt(); val r = f.right.toInt(); val b = f.bottom.toInt()
@@ -563,6 +621,16 @@ internal class HallRoomArt {
             glow.color = if (i % 3 == 0) 0xFFE8B040.toInt() else if (i % 3 == 1) 0xFF9AC850.toInt() else 0xFFD07030.toInt()
             val flip = (time * 3f + i).toInt() % 2
             cv.drawRect(x, y, x + 2f - flip, y + 1f + flip, glow)
+        }
+        // the current: glints drifting downstream
+        for ((ri, w) in s.rivers.withIndex()) {
+            val horiz = w.width() >= w.height(); val len = if (horiz) w.width() else w.height()
+            for (i in 0 until (len / 12).toInt() + 1) {
+                val ph = (time * 0.35f + i * 0.13f + ri * 0.3f) % 1f
+                glow.color = if (i % 2 == 0) 0xAAD0ECF8.toInt() else 0x80FFFFFF.toInt()
+                if (horiz) { val x = w.left + ph * w.width(); val y = w.top + 3 + (i * 5 % 9); cv.drawRect(x, y, x + 3, y + 1, glow) }
+                else { val y = w.top + ph * w.height(); val x = w.left + 3 + (i * 5 % 9); cv.drawRect(x, y, x + 1, y + 3, glow) }
+            }
         }
         // mist lying on the water, drifting and breathing
         for ((wi, w) in s.pools.withIndex()) for (i in 0 until 9) {

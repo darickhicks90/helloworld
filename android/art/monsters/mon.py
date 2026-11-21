@@ -202,13 +202,67 @@ def gazer(frame):
     for x in range(6,11): s.px(x,12,'M')
     s.px(6,12,'W'); s.px(8,12,'W'); s.px(10,12,'W'); s.px(7,13,'W'); s.px(9,13,'W')
     return s.render()
+TOADR='ABCF'   # warty olive-green skin, darkest to highlight
+TBEL='LNQS'    # pale belly
+def toad(frame):
+    s=S(24,20)
+    b=[0,1][frame]
+    # a squat, fat body, a wide head with bulging eyes on top
+    s.blob(12,13+b*0.3,10.5,6.5,TOADR,1)
+    s.blob(12,15,6.5,3.6,TBEL,2)
+    s.blob(12,9,9,5,TOADR,3)
+    for ex in (6.5,17.5): s.blob(ex,5.5,3.2,3,TOADR,4)
+    # the satchel strap and pouch
+    s.tri([(4,10),(20,15),(20,17),(4,12)],'bcdD',5)
+    s.blob(19,16,3,2.6,'bcdD',6)
+    s.render  # (keep linter quiet)
+    rows=s.render()
+    g=[list(r) for r in rows]
+    def P(x,y,c):
+        if 0<=x<24 and 0<=y<20: g[y][x]=c
+    # eyes: gold with slit pupils, heavy lids
+    for ex in (6,17):
+        P(ex,5,'Y'); P(ex+1,5,'Y'); P(ex,6,'Y'); P(ex+1,6,'Y'); P(ex+1 if ex==6 else ex,5,'K'); P(ex+1 if ex==6 else ex,6,'K')
+        P(ex-1,4,'K'); P(ex,4,'K'); P(ex+1,4,'K'); P(ex+2,4,'K')
+    # a wide, sly mouth
+    for x in range(5,19): P(x,11+b,'K')
+    P(4,10+b,'K'); P(19,10+b,'K'); P(8,12+b,'M'); P(9,12+b,'M')
+    # warts
+    for (x,y) in [(9,8),(15,9),(4,13),(20,12),(13,7)]: P(x,y,'B')
+    # webbed feet
+    for x in (5,6,7,16,17,18): P(x,19,'B')
+    return [''.join(r) for r in g]
+MOTH='mnoO'; WINGM='ghGW'
+def moth(frame):
+    s=S(24,24)
+    up=frame==0
+    # great dusty wings, eyespots on them
+    if up:
+        s.tri([(11,10),(0,1),(1,13),(10,15)],'bcdD',0); s.tri([(13,10),(24,1),(23,13),(14,15)],'bcdD',0)
+    else:
+        s.tri([(11,10),(0,5),(2,17),(10,16)],'bcdD',0); s.tri([(13,10),(24,5),(22,17),(14,16)],'bcdD',0)
+    s.blob(12,14,3.4,7,MOTH,2)       # furry body in a robe
+    s.blob(12,7,4.2,4,MOTH,3)        # head
+    rows=s.render(); g=[list(r) for r in rows]
+    def P(x,y,c):
+        if 0<=x<24 and 0<=y<24: g[y][x]=c
+    for (x,y) in ((4,8),(19,8)): P(x,y,'K'); P(x+1,y,'Y'); P(x,y+1,'Y'); P(x+1,y+1,'K')
+    # feathery antennae
+    for k in range(4): P(10-k,3-k//2,'o'); P(14+k,3-k//2,'o')
+    # big black glinting eyes, a thin smile
+    P(10,6,'K'); P(10,7,'K'); P(11,6,'K'); P(14,6,'K'); P(14,7,'K'); P(13,6,'K'); P(10,6,'W'); P(14,6,'W')
+    P(11,9,'K'); P(12,9,'K'); P(13,9,'K')
+    # a lantern in one hand
+    for y in (16,17,18): P(18,y,'Y')
+    P(18,15,'K'); P(18,19,'K'); P(17,16,'e'); P(19,17,'e')
+    return [''.join(r) for r in g]
 PAL={'K':(28,20,40),'W':(255,255,255),'r':(220,60,80),'M':(60,10,24),'X':(255,70,70),'Y':(255,236,110),
  'v':(70,24,70),'p':(128,40,96),'q':(180,70,120),'P':(230,140,170),
  'm':(48,20,40),'n':(84,36,64),'o':(120,56,88),'O':(170,96,120),
  'b':(150,120,80),'c':(210,184,136),'d':(240,226,190),'D':(255,250,232),
  'f':(140,60,70),'g':(196,100,104),'h':(236,150,140),'G':(255,206,190),
  'a':(30,30,64),'j':(42,44,92),'e':(56,58,110),'E':(110,118,190),'s':(20,60,80),'t':(30,110,130),'u':(60,170,180),'U':(160,240,240),
- 'R':(90,12,28),'H':(240,120,96),'w':(150,132,150),'x':(206,192,204),'y':(238,230,236),'z':(255,252,250),'i':(200,36,40),'I':(255,140,70)}
+ 'R':(90,12,28),'H':(240,120,96),'A':(40,52,24),'B':(70,86,34),'C':(108,128,48),'F':(158,176,80),'L':(150,142,96),'N':(196,186,128),'Q':(226,218,166),'S':(246,240,206),'w':(150,132,150),'x':(206,192,204),'y':(238,230,236),'z':(255,252,250),'i':(200,36,40),'I':(255,140,70)}
 PAL['r']=(176,34,46)
 # note: 'h'/'H' in behemoth ramp: R dark, r mid, h light, H highlight; reuse belly 'h' fine
 def preview(frames,scale,name):
@@ -222,7 +276,11 @@ def preview(frames,scale,name):
                         for b in range(scale): im.putpixel((i*(w*scale+8)+x*scale+a,y*scale+b),PAL[ch])
     im.save(name)
 Z=[gazer(i) for i in range(2)]; preview(Z,10,'gazer.png')
+TD=[toad(i) for i in range(2)]; MO=[moth(i) for i in range(2)]
+class _F:
+    def __init__(s,rows): s.g=rows; s.w=len(rows[0]); s.h=len(rows)
+preview(TD,8,'toad.png'); preview(MO,8,'moth.png')
 I=[imp(i) for i in range(2)]; T=[stalker(i) for i in range(3)]; B=[behemoth(i) for i in range(4)]
 preview(I,10,'imp.png'); preview(T,8,'stalker.png'); preview(B,6,'behemoth.png')
-import json; json.dump({'imp':I,'stalker':T,'behemoth':B,'gazer':Z},open('rows.json','w'))
+import json; json.dump({'imp':I,'stalker':T,'behemoth':B,'gazer':Z,'toad':TD,'moth':MO},open('rows.json','w'))
 print('ok')

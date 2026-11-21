@@ -300,7 +300,7 @@ class HallScreen(c: Context) : PixelView(c) {
         var st = 0; var stT = 2f; var dvx = 0f; var dvy = 0f; var orbit = 1f; var lunged = false
         /** Facing (for the mirrored sprites); getting about: where it was, how long it's been stuck, a detour. */
         var face = 1f; var lx = 0f; var ly = 0f; var stuckT = 0f; var detT = 0f; var dtx = 0f; var dty = 0f
-        var  var cd = 2f + kotlin.random.Random.nextFloat() * 2f; var hurtT = 0f; var step = 0f
+        var cd = 2f + kotlin.random.Random.nextFloat() * 2f; var hurtT = 0f; var step = 0f
         var kx = 0f; var ky = 0f; var stun = 0f    // knocked back by a stomp
         var para = 0f; var weak = 0f; var conf = 0f; var wt = 0f; var wx = 0f; var wy = 0f
         /** Frozen solid; on fire; hexed (slowed); the firewall's bite; the last fire-dash that hit it. */

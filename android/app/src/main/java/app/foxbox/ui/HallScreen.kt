@@ -125,6 +125,7 @@ class HallScreen(c: Context) : PixelView(c) {
     /** The second foe, the Blossom: her hall sheet (72 x 72 cells like his) and her duel pose. */
     /** The wood's trees: twelve bold variants, 64 x 64 each, roots on row 61 (greens, teal-greens, olive, one autumn). */
     private val treeSheet: Bitmap? = runCatching { c.assets.open("images/wild_trees.png").use { BitmapFactory.decodeStream(it) } }.getOrNull()
+    init { runCatching { c.assets.open("images/wild_bushes.png").use { BitmapFactory.decodeStream(it) } }.getOrNull()?.let { HallRoomArt.Bushes.sheet = it } }
     /** Which variant a tree is, by where it stands: oaks, limes and conifers often; autumn, birch and blossom now and then. */
     private val TREE_PICK = intArrayOf(0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 0, 1, 6, 7, 3, 9, 2, 10, 11)
     private val blossomSheet: Bitmap? = runCatching { c.assets.open("images/hall_blossom.png").use { BitmapFactory.decodeStream(it) } }.getOrNull()
@@ -766,7 +767,9 @@ class HallScreen(c: Context) : PixelView(c) {
         val k2 = savedFriend2?.takeIf { it in secondPool } ?: secondPool[rnd.nextInt(secondPool.size)]
         savedFriend2 = k2
         shieldHits = 0
-        for ((i, kk) in listOf(k, k2).withIndex()) {
+        // for now, a single companion: the wolf
+        savedFriend = Friend.WOLF; savedFriend2 = null; comps[1].kind = null
+        for ((i, kk) in listOf(Friend.WOLF).withIndex()) {
             cur = comps[i]
             friend = kk; frState = 1; frHp = kk.maxHp; frSkill = 6f + i * 3f; tauntT = 0f; frWallCd = 4f + i * 2f; frHealCd = 3f + i * 2f
             frRoom = roomId; placeFriendNear()
@@ -2000,7 +2003,7 @@ class HallScreen(c: Context) : PixelView(c) {
         val n5 = kotlin.math.ceil(n * 1.45f).toInt()     // everything out there hits hard: keep your distance
         shakeT = maxOf(shakeT, if (n >= 20) 0.32f else 0.18f)
         val nn = if (bulwarkT > 0f) (n5 + 1) / 2 else n5
-        hp -= ((if (bag.wearing(Loot.IRON_SKIN)) nn * 0.8f else nn.toFloat()) * (if (bag.wearing(Loot.THICK_HIDE)) 0.9f else 1f)).toInt(); invulnT = 1f; hurtFlashT = 0.3f
+        hp -= ((if (bag.wearing(Loot.IRON_SKIN)) nn * 0.8f else nn.toFloat()) * (if (bag.wearing(Loot.THICK_HIDE)) 0.9f else 1f)).toInt(); invulnT = 0.6f; hurtFlashT = 0.3f; hitStopT = if (n >= 20) 0.11f else 0.07f
         if (n >= 25) { sfx.play(HallSfx.S.HURT_BIG); sfx.rumbleBig() } else { sfx.play(HallSfx.S.HURT); sfx.rumbleHit() }
         if (hp <= 0) { hp = 0; phase = Phase.LOST; castRune = -1; msg = ""; paraT = 0f; poisonT = 0f; invertT = 0f; stroke.clear(); sfx.play(HallSfx.S.FRIEND_DOWN); sfx.rumbleFade() }
     }
@@ -2052,7 +2055,7 @@ class HallScreen(c: Context) : PixelView(c) {
     private fun fire(sx: Float, sy: Float, tx: Float, ty: Float, speed: Float, boss: Boolean, weak: Boolean, conf: Boolean) {
         var a = atan2(ty - sy, tx - sx)
         if (conf) a = rnd.nextFloat() * 6.2832f else if (weak) a += (rnd.nextFloat() - 0.5f) * 1.8f
-        shots += Shot(sx, sy, cos(a) * speed * SLOW, sin(a) * speed * SLOW, boss, weak)
+        shots += Shot(sx, sy, cos(a) * speed * 1.18f * SLOW, sin(a) * speed * 1.18f * SLOW, boss, weak)
     }
 
     /** The DUEL rune landed: everything in the hall stops while the turn-based duel plays out. */
@@ -2421,7 +2424,13 @@ class HallScreen(c: Context) : PixelView(c) {
         }
     }
 
+    /** A blow lands: the world stops for a heartbeat. */
+    private var hitStopT = 0f
+    private var heartT = 0f
     private fun update(dt: Float) {
+        if (hitStopT > 0f) { hitStopT -= dt; return }
+        // badly hurt: your heart pounds (a thud you can feel)
+        if (phase == Phase.FIGHT && hp > 0 && hp < maxHp * 0.35f) { heartT -= dt; if (heartT <= 0f) { heartT = if (hp < maxHp * 0.2f) 0.6f else 0.9f; sfx.rumbleSoft() } }
         if (!loaded) { loaded = true; loadGame() }
         if (choosing) return
         if (friend == null) spawnFriend()
@@ -3126,6 +3135,12 @@ class HallScreen(c: Context) : PixelView(c) {
         box(l - 1, t, l + 1, b, woodD)      // the door swung back against the wall
         for (lx in floatArrayOf(l - 6, r + 3)) { val f = 0.7f + 0.3f * sin(time * 9f + lx); p.color = ((0x40 * f).toInt() shl 24) or 0xFFC060; sc.drawCircle(lx + 1.5f, t + 2, 8f, p); box(lx, t - 1, lx + 3, t + 4, 0xFFFFD070.toInt()) }
     }
+    /** The ground of the screens round one (W, E, N, S, NW, NE, SW, SE); off the map, solid wood. */
+    private fun nbMass(wl: WildLevel, r: Int): Array<ByteArray?> {
+        val cx = r % wl.w; val cy = r / wl.w
+        fun at(x: Int, y: Int): ByteArray? = if (x < 0 || y < 0 || x >= wl.w || y >= wl.h) null else wl.mass[y * wl.w + x]
+        return arrayOf(at(cx - 1, cy), at(cx + 1, cy), at(cx, cy - 1), at(cx, cy + 1), at(cx - 1, cy - 1), at(cx + 1, cy - 1), at(cx - 1, cy + 1), at(cx + 1, cy + 1))
+    }
     /** The open wood: each stretch in view, baked once and kept (a few at a time); its gates and keys. */
     private fun drawOpenWood(time: Float) {
         val wl = wild ?: return
@@ -3140,7 +3155,7 @@ class HallScreen(c: Context) : PixelView(c) {
             val bg = a.background(r + depth * 1000) {
                 HallRoomArt.Spec(100 + r + depth * 1000, FOREST, booleanArrayOf(true, true, true, true), false,
                     (wl.props[r] + chunkExtra[r]).map { it[0] to RectF(it[1].toFloat(), it[2].toFloat(), it[3].toFloat(), it[4].toFloat()) },
-                    wl.pools[r].map { rf(it) }, 0, dais, wl.rivers[r].map { rf(it) }, wl.bridges[r].map { rf(it) }, open = true, mass = wl.mass[r], bridgeVert = wl.bridges[r].map { it.size > 4 && it[4] == 1 }, flow = wl.flow[r].toFloatArray())
+                    wl.pools[r].map { rf(it) }, 0, dais, wl.rivers[r].map { rf(it) }, wl.bridges[r].map { rf(it) }, open = true, mass = wl.mass[r], massNb = nbMass(wl, r), ox = (r % wl.w) * 240, oy = (r / wl.w) * 176, bridgeVert = wl.bridges[r].map { it.size > 4 && it[4] == 1 }, flow = wl.flow[r].toFloatArray())
             }
             sc.save(); sc.translate(cx * 240f, cy * 176f)
             sc.drawBitmap(bg, 0f, 0f, bmpP); a.overlay(sc, time)
@@ -5022,6 +5037,12 @@ class HallScreen(c: Context) : PixelView(c) {
             // a red edge round the screen when you're hurt
             p.color = (((hurtFlashT / 0.3f) * 0xA0).toInt().coerceIn(0, 255) shl 24) or 0xE02020
             sc.drawRect(0f, 0f, W.toFloat(), 3f, p); sc.drawRect(0f, H - 3f, W.toFloat(), H.toFloat(), p); sc.drawRect(0f, 3f, 3f, H - 3f, p); sc.drawRect(W - 3f, 3f, W.toFloat(), H - 3f, p)
+        }
+        if (phase == Phase.FIGHT && hp > 0 && hp < maxHp * 0.35f) {
+            val k = (1f - hp / (maxHp * 0.35f)).coerceIn(0f, 1f); val pulse = 0.5f + 0.5f * sin(time * (if (hp < maxHp * 0.2f) 11f else 7f))
+            val a = ((0x30 + 0x60 * k) * (0.6f + 0.4f * pulse)).toInt().coerceIn(0, 200)
+            for (i in 0 until 6) { p.color = ((a * (6 - i) / 6) shl 24) or 0xC01020; val e = i * 2f
+                sc.drawRect(e, e, W - e, e + 2f, p); sc.drawRect(e, H - e - 2f, W - e, H - e, p); sc.drawRect(e, e, e + 2f, H - e, p); sc.drawRect(W - e - 2f, e, W - e, H - e, p) }
         }
         if (furyT > 0f) { p.color = ((0x30 + ((time * 6).toInt() % 2) * 0x20) shl 24) or 0xF0A030; sc.drawRect(0f, 0f, W.toFloat(), 2f, p); sc.drawRect(0f, H - 2f, W.toFloat(), H.toFloat(), p); sc.drawRect(0f, 0f, 2f, H.toFloat(), p); sc.drawRect(W - 2f, 0f, W.toFloat(), H.toFloat(), p) }
         drawHud(time)

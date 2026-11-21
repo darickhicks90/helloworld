@@ -31,8 +31,15 @@ internal class HallRoomArt {
         val bridgeVert: List<Boolean> = emptyList(),
         /** The river's current: x, y, heading, every few pixels. */
         val flow: FloatArray? = null,
+        /** The ground of the screens round this one (W, E, N, S, NW, NE, SW, SE), so the bush mats run on across the seams. */
+        val massNb: Array<ByteArray?> = arrayOfNulls(8),
+        /** Where this screen lies in the wood (so a bush is the same bush seen from either side). */
+        val ox: Int = 0, val oy: Int = 0,
     )
 
+    /** The bush sheet (20 bushes, 32 x 28 each), set by the game once it's loaded. */
+    object Bushes { var sheet: Bitmap? = null }
+    private val bSrc = android.graphics.Rect(); private val bDst = RectF()
     private companion object {
         const val W = 240; const val H = 176
         const val WHITE = 0xFFF8F8F8.toInt(); const val PALE = 0xFFE0E0E8.toInt(); const val MID = 0xFFB8B8C8.toInt(); const val DARK = 0xFF707088.toInt(); const val INK = 0xFF181820.toInt()
@@ -63,7 +70,7 @@ internal class HallRoomArt {
     /** The room's still scenery, baked for this state. */
     fun background(key: Int, make: () -> Spec): Bitmap {
         val b = baked ?: Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888).also { baked = it }
-        if (key != bakedKey) { bakedKey = key; val s = make(); spec = s; c = Canvas(b); b.eraseColor(0); bake(s) }
+        if (key != bakedKey) { bakedKey = key; val s = make(); spec = s; specNb = s.massNb; specOX = s.ox; specOY = s.oy; c = Canvas(b); b.eraseColor(0); bake(s) }
         return b
     }
 
@@ -808,6 +815,38 @@ internal class HallRoomArt {
             if (at(gx - 1, gy) != 2) box(x, y, x + 1, y + 5, 0xFF3E4434.toInt())
             if (at(gx + 1, gy) != 2) box(x + 5, y, x + 6, y + 5, 0xFF3E4434.toInt())
         }
+        val sheet = Bushes.sheet
+        if (sheet != null) { bushMats(ms, sheet); return }
+        if (sheet != null) {
+            // woven mats of bushes: each patch of ground one or two kinds, stamped close and overlapping,
+            // back rows first; small ones at the edges so nothing spills into the way
+            val fams = intArrayOf(0, 0, 0, 0, 1, 1, 1, 6, 6, 4, 4, 3, 3, 2, 2, 5)
+            val famStart = intArrayOf(0, 4, 7, 10, 13, 16, 18); val famLen = intArrayOf(4, 3, 3, 3, 3, 2, 2)
+            fun forestAt(x: Float, y: Float): Boolean { val gx = (x / 6f).toInt(); val gy = (y / 5f).toInt(); return at(gx, gy) == 1 }
+            var row = 0; var y = 2f
+            while (y < H + 6) {
+                var x = (if (row % 2 == 1) 5f else 0f)
+                while (x < W + 6) {
+                    val v = h(x.toInt(), y.toInt(), id + 41)
+                    val sx = x + (v % 5) - 2; val sy = y + ((v shr 4) % 3) - 1
+                    if (forestAt(sx, sy)) {
+                        val full = forestAt(sx - 8, sy) && forestAt(sx + 8, sy) && forestAt(sx, sy - 7) && forestAt(sx, sy + 4)
+                        val fam = fams[h((sx / 56).toInt(), (sy / 44).toInt(), id + 7) % fams.size].let { if (v % 9 == 0) fams[(v shr 6) % fams.size] else it }
+                        val idx = famStart[fam] + (v shr 3) % famLen[fam]
+                        val sc = if (full) 1f else 0.6f
+                        val bw = 32f * sc; val bh = 28f * sc
+                        bSrc.set(idx * 32, 0, idx * 32 + 32, 28)
+                        val flip = (v shr 9) % 2 == 0
+                        bDst.set(sx - bw / 2, sy + 4 - bh, sx + bw / 2, sy + 4)
+                        if (flip) { c.save(); c.scale(-1f, 1f, sx, 0f); c.drawBitmap(sheet, bSrc, bDst, p); c.restore() } else c.drawBitmap(sheet, bSrc, bDst, p)
+                    }
+                    x += 10f
+                }
+                y += 6f; row++
+            }
+            for (gy in 0 until 35) for (gx in 0 until 40) if (at(gx, gy) == 1 && at(gx, gy + 1) == 0) { box(gx * 6, gy * 5 + 5, gx * 6 + 6, gy * 5 + 7, 0x30000000); box(gx * 6, gy * 5 + 7, gx * 6 + 6, gy * 5 + 9, 0x14000000) }
+            return
+        }
         // trunks where the forest meets open ground below
         for (gy in 0 until 35) for (gx in 0 until 40) if (at(gx, gy) == 1 && at(gx, gy + 1) == 0 && h(gx, gy, id + 3) % 3 == 0) {
             val x = gx * 6 + 2; val y = gy * 5 + 2
@@ -841,6 +880,53 @@ internal class HallRoomArt {
         }
         // a soft shadow cast onto the open ground below the forest's edge
         for (gy in 0 until 35) for (gx in 0 until 40) if (at(gx, gy) == 1 && at(gx, gy + 1) == 0) { box(gx * 6, gy * 5 + 5, gx * 6 + 6, gy * 5 + 7, 0x38000000); box(gx * 6, gy * 5 + 7, gx * 6 + 6, gy * 5 + 9, 0x18000000) }
+    }
+    private var specNb: Array<ByteArray?> = arrayOfNulls(8); private var specOX = 0; private var specOY = 0
+    /** The mats: bushes stamped close and overlapping over the forest, back rows first, carried across screen seams. */
+    private fun bushMats(ms: ByteArray, sheet: Bitmap) {
+        val nb = specNb
+        fun cellAt(x: Float, y: Float): Int {
+            var g = ms; var lx = x; var ly = y
+            val dxs = if (x < 0f) -1 else if (x >= W) 1 else 0; val dys = if (y < 0f) -1 else if (y >= H) 1 else 0
+            if (dxs != 0 || dys != 0) {
+                val k = when { dys == 0 && dxs == -1 -> 0; dys == 0 && dxs == 1 -> 1; dxs == 0 && dys == -1 -> 2; dxs == 0 && dys == 1 -> 3; dxs == -1 && dys == -1 -> 4; dxs == 1 && dys == -1 -> 5; dxs == -1 -> 6; else -> 7 }
+                g = nb[k] ?: return 1
+                lx = x - dxs * W; ly = y - dys * H
+            }
+            val gx = (lx / 6f).toInt().coerceIn(0, 39); val gy = (ly / 5f).toInt().coerceIn(0, 34)
+            return g[gy * 40 + gx].toInt()
+        }
+        fun forestAt(x: Float, y: Float) = cellAt(x, y) == 1
+        val fams = intArrayOf(0, 0, 0, 0, 1, 1, 1, 6, 6, 4, 4, 3, 3, 2, 2, 0, 1, 5)
+        val famStart = intArrayOf(0, 4, 7, 10, 13, 16, 18); val famLen = intArrayOf(4, 3, 3, 3, 3, 2, 2)
+        // stamp points on a staggered grid in the wood's own coordinates, so neighbouring screens agree
+        val wy0 = specOY - 30; val wy1 = specOY + H + 34
+        var wy = (wy0 / 6) * 6
+        while (wy < wy1) {
+            val row = Math.floorMod(wy / 6, 2)
+            var wx = ((specOX - 20) / 10) * 10 + (if (row == 1) 5 else 0)
+            while (wx < specOX + W + 20) {
+                val v = h(wx, wy, 7711)
+                val sx = wx - specOX + (v % 5) - 2f; val sy = wy - specOY + ((v shr 4) % 3) - 1f
+                if (forestAt(sx, sy)) {
+                    val full = forestAt(sx - 8, sy) && forestAt(sx + 8, sy) && forestAt(sx, sy - 7) && forestAt(sx, sy + 4)
+                    // which kind grows here: a smooth wandering field, its borders frayed stamp by stamp
+                    val fieldV = sin(wx * 0.023f + 1.7f) + sin(wy * 0.031f + 0.4f) + sin((wx + wy) * 0.017f + 2.9f) + sin((wx - wy) * 0.011f) * 0.8f + ((v shr 12) % 100) / 100f * 0.9f
+                    val fam = fams[(((fieldV + 4f) / 8.9f) * fams.size).toInt().coerceIn(0, fams.size - 1)].let { if (v % 13 == 0) fams[(v shr 6) % fams.size] else it }
+                    val idx = famStart[fam] + (v shr 3) % famLen[fam]
+                    val scl = if (full) 1f else 0.6f
+                    val bw = 32f * scl; val bh = 28f * scl
+                    if (sx + bw / 2 > -1 && sx - bw / 2 < W + 1 && sy + 4 > -1 && sy + 4 - bh < H + 1) {
+                        bSrc.set(idx * 32, 0, idx * 32 + 32, 28)
+                        bDst.set(sx - bw / 2, sy + 4 - bh, sx + bw / 2, sy + 4)
+                        if ((v shr 9) % 2 == 0) { c.save(); c.scale(-1f, 1f, sx, 0f); c.drawBitmap(sheet, bSrc, bDst, p); c.restore() } else c.drawBitmap(sheet, bSrc, bDst, p)
+                    }
+                }
+                wx += 10
+            }
+            wy += 6
+        }
+        for (gy in 0 until 35) for (gx in 0 until 40) if (ms[gy * 40 + gx].toInt() == 1 && (gy == 34 || ms[(gy + 1) * 40 + gx].toInt() == 0)) { box(gx * 6, gy * 5 + 5, gx * 6 + 6, gy * 5 + 7, 0x30000000); box(gx * 6, gy * 5 + 7, gx * 6 + 6, gy * 5 + 9, 0x14000000) }
     }
     /** Rock: the top of the cliff, grey-green and grassed over, cut into blocks. */
     private fun cliffTop(f: RectF, id: Int) {

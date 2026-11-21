@@ -22,6 +22,7 @@ class HallSfx(private val ctx: Context) {
         HURT, HURT_BIG, ZAP, THUNDER, STOMP, SPRINT, FIREDASH, IMP_HIT, IMP_DIE, PICKUP, LEGENDARY, EXOTIC,
         LEVEL_UP, FRIEND_JOIN, FRIEND_SKILL, FRIEND_HURT, FRIEND_DOWN, REVIVE, SPELL, HEX, STARFALL, MEND,
         BLINK, BOSS_RUNE, COUNTER, SLAM, PERISH, BURN, ORB, DUEL, SHATTER, FETCH,
+        DOOR_UNLOCK, DOOR_GRIND, DOOR_OPEN,
     }
     private val rate = 22050
     @Volatile private var pool: SoundPool? = null
@@ -41,7 +42,7 @@ class HallSfx(private val ctx: Context) {
             val dir = java.io.File(ctx.cacheDir, "hall_sfx").apply { mkdirs() }
             for (s in S.values()) runCatching {
                 if (pool !== sp) return@Thread
-                val f = java.io.File(dir, "v1_" + s.name.lowercase() + ".wav")
+                val f = java.io.File(dir, "v2_" + s.name.lowercase() + ".wav")
                 if (!f.exists() || f.length() < 64) writeWav(f, render(s))
                 val id = sp.load(f.path, 1)
                 synchronized(ids) { if (pool === sp) ids[s] = id }
@@ -126,7 +127,10 @@ class HallSfx(private val ctx: Context) {
 
     private fun render(s: S): ShortArray {
         val d = when (s) {
+            S.DOOR_GRIND -> 2.0f
+            S.DOOR_OPEN -> 1.6f
             S.LEGENDARY, S.EXOTIC, S.LEVEL_UP, S.PERISH, S.SLAM, S.STARFALL -> 1.1f
+            S.DOOR_UNLOCK -> 0.7f
             S.FRIEND_JOIN, S.FRIEND_DOWN, S.REVIVE, S.MEND, S.HEX, S.SPELL, S.DUEL, S.BOSS_RUNE, S.THUNDER -> 0.7f
             else -> 0.35f
         }
@@ -164,8 +168,50 @@ class HallSfx(private val ctx: Context) {
             S.DUEL -> { tone(b, 0f, 0.7f, 147f, 147f, 0, 0.3f, 1.5f, 0.3f); tone(b, 0.15f, 0.5f, 220f, 220f, 0, 0.2f, 2f, 0.3f); tone(b, 0.3f, 0.4f, 294f, 294f, 0, 0.2f, 2f, 0.3f) }
             S.SHATTER -> { tone(b, 0f, 0.25f, 4000f, 1500f, 3, 0.4f, 5f); tone(b, 0f, 0.15f, 2637f, 2637f, 1, 0.2f, 6f) }
             S.FETCH -> { tone(b, 0f, 0.1f, 1568f, 1760f, 1, 0.25f, 4f); tone(b, 0.09f, 0.12f, 2093f, 2093f, 1, 0.2f, 4f) }
+            S.DOOR_UNLOCK -> {
+                // a heavy bolt drawn in stone: a crack, a thunk, a ring of the rune
+                tone(b, 0f, 0.05f, 3000f, 800f, 3, 0.7f, 9f); tone(b, 0.02f, 0.3f, 110f, 45f, 0, 0.7f, 5f, 0.3f)
+                tone(b, 0.1f, 0.12f, 2200f, 400f, 3, 0.4f, 8f); tone(b, 0.12f, 0.5f, 880f, 870f, 2, 0.18f, 3f); tone(b, 0.12f, 0.5f, 1318f, 1300f, 2, 0.1f, 3f)
+            }
+            S.DOOR_GRIND -> {
+                // two slabs dragged over stone: a low rough grind with grit cracking in it
+                tone(b, 0f, 2f, 70f, 52f, 3, 0.55f, 0.6f); tone(b, 0f, 2f, 41f, 37f, 0, 0.35f, 0.5f, 0.2f); tone(b, 0f, 2f, 300f, 220f, 3, 0.18f, 0.8f)
+                val r = kotlin.random.Random(11); repeat(26) { tone(b, r.nextFloat() * 1.9f, 0.04f, 2000f + r.nextFloat() * 2000f, 600f, 3, 0.25f + r.nextFloat() * 0.2f, 10f) }
+            }
+            S.DOOR_OPEN -> {
+                // the slabs boom into their frame; the starlight rings out behind them
+                tone(b, 0f, 0.9f, 80f, 28f, 1, 0.9f, 3f); tone(b, 0f, 0.5f, 900f, 80f, 3, 0.6f, 4f)
+                floatArrayOf(523f, 784f, 1047f, 1319f, 1568f, 2093f, 2637f).forEachIndexed { i, f -> tone(b, 0.18f + i * 0.09f, 0.9f, f, f * 1.003f, 2, 0.13f, 2.5f) }
+                tone(b, 0.2f, 1.3f, 196f, 196f, 2, 0.18f, 1.5f)
+            }
         }
-        // soft limiter
-        return ShortArray(b.a.size) { (kotlin.math.tanh(b.a[it] * 1.2) * 26000).toInt().toShort() }
+        // grit: every sound goes through some dirt (hard hits the most, chimes the least)
+        val dirt = when (s) {
+            S.HURT, S.HURT_BIG, S.STOMP, S.SLAM, S.IMP_HIT, S.IMP_DIE, S.THUNDER, S.SHATTER, S.BURN, S.FIREDASH, S.DOOR_GRIND, S.DOOR_UNLOCK, S.PERISH, S.COUNTER, S.FRIEND_HURT, S.ZAP -> 1f
+            S.LEGENDARY, S.EXOTIC, S.LEVEL_UP, S.MEND, S.ORB, S.PICKUP, S.FETCH, S.FRIEND_JOIN, S.REVIVE -> 0.35f
+            else -> 0.65f
+        }
+        grit(b.a, dirt)
+        // limiter
+        return ShortArray(b.a.size) { (kotlin.math.tanh(b.a[it] * 1.3) * 26500).toInt().toShort() }
+    }
+    /**
+     * Dirt: an uneven (tube-like) overdrive, a crunch of lowered sample rate and bit depth mixed
+     * in, and a grain of noise that rides the sound's own loudness.
+     */
+    private fun grit(a: FloatArray, k: Float) {
+        val r = kotlin.random.Random(3)
+        val hold = if (k > 0.8f) 3 else 2
+        val levels = if (k > 0.8f) 24f else 48f
+        var held = 0f; var env = 0f; var lp = 0f
+        for (i in a.indices) {
+            val x = a[i]
+            env = maxOf(kotlin.math.abs(x), env * 0.9985f)
+            val drive = 1f + 2.2f * k
+            val sat = kotlin.math.tanh((x * drive + 0.25f * k * x * x).toDouble()).toFloat()
+            if (i % hold == 0) held = kotlin.math.round(sat * levels) / levels
+            val n = r.nextFloat() * 2f - 1f; lp += (n - lp) * 0.35f
+            a[i] = sat * (1f - 0.45f * k) + held * (0.45f * k) + lp * env * 0.22f * k
+        }
     }
 }

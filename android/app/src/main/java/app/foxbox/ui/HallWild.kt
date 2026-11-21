@@ -38,6 +38,12 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
     var fort = -1
     /** Every screen of the fort (a block of up to 3 x 2, open inside, walled round). */
     val fortRooms = HashSet<Int>()
+    /** Each screen's shape: the ways through it (kept clear), the open cells, and whether it's left as it is. */
+    private val ways = Array(n) { ArrayList<IntArray>() }
+    private val openCell = Array(n) { BooleanArray(GX * GY) }
+    private val shaped = BooleanArray(n)
+    /** The key that opens the stone door (the last key); the others open wooden gates. */
+    fun isStone(i: Int) = i == keys.size - 1
     val npcs = ArrayList<IntArray>()
     /** Fog banks: screens lying under fog (each bank two to four screens), where shades drift. */
     val fog = HashSet<Int>()
@@ -52,6 +58,12 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
         const val BENCH = 28; const val CART = 29; const val SIGNPOST = 30; const val FLOWERBED = 31; const val LAUNDRY = 32
         // the grander ruins: a paved plaza (walkable), standing columns, an arch, a statue, fallen drums
         const val PLAZA = 33; const val COLUMN = 34; const val ARCH = 35; const val RUIN_STATUE = 36; const val FALLEN_COLUMN = 37
+        /** Rock you can't climb: the wood's walls, with the thickets and ponds. */
+        const val CLIFF = 38
+        /** A house in the fort. */
+        const val BUILDING = 39
+        /** The shaping grid: 20 x 16 cells of 12 x 11. */
+        const val CW = 12; const val CH = 11; const val GX = 20; const val GY = 16
         /** Fort folk: 0 the toad (herbs), 1 the moth-witch (spirit blooms), 2 a mercenary (its kind in [4]), 3 a guard, 4 townsfolk. */
         const val NPC_TOAD = 0; const val NPC_MOTH = 1; const val NPC_MERC = 2; const val NPC_GUARD = 3; const val NPC_FOLK = 4
         /** Where rivers cross a screen: a band along y = 151 and one along x = 52, meeting at the corner pond. */
@@ -100,7 +112,7 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
         // 4. a few extra paths, only within a region (so the gates still matter)
         for (r in 0 until n) for (d in 1..3 step 2) {
             val o = nb(r, d); if (o < 0 || sides[r][d]) continue
-            if (region[o] == region[r] && rnd.nextFloat() < 0.22f) open(r, d)
+            if (region[o] == region[r] && o != exit && r != exit && rnd.nextFloat() < 0.22f) open(r, d)
         }
         for (r in 0 until n) doors[r] = (0 until 4).filter { sides[r][it] }.joinToString("") { "WENS"[it].toString() }
         // 5. keys: key i somewhere in region i, far from the start, never on the start or exit
@@ -140,6 +152,7 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
             }
         }
         repeat(if (depth >= 3) 2 else 1) { river() }
+        for (r in 0 until n) if (shaped[r] && r !in fortRooms) fillMass(r)
         for (k in keys) { val spot = clearSpot(k[0]); k[1] = spot.first; k[2] = spot.second }
         for (r in 0 until n) names[r] = A[rnd.nextInt(A.size)] + " " + B[rnd.nextInt(B.size)]
         for ((r, nm) in special) names[r] = nm
@@ -162,20 +175,108 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
         }
     }
 
-    /** The corridors from each open side to the middle, kept clear. */
-    private fun inCorridor(r: Int, l: Int, t: Int, rr: Int, b: Int): Boolean {
-        val s = sides[r]
-        fun hit(cl: Int, ct: Int, cr: Int, cb: Int) = rr > cl && l < cr && b > ct && t < cb
-        if (hit(92, 76, 148, 132)) return true                      // the middle
-        if (s[0] && hit(0, 78, 120, 130)) return true
-        if (s[1] && hit(120, 78, 240, 130)) return true
-        if (s[2] && hit(96, 28, 144, 104)) return true
-        if (s[3] && hit(96, 104, 144, 176)) return true
-        return false
+    /**
+     * A screen's shape: a clearing of its own size round the middle, and a way out to each open
+     * side, of its own width, with a dog-leg in it. Everything else will be filled in (cliffs,
+     * thicket, ponds), so the wood squeezes down to a passage and opens out again.
+     * [size]: -1 leave it (it shapes itself), 0 any, 1 roomy, 2 an arena. [keep]: kept clear too.
+     */
+    private fun shape(r: Int, size: Int, keep: IntArray?) {
+        val w0 = ways[r]; w0.clear()
+        w0 += intArrayOf(96, 80, 144, 128)                               // the hub, always open
+        keep?.let { w0 += it }
+        if (size < 0) { java.util.Arrays.fill(openCell[r], true); return }
+        shaped[r] = true
+        for (d in 0 until 4) {
+            if (!sides[r][d]) continue
+            val w = listOf(28, 32, 36, 44, 56)[rnd.nextInt(5)]; val h = w / 2
+            val bend = rnd.nextInt(-22, 23)
+            when (d) {
+                0, 1 -> {
+                    val xb = if (d == 0) 30 + rnd.nextInt(40) else 210 - rnd.nextInt(40)
+                    val (e0, e1) = if (d == 0) 0 to xb + h else xb - h to 240
+                    w0 += intArrayOf(e0, 104 - h, e1, 104 + h)
+                    w0 += intArrayOf(xb - h, minOf(104, 104 + bend) - h, xb + h, maxOf(104, 104 + bend) + h)
+                    w0 += if (d == 0) intArrayOf(xb - h, 104 + bend - h, 120, 104 + bend + h) else intArrayOf(120, 104 + bend - h, xb + h, 104 + bend + h)
+                }
+                else -> {
+                    val yb = if (d == 2) 24 + rnd.nextInt(30) else 150 - rnd.nextInt(30)
+                    val (e0, e1) = if (d == 2) 0 to yb + h else yb - h to 176
+                    w0 += intArrayOf(120 - h, e0, 120 + h, e1)
+                    w0 += intArrayOf(minOf(120, 120 + bend) - h, yb - h, maxOf(120, 120 + bend) + h, yb + h)
+                    w0 += if (d == 2) intArrayOf(120 + bend - h, yb - h, 120 + bend + h, 104) else intArrayOf(120 + bend - h, 104, 120 + bend + h, yb + h)
+                }
+            }
+        }
+        // the clearing: small and tight, or wide open
+        val crx = when (size) { 2 -> 100f; 1 -> 70f + rnd.nextInt(25); else -> 26f + rnd.nextInt(60) }
+        val cry = when (size) { 2 -> 66f; 1 -> 46f + rnd.nextInt(14); else -> 20f + rnd.nextInt(36) }
+        val ccx = 120f + rnd.nextInt(-24, 25) * (if (size == 0) 1 else 0); val ccy = 104f + rnd.nextInt(-16, 17) * (if (size == 0) 1 else 0)
+        val oc = openCell[r]
+        for (gy in 0 until GY) for (gx in 0 until GX) {
+            val cx = gx * CW + CW / 2f; val cy = gy * CH + CH / 2f
+            val inWay = w0.any { cx > it[0] - 4 && cx < it[2] + 4 && cy > it[1] - 4 && cy < it[3] + 4 }
+            val dx = (cx - ccx) / crx; val dy = (cy - ccy) / cry
+            oc[gy * GX + gx] = inWay || dx * dx + dy * dy < 1f
+        }
     }
+    /** Is this box on the open ground of its screen? */
+    private fun onOpen(r: Int, l: Int, t: Int, rr: Int, b: Int): Boolean {
+        val oc = openCell[r]
+        for (gy in (t / CH).coerceIn(0, GY - 1)..((b - 1) / CH).coerceIn(0, GY - 1)) for (gx in (l / CW).coerceIn(0, GX - 1)..((rr - 1) / CW).coerceIn(0, GX - 1)) if (!oc[gy * GX + gx]) return false
+        return true
+    }
+    /**
+     * Fills a screen's closed ground: a quarter to a half of it in all, the rest left as pockets
+     * opening off the clearing. Cliffs, thicket or ponds, one kind mostly with patches of another.
+     */
+    private fun fillMass(r: Int) {
+        val oc = openCell[r].copyOf()
+        fun clearOf(gx: Int, gy: Int): Boolean {
+            val l = gx * CW - 3; val t = gy * CH - 3; val rr = l + CW + 6; val b = t + CH + 6
+            if (props[r].any { p -> rr > p[1] && l < p[3] && b > p[2] && t < p[4] }) return false
+            if ((pools[r] + rivers[r] + bridges[r]).any { p -> rr > p[0] && l < p[2] && b > p[1] && t < p[3] }) return false
+            return true
+        }
+        val cand = ArrayList<Int>()
+        for (i in 0 until GX * GY) if (!oc[i] && clearOf(i % GX, i / GX)) cand += i
+        val target = ((0.25f + rnd.nextFloat() * 0.25f) * GX * GY).toInt()
+        val fill = HashSet(cand)
+        // too much? open pockets off the open ground, cell by cell
+        var guard = 0
+        while (fill.size > target && guard++ < 2000) {
+            val edge = fill.filter { i -> val gx = i % GX; val gy = i / GX; listOf(gx - 1 to gy, gx + 1 to gy, gx to gy - 1, gx to gy + 1).any { (a, b) -> a in 0 until GX && b in 0 until GY && (a + b * GX) !in fill } }
+            if (edge.isEmpty()) break
+            repeat(minOf(4, fill.size - target)) { fill.remove(edge[rnd.nextInt(edge.size)]) }
+        }
+        // the kinds: 0 cliff, 1 thicket, 2 pond
+        val main = listOf(0, 0, 0, 1, 1, 2)[rnd.nextInt(6)]; val alt = listOf(0, 1, 2).filter { it != main }[rnd.nextInt(2)]
+        val ph = rnd.nextFloat() * 6.28f; val ph2 = rnd.nextFloat() * 6.28f
+        fun kindAt(gx: Int, gy: Int): Int { val v = kotlin.math.sin(gx * 0.55f + ph) + kotlin.math.sin(gy * 0.7f + ph2) + kotlin.math.sin((gx + gy) * 0.31f); return if (v > 1.1f) alt else main }
+        for (gy in 0 until GY) {
+            var runK = -1; var runS = 0
+            fun flush(end: Int) {
+                if (runK < 0) return
+                val l = runS * CW; val rr = end * CW; val t = gy * CH; val b = t + CH
+                when (runK) {
+                    0 -> props[r] += intArrayOf(CLIFF, l, t, rr, b)
+                    1 -> props[r] += intArrayOf(THICKET, l, t, rr, b)
+                    else -> { var x = l; while (x < rr) { pools[r] += intArrayOf(x - 3, t - 3, x + CW + 3, b + 3); x += CW } }
+                }
+                runK = -1
+            }
+            for (gx in 0..GX) {
+                val k = if (gx < GX && (gx + gy * GX) in fill) kindAt(gx, gy) else -1
+                if (k != runK) { flush(gx); if (k >= 0) { runK = k; runS = gx } }
+            }
+            flush(GX)
+        }
+    }
+    private fun inCorridor(r: Int, l: Int, t: Int, rr: Int, b: Int): Boolean = ways[r].any { w -> rr > w[0] && l < w[2] && b > w[1] && t < w[3] }
     private fun free(r: Int, l: Int, t: Int, rr: Int, b: Int, pad: Int): Boolean {
         if (l < 8 || rr > 232 || t < 36 || b > 168) return false
         if (inCorridor(r, l, t, rr, b)) return false
+        if (shaped[r] && !onOpen(r, l, t, rr, b)) return false
         for (p in props[r]) if (rr + pad > p[1] && l - pad < p[3] && b + pad > p[2] && t - pad < p[4]) return false
         for (p in pools[r]) if (rr + pad > p[0] && l - pad < p[2] && b + pad > p[1] && t - pad < p[3]) return false
         return true
@@ -192,13 +293,18 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
 
     private fun furnish(r: Int) {
         if (r == exit) {
-            // the root door at the top; for the boss, an open arena
-            props[r] += intArrayOf(EXIT, 104, 36, 136, 44)
+            // the great stone door, against a wall with no way through it; for the boss, an open arena
+            val sd = sides[r]
+            val door = when { !sd[2] -> intArrayOf(96, 38, 144, 50); !sd[3] -> intArrayOf(96, 146, 144, 158); !sd[0] -> intArrayOf(14, 70, 62, 82); else -> intArrayOf(178, 70, 226, 82) }
+            shape(r, if (bossLevel) 2 else 1, intArrayOf(door[0] - 8, door[1] - 6, door[2] + 8, door[3] + 18))
+            props[r] += intArrayOf(EXIT, door[0], door[1], door[2], door[3])
             if (!bossLevel) { repeat(3) { place(r, TREE, 12, 6) }; repeat(2) { place(r, SHRUB, 16, 8) } }
             else { repeat(4) { place(r, MUSHROOM, 8, 5, area = intArrayOf(10, 130, 230, 166)) } }
             return
         }
-        when (if (r == start) 1 else rnd.nextInt(12)) {
+        val type = if (r == start) 1 else rnd.nextInt(12)
+        shape(r, when (type) { 10, 11, 1 -> 1; 8, 9 -> -1; else -> 0 }, null)
+        when (type) {
             10 -> { graveyard(r); special[r] = "THE " + listOf("BARROWS", "GRAVEYARD", "BONE GARDEN", "OLD CHURCHYARD")[rnd.nextInt(4)]; return }
             11 -> { ruins(r); special[r] = listOf("FALLEN SHRINE", "BROKEN HALL", "OLD RUINS", "TUMBLED TOWER")[rnd.nextInt(4)]; return }
             0 -> { repeat(5 + rnd.nextInt(4)) { place(r, TREE, 12, 6) }; repeat(2) { place(r, SHRUB, 16, 8) } }       // a grove
@@ -255,7 +361,7 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
         val kinds = listOf(0, 1, 3, 0, 1, 3, 2).shuffled(rnd)
         val heart = fort
         for (r in block) {
-            props[r].clear(); pools[r].clear()
+            props[r].clear(); pools[r].clear(); shaped[r] = false; java.util.Arrays.fill(openCell[r], true)
             val sd = sides[r]; val cx = r % w; val cy = r / w
             fun wall(l: Int, t: Int, rr: Int, b: Int) { props[r] += intArrayOf(PALISADE, l, t, rr, b) }
             fun guard(x: Int, y: Int) { npcs += intArrayOf(r, x, y, NPC_GUARD, listOf(2, 1, 2, 3)[rnd.nextInt(4)]) }
@@ -270,12 +376,14 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
                 props[r] += intArrayOf(CAMPFIRE, 62, 140, 74, 146)
                 props[r] += intArrayOf(STALL, 160, 140, 198, 148)
                 props[r] += intArrayOf(LANTERN, 84, 62, 88, 66); props[r] += intArrayOf(LANTERN, 152, 62, 156, 66)
+                place(r, BUILDING, 52, 14, pad = 8, area = intArrayOf(60, 38, 180, 74))
                 npcs += intArrayOf(r, 179, 138, NPC_TOAD, 0)
                 npcs += intArrayOf(r, 40, 150, NPC_MOTH, 0)
                 npcs += intArrayOf(r, 66, 98, NPC_MERC, kinds[0]); npcs += intArrayOf(r, 176, 98, NPC_MERC, kinds[1])
                 continue
             }
-            // every other screen: a corner of the village
+            // every other screen: a corner of the village, a house or two first
+            repeat(1 + rnd.nextInt(2)) { place(r, BUILDING, 44 + rnd.nextInt(3) * 8, 14, pad = 10) }
             val pick = (r * 7 + rnd.nextInt(5)) % 4
             when (pick) {
                 0 -> { place(r, WELL, 18, 10, pad = 8); repeat(2) { place(r, BENCH, 16, 5) }; repeat(3) { place(r, FLOWERBED, 20, 6, pad = 3) }; repeat(2) { place(r, LANTERN, 4, 4) } }
@@ -297,15 +405,7 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
         repeat(2) { npcs += intArrayOf(heart, 100 + rnd.nextInt(40), 118 + rnd.nextInt(20), NPC_FOLK, rnd.nextInt(6)) }
     }
     /** The ways through a screen (always kept open; a river crossing one gets a bridge). */
-    private fun lanes(r: Int): List<IntArray> {
-        val s = sides[r]; val out = ArrayList<IntArray>()
-        out += intArrayOf(92, 76, 148, 132)
-        if (s[0]) out += intArrayOf(0, 78, 120, 130)
-        if (s[1]) out += intArrayOf(120, 78, 240, 130)
-        if (s[2]) out += intArrayOf(96, 28, 144, 104)
-        if (s[3]) out += intArrayOf(96, 104, 144, 176)
-        return out
-    }
+    private fun lanes(r: Int): List<IntArray> = ways[r].ifEmpty { listOf(intArrayOf(96, 80, 144, 128)) }
     /** A river from a pond to another pond some five screens away, under the hedges between screens. */
     private fun river() {
         val bad = HashSet<Int>().apply { addAll(fortRooms) }
@@ -391,6 +491,12 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
     private fun passage(r: Int) {
         val s = sides[r]
         val bend = rnd.nextInt(-16, 17)
+        // its ways, for keys and bridges
+        ways[r].clear(); ways[r] += intArrayOf(108 + bend, 90, 132 + bend, 116)
+        if (s[0]) { ways[r] += intArrayOf(0, 92, 60, 116); ways[r] += intArrayOf(58, 92 + bend / 2, 118 + bend, 116 + bend / 2) }
+        if (s[1]) { ways[r] += intArrayOf(180, 92, 240, 116); ways[r] += intArrayOf(122 + bend, 92 - bend / 2, 182, 116 - bend / 2) }
+        if (s[2]) { ways[r] += intArrayOf(108, 28, 132, 62); ways[r] += intArrayOf(108 + bend / 2, 62, 132 + bend, 98) }
+        if (s[3]) { ways[r] += intArrayOf(108, 142, 132, 176); ways[r] += intArrayOf(108 + bend / 2, 106, 132 + bend, 142) }
         fun open(l: Int, t: Int, rr: Int, b: Int): Boolean {
             val m = 2
             fun hit(cl: Int, ct: Int, cr: Int, cb: Int) = rr + m > cl && l - m < cr && b + m > ct && t - m < cb

@@ -105,7 +105,8 @@ class HallScreen(c: Context) : PixelView(c) {
         const val BENCH = 28; const val CART = 29; const val SIGNPOST = 30; const val FLOWERBED = 31; const val LAUNDRY = 32
         const val PLAZA = 33; const val COLUMN = 34; const val ARCH = 35; const val RUIN_STATUE = 36; const val FALLEN_COLUMN = 37
         const val FOREST = 10
-        fun propH(k: Int) = when (k) { PILLAR -> 70f; ROCK -> 12f; SHRUB -> 14f; STATUE -> 28f; FOUNTAIN -> 18f; TABLE -> 8f; BRAZIER -> 14f; TOMB -> 14f; TREE -> 46f; STUMP -> 9f; LOG -> 9f; MUSHROOM -> 9f; EXIT -> 34f; THICKET -> 8f; GRAVE -> 12f; RUIN_PILLAR -> 26f; RUIN_WALL -> 12f; DEADTREE -> 40f; TENT -> 22f; CAMPFIRE -> 6f; STALL -> 16f; PALISADE -> 10f; WELL -> 18f; CRATES -> 14f; BARREL -> 10f; HAY -> 10f; LANTERN -> 18f; BENCH -> 6f; CART -> 14f; SIGNPOST -> 18f; FLOWERBED -> 4f; LAUNDRY -> 20f; PLAZA -> 0f; COLUMN -> 46f; ARCH -> 40f; RUIN_STATUE -> 30f; FALLEN_COLUMN -> 8f; else -> 12f }
+        const val CLIFF = 38; const val BUILDING = 39
+        fun propH(k: Int) = when (k) { PILLAR -> 70f; ROCK -> 12f; SHRUB -> 14f; STATUE -> 28f; FOUNTAIN -> 18f; TABLE -> 8f; BRAZIER -> 14f; TOMB -> 14f; TREE -> 46f; STUMP -> 9f; LOG -> 9f; MUSHROOM -> 9f; EXIT -> 34f; THICKET -> 8f; GRAVE -> 12f; RUIN_PILLAR -> 26f; RUIN_WALL -> 12f; DEADTREE -> 40f; TENT -> 22f; CAMPFIRE -> 6f; STALL -> 16f; PALISADE -> 10f; WELL -> 18f; CRATES -> 14f; BARREL -> 10f; HAY -> 10f; LANTERN -> 18f; BENCH -> 6f; CART -> 14f; SIGNPOST -> 18f; FLOWERBED -> 4f; LAUNDRY -> 20f; PLAZA -> 0f; COLUMN -> 46f; ARCH -> 40f; RUIN_STATUE -> 30f; FALLEN_COLUMN -> 8f; CLIFF -> 14f; BUILDING -> 40f; EXIT -> 58f; else -> 12f }
         const val BOSS_MAX = 400; const val LAST = 100
         /** How long a seal on a behemoth waits for the strike before it fades (or the brainwash begins). */
         const val SEAL_TIME = 1.1f
@@ -277,7 +278,9 @@ class HallScreen(c: Context) : PixelView(c) {
     private val gates = ArrayList<Gate>()
     private val chunkArt = LinkedHashMap<Int, HallRoomArt>()
     /** Which level of the wood (0: still in the hall), when the next beast waits, the seed of this level, keys in hand. */
-    private var depth = 0; private var beastDepth = 0; private var wildSeed = 0L; private var keys = 0
+    private var depth = 0; private var beastDepth = 0; private var wildSeed = 0L; private var keys = 0; private var stoneKeys = 0
+    /** The stone door opening: time since it began (-1: shut), and where it stands. */
+    private var doorT = -1f; private var doorX = 0f; private var doorY = 0f
     /** Screens of this level you've seen; keys found (by index); the beast, when it's here. */
     private val visited = HashSet<Int>(); private val keysTaken = HashSet<Int>(); private val gatesSeen = HashSet<Int>()
     private var beast: WildBeast? = null; private var beastRoom = -1; private var beastWon = false
@@ -401,6 +404,14 @@ class HallScreen(c: Context) : PixelView(c) {
     /** Where the boss is (she can follow you out of the throne room in her last stand). */
     private var bossRoom = 4
     private val bossHere get() = roomId == bossRoom
+    private fun bossOnScreen() = bx > camX - 6f && bx < camX + W + 6f && by > camY + 4f && by - 40f < camY + H
+    /** Off screen, the boss can follow you but can't work anything on you: its spells wait, a spell being cast fizzles. */
+    private fun holdBossSpells() {
+        if (bossOnScreen()) return
+        if (castRune >= 0) { castRune = -1; stroke.clear(); say("THE SPELL FIZZLES OUT OF SIGHT", 1.2f) }
+        bossShotT = maxOf(bossShotT, 0.8f); spellT = maxOf(spellT, 1.5f); summonT = maxOf(summonT, 1.5f)
+        seedT = maxOf(seedT, 1f); lashT = maxOf(lashT, 1f); mandalaT = maxOf(mandalaT, 1f)
+    }
     /** Something big to hit here: the hall's boss (not mid-slam), or the beast of the wood; and where it stands. */
     private val bigHere get() = (bossHere && stage != Stage.SLAM) || beastHere
     private val gx get() = if (beastHere) beast!!.x else bx
@@ -670,6 +681,8 @@ class HallScreen(c: Context) : PixelView(c) {
         var kind: Friend? = null; var wallCd = 4f; var healCd = 3f; var guardCd = 0f; var state = 0; var room = 3
         var x = 0f; var y = 0f; var hp = 0; var tx = 0f; var ty = 0f; var repick = 0f; var atk = 0f; var skill = 6f
         var hurt = 0f; var inv = 0f; var lunge = 0f; var lx = 0f; var ly = 0f; var face = 1; var step = 0f; var moving = false; var taunt = 0f
+        /** Getting unstuck. */
+        var stuck = 0f; var slx = 0f; var sly = 0f; var detT = 0f; var dtx = 0f; var dty = 0f
     }
     private val comps = arrayListOf(Comp(), Comp())
     private var cur = comps[0]
@@ -733,15 +746,31 @@ class HallScreen(c: Context) : PixelView(c) {
         return solid(x - 7, y - 4, x + 7, y)
     }
     private fun frMove(tx: Float, ty: Float, sp: Float, dt: Float) {
-        val dx = tx - frX; val dy = ty - frY; val d = hypot(dx, dy)
+        val c = cur
+        var dx = tx - frX; var dy = ty - frY; val d = hypot(dx, dy)
         if (d < 1.5f) { frMoving = false; return }
         val st = minOf(d, sp * dt)
-        val nx = frX + dx / d * st; val ny = frY + dy / d * st
+        var ux = dx / d; var uy = dy / d
+        if (c.detT > 0f) { c.detT -= dt; ux = c.dtx; uy = c.dty }
+        else if (friend?.flies != true && !clearPath(frX, frY, tx, ty, 1)) {
+            // round the obstacle on the flow field (it leads toward you), then straight on
+            steer(frX, frY, if (hypot(tx - fieldX, ty - fieldY) < 90f) fieldX else tx, if (hypot(tx - fieldX, ty - fieldY) < 90f) fieldY else ty, 1)
+            ux = dir[0]; uy = dir[1]
+        }
+        val nx = frX + ux * st; val ny = frY + uy * st
         var moved = false
         if (!frSolid(nx, frY)) { frX = nx; moved = true }
         if (!frSolid(frX, ny)) { frY = ny; moved = true }
         if (abs(dx) > 0.5f) frFace = if (dx > 0) 1 else -1
         frMoving = moved
+        if (hypot(frX - c.slx, frY - c.sly) < st * 0.3f) c.stuck += dt else c.stuck = 0f
+        c.slx = frX; c.sly = frY
+        if (c.stuck > 0.35f) {
+            c.stuck = 0f
+            val f1 = !frSolid(frX - uy * 8f, frY + ux * 8f); val f2 = !frSolid(frX + uy * 8f, frY - ux * 8f)
+            val sgn = when { f1 && !f2 -> 1f; f2 && !f1 -> -1f; else -> if (rnd.nextBoolean()) 1f else -1f }
+            c.dtx = -uy * sgn; c.dty = ux * sgn; c.detT = 0.5f + rnd.nextFloat() * 0.4f
+        }
         if (moved) frStep += dt else frRepick = 0f
     }
     private fun frPatrolPoint(px: Float, py: Float, near: Float, far: Float) {
@@ -1246,10 +1275,36 @@ class HallScreen(c: Context) : PixelView(c) {
             if (m.hp > 0 || m.kind == 2) continue
             it.remove()
             gainXp(5); sfx.play(HallSfx.S.IMP_DIE, 0.7f)
-            if (inWild) { coins += if (m.kind == 1 || m.kind == 3) 2 else 1 + rnd.nextInt(2); fxs += Fx(FX_NOVA_STAR, m.x, m.y - 4, 0.3f) }
-            // loot is rare: about one imp in twenty (one in ten with the lodestone), and often just a herb
-            if (rnd.nextFloat() < (if (bag.wearing(Loot.LODESTONE)) 0.03f else 0.015f)) drops += Drop(m.x, m.y, m.room, rollLoot(0.5f))
+            if (inWild) { coins += (if (m.kind == 1 || m.kind == 3) 2 else 1 + rnd.nextInt(2)) + (if (bag.wearing(Loot.COIN_PURSE)) 1 else 0); fxs += Fx(FX_NOVA_STAR, m.x, m.y - 4, 0.3f) }
+            // loot is rare: an everyday find from about one foe in fifty; better things far more seldom; a herb now and then
+            val lk = if (bag.wearing(Loot.LODESTONE)) 2f else 1f
+            val q = rnd.nextFloat()
+            when {
+                q < 0.02f * lk -> drops += Drop(m.x, m.y, m.room, rollTier(Rarity.COMMON))
+                q < 0.026f * lk -> drops += Drop(m.x, m.y, m.room, rollTier(Rarity.RARE))
+                q < 0.028f * lk -> drops += Drop(m.x, m.y, m.room, rollTier(Rarity.EPIC))
+                q < 0.05f * lk -> drops += Drop(m.x, m.y, m.room, Loot.HERB)
+            }
         }
+    }
+    /** Something of this rarity you don't have yet (or the nearest tier below that has one; at worst a herb). */
+    private fun rollTier(r: Rarity): Loot {
+        for (t in r.ordinal downTo 0) {
+            val pool = Loot.values().filter { it.dropped && !it.consumable && it !in bag.owned && it.rarity.ordinal == t }
+            if (pool.isNotEmpty()) return pool[rnd.nextInt(pool.size)]
+        }
+        return Loot.HERB
+    }
+    /** A boss's prize: one time in twenty an exotic, else something epic or rare. */
+    private fun bossPrize(): Loot = when {
+        rnd.nextFloat() < 0.05f * (if (bag.wearing(Loot.LODESTONE)) 1.5f else 1f) -> rollTier(Rarity.EXOTIC)
+        rnd.nextFloat() < 0.4f -> rollTier(Rarity.EPIC)
+        else -> rollTier(Rarity.RARE)
+    }
+    /** A behemoth-class beast's: legendary one time in a hundred, an epic or rare now and then. */
+    private fun bigPrize(): Loot? {
+        val lk = if (bag.wearing(Loot.LODESTONE)) 2f else 1f; val q = rnd.nextFloat()
+        return when { q < 0.01f * lk -> rollTier(Rarity.LEGENDARY); q < 0.04f * lk -> rollTier(Rarity.EPIC); q < 0.1f * lk -> rollTier(Rarity.RARE); q < 0.2f -> Loot.HERB; else -> null }
     }
     /** A find: a herb (or, with a companion along, sometimes a spirit bloom), else something from a tier chosen by rarity. */
     private fun rollLoot(herbChance: Float): Loot {
@@ -1266,15 +1321,16 @@ class HallScreen(c: Context) : PixelView(c) {
     /** B: a ground stomp that throws nearby imps back (and stuns them a moment); with his axe it cleaves them too. */
     private fun stomp() {
         if (phase != Phase.FIGHT || stompCd > 0f) return
-        stompCd = 1.2f
+        stompCd = 2.6f
         val cx = hx + 8; val cy = hy + 13
+        val reach = if (bag.wearing(Loot.STOMP_STONE)) 52f else 44f
         rings += Ring(cx, cy); shakeT = 0.15f
         var shattered = 0
         for (m in minions) {
             if (m.room != roomId || m.ally) continue
             val dx = m.x - cx; val dy = m.y - cy; val d = hypot(dx, dy)
-            if (d < 40f) {
-                val k = ((40f - d) / 40f * 150f + 60f) * (if (m.kind == 2) 0.2f else 1f); val dd = d.coerceAtLeast(1f); m.kx = dx / dd * k; m.ky = dy / dd * k; m.stun = if (m.kind == 2) 0.15f else 0.6f
+            if (d < reach) {
+                val k = ((reach - d) / reach * 300f + 140f) * (if (m.kind == 2) 0.25f else 1f); val dd = d.coerceAtLeast(1f); m.kx = dx / dd * k; m.ky = dy / dd * k; m.stun = if (m.kind == 2) 0.15f else 0.6f
                 if (m.kind == 1 && m.st != 0) { m.st = 3; m.stT = 0.8f }
                 // the Frost Ring freezes them solid; stamp on one already frozen and it shatters
                 if (bag.wearing(Loot.FROST_RING)) {
@@ -1406,7 +1462,7 @@ class HallScreen(c: Context) : PixelView(c) {
             wl.pools[r].map { RectF((it[0] + ox).toFloat(), (it[1] + oy).toFloat(), (it[2] + ox).toFloat(), (it[3] + oy).toFloat()) }.also { allPools += it }
         }
         openRoom = Room("", FOREST, "WENS", allProps, allPools)
-        hp = maxHp; invulnT = 0f; paraT = 0f; poisonT = 0f; invertT = 0f; keys = 0
+        hp = maxHp; invulnT = 0f; paraT = 0f; poisonT = 0f; invertT = 0f; keys = 0; stoneKeys = 0; doorT = -1f
         visited.clear(); keysTaken.clear(); gatesSeen.clear(); searched.clear()
         minions.clear(); shots.clear(); wards.clear(); drawing.clear(); arcs.clear(); bursts.clear(); orbs.clear(); stroke.clear(); drops.clear()
         seeds.clear(); lashes.clear(); mandalas.clear(); fires.clear(); stars.clear(); fxs.clear(); beams.clear()
@@ -1488,8 +1544,13 @@ class HallScreen(c: Context) : PixelView(c) {
         val wl = wild ?: return
         when {
             wl.bossLevel && !beastWon -> say("THE BEAST'S ROOTS HOLD THE DOOR FAST.", 1.8f)
-            keys <= 0 -> say("THE ROOT DOOR IS LOCKED. IT NEEDS A KEY.", 1.8f)
-            else -> { keys--; fxs += Fx(FX_NOVA, 120f, 30f, 0.8f); flashT = 0.3f; sfx.play(HallSfx.S.EXOTIC); sfx.rumbleBig(); finishWildLevel() }
+            doorT >= 0f -> {}
+            stoneKeys <= 0 -> say(if (keys > 0) "A GREAT STONE DOOR. A WOODEN KEY WON'T TURN IT: FIND THE STONE KEY." else "A GREAT STONE DOOR. IT NEEDS THE STONE KEY.", 2f)
+            else -> {
+                stoneKeys--; doorT = 0f
+                val e = chunkProps[wl.exit].first { it.kind == EXIT }; doorX = e.foot.centerX(); doorY = e.foot.bottom
+                say("THE STONE KEY TURNS...", 2f); sfx.play(HallSfx.S.DOOR_UNLOCK); sfx.rumbleBig()
+            }
         }
     }
     /** Keys underfoot; gates you walk up to (opened with a key if you have one). */
@@ -1499,13 +1560,22 @@ class HallScreen(c: Context) : PixelView(c) {
     private fun wildChecks(dt: Float) {
         val wl = wild ?: return
         gateMsgT -= dt; offerT -= dt
+        if (doorT >= 0f) {
+            val was = doorT; doorT += dt
+            if (was < 0.6f && doorT >= 0.6f) { sfx.play(HallSfx.S.DOOR_GRIND); shakeT = maxOf(shakeT, 1.6f) }
+            if (doorT in 0.6f..2.4f) { shakeT = maxOf(shakeT, 0.12f); if (rnd.nextFloat() < dt * 10f) bursts += Burst(doorX + (rnd.nextFloat() - 0.5f) * 50f, doorY - rnd.nextFloat() * 4f) }
+            if (was < 2.4f && doorT >= 2.4f) { flashT = 0.35f; sfx.play(HallSfx.S.DOOR_OPEN); sfx.rumbleFanfare(); say("THE DOOR STANDS OPEN ON THE STARS.", 2f) }
+            if (doorT >= 3.6f) { doorT = -1f; finishWildLevel(); return }
+        }
         if (beastFell) { beastFell = false; minions.removeAll { it.room == roomId && !it.ally }; shots.clear(); lashes.clear() }
         val here = ry * wl.w + rx
         wl.keys.forEachIndexed { i, k ->
             val kx = (k[0] % wl.w) * 240f + k[1]; val ky = (k[0] / wl.w) * 176f + k[2]
             if (i !in keysTaken && hypot(kx - (hx + 8), ky - (hy + 12)) < 11f) {
-                keysTaken += i; keys++; bursts += Burst(kx, ky); fxs += Fx(FX_NOVA_STAR, kx, ky, 0.5f)
-                say("A KEY! (${keysTaken.size}/${wl.keys.size} FOUND)", 2f); sfx.play(HallSfx.S.LEGENDARY, 0.8f); sfx.rumbleSoft(); saveSoon = true
+                keysTaken += i; bursts += Burst(kx, ky); fxs += Fx(FX_NOVA_STAR, kx, ky, 0.5f)
+                if (wl.isStone(i)) { stoneKeys++; say("THE STONE KEY! IT OPENS THE GREAT DOOR.", 2.4f); sfx.play(HallSfx.S.EXOTIC, 0.8f) }
+                else { keys++; say("A WOODEN KEY! (${keysTaken.count { !wl.isStone(it) }}/${wl.keys.size - 1}) IT OPENS A GATE.", 2f); sfx.play(HallSfx.S.LEGENDARY, 0.8f) }
+                sfx.rumbleSoft(); saveSoon = true
             }
         }
         // a gate in a hedgerow: opened with a key if you have one
@@ -1519,7 +1589,7 @@ class HallScreen(c: Context) : PixelView(c) {
                 keys--; gi.remove(); wl.locked -= g.a; wl.locked -= g.b
                 bursts += Burst(g.r.centerX(), g.r.centerY()); fxs += Fx(FX_NOVA, g.r.centerX(), g.r.centerY(), 0.6f); shakeT = 0.2f
                 say("THE GATE SWINGS OPEN!", 1.6f); sfx.play(HallSfx.S.COUNTER); sfx.rumbleBig(); saveSoon = true; fieldT = 0f
-            } else if (gateMsgT <= 0f) { gateMsgT = 2.5f; say("A LOCKED GATE. FIND A KEY.", 1.6f) }
+            } else if (gateMsgT <= 0f) { gateMsgT = 2.5f; say(if (stoneKeys > 0) "A LOCKED GATE. THE STONE KEY WON'T FIT: FIND A WOODEN ONE." else "A LOCKED GATE. FIND A WOODEN KEY.", 1.8f) }
         }
         // the beast: it rises when you reach the heart of the wood
         if (wl.bossLevel && !beastWon && beast == null && here == wl.exit) {
@@ -1530,7 +1600,7 @@ class HallScreen(c: Context) : PixelView(c) {
         val b = beast
         if (b != null && b.dead && b.deathT > 2f && !beastWon) {
             beastWon = true
-            drops += Drop(b.x, b.y, beastRoom, rollLoot(0f)).also { it.life = 1e9f }
+            drops += Drop(b.x, b.y, beastRoom, bossPrize()).also { it.life = 1e9f }
             drops += Drop(b.x + 14f, b.y + 4f, beastRoom, Loot.HERB).also { it.life = 1e9f }
             say("THE ${b.name} IS NO MORE. THE ROOT DOOR STANDS FREE.", 3f); sfx.play(HallSfx.S.LEGENDARY); sfx.rumbleFanfare()
             beast = null; saveSoon = true
@@ -1572,7 +1642,7 @@ class HallScreen(c: Context) : PixelView(c) {
     private fun washTime(m: Minion) = (if (m.kind == 2) 3.8f else 4.6f) * (if (bag.wearing(Loot.RUNE_LENS)) 1.3f else 1f)
     private fun beginWash(m: Minion) {
         if (m.kind == 4) { say("A SHADE HAS NO MIND TO TAKE", 1.4f); return }
-        if (minions.count { it.ally && !it.perm && !it.merc } >= 3) { say("YOUR MIND IS FULL: THREE THRALLS AT MOST", 1.8f); return }
+        if (minions.count { it.ally && !it.perm && !it.merc && it.hp >= 0 } >= 1) { say("YOUR MIND HOLDS ONLY ONE THRALL AT A TIME", 1.8f); return }
         val n = if (m.kind == 2) 4 else 3
         val seq = ArrayList<Int>(); while (seq.size < n) { val k = rnd.nextInt(WASH_SHAPES.size); if (seq.lastOrNull() != k) seq += k }
         wash = Wash(m, seq).also { it.t = washTime(m); it.max = it.t }
@@ -1625,7 +1695,7 @@ class HallScreen(c: Context) : PixelView(c) {
     /** An ally's turn: fight the nearest foe (or the big one), else keep near you. */
     private fun updateAlly(m: Minion, dt: Float, px: Float, py: Float) {
         m.atkCd -= dt
-        if (m.perm) { m.supCd -= dt; if (m.supCd <= 0f) partySupport(m, px, py) }
+        if (!m.merc) { m.supCd -= dt; if (m.supCd <= 0f) partySupport(m, px, py) }
         if (m.para > 0f || m.ice > 0f || m.stun > 0f || m.hp <= 0) return
         // the foe nearest you (thralls guard you; they don't roam off hunting)
         var t: Minion? = null; var td = 95f
@@ -1671,7 +1741,7 @@ class HallScreen(c: Context) : PixelView(c) {
                 m.supCd = 8f
                 if (hp < maxHp) { hp = minOf(maxHp, hp + 12); beams += Beam(m.x, m.y - 6, false); fxs += Fx(FX_MEND, px, py - 4, 0.6f) }
                 hurtAlly?.let { it.hp = minOf(it.maxHp, it.hp + 12); arcs += Arc(m.x, m.y - 6, it.x, it.y - 6); fxs += Fx(FX_MEND, it.x, it.y - 6, 0.5f) }
-                say("IMP: EMBER MEND", 1f); sfx.play(HallSfx.S.ORB, 0.5f)
+                say(if (m.perm) "IMP: EMBER MEND" else "THRALL: EMBER MEND", 1f); sfx.play(HallSfx.S.ORB, 0.5f)
             }
             1 -> {
                 // the hunting howl: foes near you falter and slow; you're quickened
@@ -1680,7 +1750,7 @@ class HallScreen(c: Context) : PixelView(c) {
                 m.supCd = 10f
                 for (o in near) { o.weak = maxOf(o.weak, 4f); o.slow = maxOf(o.slow, 4f) }
                 swiftT = maxOf(swiftT, 3f); rings += Ring(m.x, m.y); fxs += Fx(FX_HEX, m.x, m.y, 0.6f)
-                say("STALKER: HUNTING HOWL", 1f); sfx.play(HallSfx.S.SPRINT, 0.6f)
+                say(if (m.perm) "STALKER: HUNTING HOWL" else "THRALL: HUNTING HOWL", 1f); sfx.play(HallSfx.S.SPRINT, 0.6f)
             }
             3 -> {
                 // warding glare: the nearest foe held, the shots round you burned away
@@ -1689,7 +1759,7 @@ class HallScreen(c: Context) : PixelView(c) {
                 m.supCd = 9f
                 t.para = maxOf(t.para, 2f); fxs += Fx(FX_BIND, t.x, t.y, 0.5f); arcs += Arc(m.x, m.y - 12, t.x, t.y)
                 shots.removeAll { !it.ally && hypot(it.x - px, it.y - py) < 50f }
-                say("GAZER: WARDING GLARE", 1f); sfx.play(HallSfx.S.ZAP, 0.5f)
+                say(if (m.perm) "GAZER: WARDING GLARE" else "THRALL: WARDING GLARE", 1f); sfx.play(HallSfx.S.ZAP, 0.5f)
             }
             else -> m.supCd = 99f
         }
@@ -1816,7 +1886,7 @@ class HallScreen(c: Context) : PixelView(c) {
         flashT = 0.25f; shakeT = 0.4f
         say("BANISHED!", 2f); sfx.play(HallSfx.S.PERISH); sfx.play(HallSfx.S.LEGENDARY, 0.7f); sfx.rumbleFanfare()
         gainXp(120); coins += 10
-        if (rnd.nextFloat() < (if (bag.wearing(Loot.LODESTONE)) 0.4f else 0.25f)) drops += Drop(m.x, m.y, m.room, rollLoot(0.35f))
+        bigPrize()?.let { drops += Drop(m.x, m.y, m.room, it) }
     }
     /** A circle round a behemoth still on his feet: he tears through it, and it only feeds him. */
     private fun spurned(m: Minion) {
@@ -1842,7 +1912,7 @@ class HallScreen(c: Context) : PixelView(c) {
         }
         val n5 = kotlin.math.ceil(n * 0.9f).toInt()      // a touch gentler than before, now foes come in numbers
         val nn = if (bulwarkT > 0f) (n5 + 1) / 2 else n5
-        hp -= if (bag.wearing(Loot.IRON_SKIN)) (nn * 0.8f).toInt() else nn; invulnT = 1f; hurtFlashT = 0.3f
+        hp -= ((if (bag.wearing(Loot.IRON_SKIN)) nn * 0.8f else nn.toFloat()) * (if (bag.wearing(Loot.THICK_HIDE)) 0.9f else 1f)).toInt(); invulnT = 1f; hurtFlashT = 0.3f
         if (n >= 25) { sfx.play(HallSfx.S.HURT_BIG); sfx.rumbleBig() } else { sfx.play(HallSfx.S.HURT); sfx.rumbleHit() }
         if (hp <= 0) { hp = 0; phase = Phase.LOST; castRune = -1; msg = ""; paraT = 0f; poisonT = 0f; invertT = 0f; stroke.clear(); sfx.play(HallSfx.S.FRIEND_DOWN); sfx.rumbleFade() }
     }
@@ -1938,7 +2008,7 @@ class HallScreen(c: Context) : PixelView(c) {
     // where you stand, so foes walk round the furniture to reach you instead of pressing into it.
     // Three of them: for imps and stalkers, for the behemoth (much broader), and for the boss.
     // =====================================================================================
-    private val GW = 30; private val GH = 22; private val CELL = 8f
+    private val GW = 60; private val GH = 44; private val CELL = 8f
     private val fields = Array(3) { IntArray(GW * GH) }
     private val fieldOk = BooleanArray(3)
     private val cellOk = ByteArray(GW * GH)
@@ -2015,12 +2085,22 @@ class HallScreen(c: Context) : PixelView(c) {
         val r = if (k == 1) 8f else 3f
         if (m.detT > 0f) { m.detT -= dt; if (!walk(m, m.dtx, m.dty, sp, r)) m.detT = 0f; return }
         if (useField) steer(m.x, m.y, tx, ty, k)
-        else { val dx = tx - m.x; val dy = ty - m.y; val d = hypot(dx, dy).coerceAtLeast(0.01f); dir[0] = dx / d; dir[1] = dy / d }
+        else {
+            val dx = tx - m.x; val dy = ty - m.y; val d = hypot(dx, dy).coerceAtLeast(0.01f); dir[0] = dx / d; dir[1] = dy / d
+            // a wall in the way of somewhere near you: the field round it, toward you, then straight on
+            if (!clearPath(m.x, m.y, tx, ty, k) && hypot(tx - fieldX, ty - fieldY) < 90f) steer(m.x, m.y, fieldX, fieldY, k)
+        }
         val ux = dir[0]; val uy = dir[1]
         walk(m, ux, uy, sp, r)
         if (hypot(m.x - m.lx, m.y - m.ly) < sp * 0.3f) m.stuckT += dt else m.stuckT = 0f
         m.lx = m.x; m.ly = m.y
-        if (m.stuckT > 0.45f) { m.stuckT = 0f; val sgn = if (rnd.nextBoolean()) 1f else -1f; m.dtx = -uy * sgn; m.dty = ux * sgn; m.detT = 0.4f + rnd.nextFloat() * 0.3f }
+        if (m.stuckT > 0.35f) {
+            // stuck: slide off sideways, whichever side is free (the open one first), and a little further each time
+            m.stuckT = 0f
+            val free1 = !foeSolid(m.x - uy * 6f, m.y + ux * 6f, r); val free2 = !foeSolid(m.x + uy * 6f, m.y - ux * 6f, r)
+            val sgn = when { free1 && !free2 -> 1f; free2 && !free1 -> -1f; else -> if (rnd.nextBoolean()) 1f else -1f }
+            m.dtx = -uy * sgn; m.dty = ux * sgn; m.detT = 0.5f + rnd.nextFloat() * 0.5f; fieldT = minOf(fieldT, 0.05f)
+        }
     }
 
     private val BEH_SLAM_R = 34f
@@ -2297,7 +2377,7 @@ class HallScreen(c: Context) : PixelView(c) {
         if (sprintT > 0f && ex == 0 && ey == 0) when (facing) { 0 -> ey = 1; 1 -> ey = -1; 2 -> ex = -1; else -> ex = 1 }
         if (paraT <= 0f && (ex != 0 || ey != 0) && phase != Phase.LOST) {
             facing = when { ey > 0 -> 0; ey < 0 -> 1; ex < 0 -> 2; else -> 3 }
-            val sp = HERO_SPEED * SLOW * dt * (if (sprintT > 0f) 2.4f else 1f) * (if (swiftT > 0f) 1.3f else 1f)
+            val sp = HERO_SPEED * SLOW * dt * (if (sprintT > 0f) 2.4f else 1f) * (if (swiftT > 0f) 1.3f else 1f) * (if (bag.wearing(Loot.MOSS_BOOTS)) 1.08f else 1f)
             val nx = hx + ex * sp; val ny = hy + ey * sp
             if (!blocked(nx, hy)) hx = nx
             if (!blocked(hx, ny)) hy = ny
@@ -2504,6 +2584,7 @@ class HallScreen(c: Context) : PixelView(c) {
         bossPara -= dt; bossWeak -= dt; bossConf -= dt; bossFireCd -= dt
         if (bossBurn > 0f) { bossBurn -= dt; bossBurnTick -= dt; if (bossBurnTick <= 0f) { bossBurnTick = 0.7f; damageBoss(3); if (burnSfxT <= 0f) { burnSfxT = 0.3f; sfx.play(HallSfx.S.BURN, 0.5f) } } }
         if (phase != Phase.FIGHT) return
+        holdBossSpells()
         when (stage) {
             Stage.DAIS -> {
                 if (castRune >= 0) { castT -= dt; if (castT <= 0f) landSpell() }
@@ -2558,11 +2639,11 @@ class HallScreen(c: Context) : PixelView(c) {
     /** R, Vital Spark: magic arcs from the firefly through up to three imps (and him), each strike bursting. */
     private fun zap() {
         if (phase != Phase.FIGHT || talking || zapCd > 0f) return
-        zapCd = 0.45f
+        zapCd = 0.225f * (if (bag.wearing(Loot.QUICK_GLOVE)) 0.8f else 1f)
         var fromX = flyX; var fromY = flyY
         val star = bag.wearing(Loot.STARHEART)
         val reach = (if (bag.wearing(Loot.EMBER_RING)) 38f else 32f) + (if (star) 6f else 0f) + flySize() * 2f
-        val bite = 2 + (if (bag.wearing(Loot.EMBER_RING)) 1 else 0) + (if (star) 1 else 0)
+        val bite = 2 + (if (bag.wearing(Loot.EMBER_RING)) 1 else 0) + (if (star) 1 else 0) + (if (bag.wearing(Loot.SPARK_FLINT)) 1 else 0)
         val chain = when { star -> 6; bag.wearing(Loot.STORM_RING) -> 5; else -> 3 }
         val splash = if (star) 20f else SPLASH
         val hit = minions.filter { it.room == roomId && !it.ally && hypot(it.x - flyX, it.y - flyY) < reach }.sortedBy { hypot(it.x - flyX, it.y - flyY) }.take(chain)
@@ -2575,7 +2656,7 @@ class HallScreen(c: Context) : PixelView(c) {
         }
         burst(flyX, flyY)
         for (m in hit) { arcs += Arc(fromX, fromY, m.x, m.y); fromX = m.x; fromY = m.y; if (struck.add(m)) { val d0 = pw(bite); hitImp(m, d0, true); charge(d0) }; burst(m.x, m.y) }
-        if (bag.wearing(Loot.BLOSSOM_DAGGER) && struck.isNotEmpty() && hp < maxHp) { hp = minOf(maxHp, hp + minOf(3, struck.size)); fxs += Fx(FX_MEND, hx + 8, hy + 6, 0.4f) }
+        if (bag.wearing(Loot.BLOSSOM_DAGGER) && struck.isNotEmpty() && hp < maxHp) { hp = minOf(maxHp, hp + minOf(2, (struck.size + 1) / 2)); fxs += Fx(FX_MEND, hx + 8, hy + 6, 0.4f) }
         if (bigHere && hypot(gx - flyX, gy - 24 - flyY) < 34f + flySize() * 2f) {
             arcs += Arc(flyX, flyY, gx, gy - 24); bursts += Burst(gx, gy - 24); val d1 = pw(if (star) 12 else 9); damageBoss(d1); charge(d1)
         }
@@ -2583,7 +2664,7 @@ class HallScreen(c: Context) : PixelView(c) {
         eachComp {
             val fk = friend
             if (fk != null && friendHere && frHp < fk.maxHp && hypot(frX - flyX, frY - 10 - flyY) < reach) {
-                val heal = maxOf(4, fk.maxHp / 30)
+                val heal = maxOf(2, fk.maxHp / 60)
                 frHp = minOf(fk.maxHp, frHp + heal)
                 arcs += Arc(flyX, flyY, frX, frY - 10); fxs += Fx(FX_MEND, frX, frY - 8, 0.5f)
                 sfx.play(HallSfx.S.ORB, 0.5f)
@@ -2592,7 +2673,7 @@ class HallScreen(c: Context) : PixelView(c) {
         // brainwashed allies mend as well, at about half the rate a companion does
         var mended = false
         for (m in minions) if (m.ally && m.room == roomId && m.hp in 1 until m.maxHp && hypot(m.x - flyX, m.y - 6 - flyY) < reach) {
-            m.hp = minOf(m.maxHp, m.hp + maxOf(2, (friend?.maxHp ?: 180) / 60)); mended = true
+            m.hp = minOf(m.maxHp, m.hp + maxOf(1, (friend?.maxHp ?: 180) / 120)); mended = true
             arcs += Arc(flyX, flyY, m.x, m.y - 6); fxs += Fx(FX_MEND, m.x, m.y - 6, 0.4f)
         }
         if (mended) sfx.play(HallSfx.S.ORB, 0.4f)
@@ -2634,6 +2715,7 @@ class HallScreen(c: Context) : PixelView(c) {
         bossPara -= dt; bossWeak -= dt; bossConf -= dt; bossFireCd -= dt
         if (bossBurn > 0f) { bossBurn -= dt; bossBurnTick -= dt; if (bossBurnTick <= 0f) { bossBurnTick = 0.7f; damageBoss(3) } }
         if (phase != Phase.FIGHT) return
+        holdBossSpells()
         seedT -= dt; lashT -= dt
         when (stage) {
             Stage.DAIS -> {
@@ -2778,7 +2860,7 @@ class HallScreen(c: Context) : PixelView(c) {
         lvl = sp.getInt("lvl", 1).coerceIn(1, 20); xp = sp.getInt("xp", 0).coerceAtLeast(0); maxHp = sp.getInt("maxHp", 100).coerceIn(100, 200); hp = maxHp
         bag.clear()
         sp.getString("owned", "")!!.split(',').mapNotNull { n -> Loot.values().firstOrNull { it.name == n } }.forEach { if (it !in bag.owned) bag.owned += it }
-        sp.getString("worn", "")!!.split(',').mapNotNull { n -> Loot.values().firstOrNull { it.name == n } }.forEach { if (it in bag.owned && bag.wornCount(it.mode) < 3) bag.worn += it }
+        sp.getString("worn", "")!!.split(',').mapNotNull { n -> Loot.values().firstOrNull { it.name == n } }.forEach { if (it in bag.owned && bag.wornCount(it.mode) < bag.SLOTS) bag.worn += it }
         bag.herbs = sp.getInt("herbs", 0).coerceIn(0, 9); bag.blooms = sp.getInt("blooms", 0).coerceIn(0, 5)
         savedFriend = Friend.values().firstOrNull { it.name == sp.getString("friend", "") }
         savedFriend2 = Friend.values().firstOrNull { it.name == sp.getString("friend2", "") }
@@ -2914,12 +2996,24 @@ class HallScreen(c: Context) : PixelView(c) {
             val x = (k[0] % wl.w) * 240f + k[1]; val y0 = (k[0] / wl.w) * 176f + k[2]
             if (x < camX - 20 || x > camX + W + 20 || y0 < camY - 40 || y0 > camY + H + 20) return@forEachIndexed
             val y = y0 - 3f + sin(time * 3f + i) * 1.5f
-            for (yy in 0 until 30 step 2) { p.color = ((0x30 - yy) shl 24) or 0xF8E070; sc.drawRect(x - 2f, y - 6f - yy * 1.6f, x + 2f, y - 5f - yy * 1.6f, p) }
+            val stone = wl.isStone(i)
+            val beam = if (stone) 0xA0C8F0 else 0xF8E070
+            for (yy in 0 until 30 step 2) { p.color = ((0x30 - yy) shl 24) or beam; sc.drawRect(x - 2f, y - 6f - yy * 1.6f, x + 2f, y - 5f - yy * 1.6f, p) }
             p.color = 0x40000000; sc.drawOval(x - 5, y0 + 2f, x + 5, y0 + 5f, p)
-            p.color = 0x30F8E070; sc.drawCircle(x, y, 8f + sin(time * 4f) * 1.5f, p)
-            box(x - 6, y - 4, x, y + 2, INK); box(x - 5, y - 3, x - 1, y + 1, GOLD); box(x - 4, y - 2, x - 2, y, INK)
-            box(x - 1, y - 1, x + 7, y + 1, INK); box(x, y - 0.5f, x + 6, y + 0.5f, GOLD)
-            box(x + 3, y, x + 5, y + 3, INK); box(x + 5, y, x + 7, y + 2, INK); box(x + 3.5f, y, x + 4.5f, y + 2.5f, GOLD)
+            p.color = (0x30 shl 24) or beam; sc.drawCircle(x, y, 8f + sin(time * 4f) * 1.5f, p)
+            if (stone) {
+                // the stone key: a heavy grey key with a glowing blue rune in its bow
+                val st = 0xFF9A948A.toInt(); val stL = 0xFFC8C2B4.toInt()
+                box(x - 8, y - 5, x, y + 3, INK); box(x - 7, y - 4, x - 1, y + 2, st); box(x - 7, y - 4, x - 1, y - 3, stL); box(x - 5, y - 2, x - 3, y, if ((time * 4).toInt() % 2 == 0) 0xFFA0E0FF.toInt() else 0xFF6090D0.toInt())
+                box(x - 1, y - 1.5f, x + 9, y + 1.5f, INK); box(x, y - 0.5f, x + 8, y + 0.5f, st)
+                box(x + 3, y, x + 5, y + 4, INK); box(x + 6, y, x + 9, y + 3, INK); box(x + 3.5f, y + 0.5f, x + 4.5f, y + 3.5f, st); box(x + 6.5f, y + 0.5f, x + 8.5f, y + 2.5f, st)
+            } else {
+                // a wooden key, for a gate
+                val wd = 0xFFB07E48.toInt(); val wdL = 0xFFD8A868.toInt()
+                box(x - 6, y - 4, x, y + 2, INK); box(x - 5, y - 3, x - 1, y + 1, wd); box(x - 5, y - 3, x - 1, y - 2, wdL); box(x - 4, y - 2, x - 2, y, INK)
+                box(x - 1, y - 1, x + 7, y + 1, INK); box(x, y - 0.5f, x + 6, y + 0.5f, wd)
+                box(x + 3, y, x + 5, y + 3, INK); box(x + 5, y, x + 7, y + 2, INK); box(x + 3.5f, y, x + 4.5f, y + 2.5f, wd)
+            }
         }
     }
     /** A screen of the wood: its baked scenery (with every path drawn, locked or not), then gates and keys. */
@@ -3121,7 +3215,32 @@ class HallScreen(c: Context) : PixelView(c) {
                     if (!glowy) { box(cx + 1 * s0, top + 1, cx + 2 * s0, top + 2, WHITE); box(cx - 2.5f * s0, top + 2, cx - 1.5f * s0, top + 3, WHITE) }
                 }
             }
-            THICKET, PALISADE, PLAZA -> {}
+            THICKET, PALISADE, PLAZA, CLIFF -> {}
+            BUILDING -> {
+                // a house: plastered walls in a timber frame, a steep roof, a door, lit windows, smoke from the chimney
+                val roofs = intArrayOf(0xFF9A3A2A.toInt(), 0xFFC8A050.toInt(), 0xFF4A5468.toInt(), 0xFF6A4A7A.toInt())
+                val roof = roofs[(v and 0x7FFFFFFF) % 4]; val roofD = (roof and 0xFEFEFE shr 1) or (0xFF shl 24)
+                val wall = 0xFFE8DCC0.toInt(); val wallD = 0xFFC8B898.toInt(); val beam = 0xFF5A3A20.toInt()
+                val l = f.left; val r = f.right; val bot = f.bottom; val wt = bot - 24f; val top = b.top
+                box(l, wt, r, bot, INK); box(l + 1, wt + 1, r - 1, bot - 1, wall); box(r - 6, wt + 1, r - 1, bot - 1, wallD)
+                var bx0 = l + 1; while (bx0 < r - 2) { box(bx0, wt + 1, bx0 + 1.5f, bot - 1, beam); bx0 += 12 }
+                box(l + 1, wt + 1, r - 1, wt + 2.5f, beam); box(l + 1, bot - 3, r - 1, bot - 1, 0xFF8A7A60.toInt())
+                // the roof, eaves overhanging
+                val rh = wt - top
+                for (k in 0 until rh.toInt()) { val u = k / rh; val inset = (1f - u) * (f.width() * 0.22f)
+                    box(l - 3 + inset, top + k, r + 3 - inset, top + k + 1, if (k % 3 == 0) roofD else roof) }
+                box(l - 3, wt - 1, r + 3, wt + 1, INK); box(l + f.width() * 0.22f - 3, top - 1, r - f.width() * 0.22f + 3, top, INK)
+                // a door and two windows, warm inside
+                val dx = f.centerX() - 4
+                box(dx, bot - 13, dx + 8, bot - 1, INK); box(dx + 1, bot - 12, dx + 7, bot - 1, 0xFF7A4A28.toInt()); box(dx + 5, bot - 7, dx + 6, bot - 6, GOLD)
+                val glow = if ((time * 0.7f + v).toInt() % 7 == 0) 0xFFFFE0A0.toInt() else 0xFFF8C060.toInt()
+                for (wx in floatArrayOf(l + 6, r - 14)) { box(wx, wt + 6, wx + 8, wt + 13, INK); box(wx + 1, wt + 7, wx + 7, wt + 12, glow); box(wx + 3.5f, wt + 7, wx + 4.5f, wt + 12, beam); box(wx + 1, wt + 9, wx + 7, wt + 10, beam) }
+                // the chimney and its smoke
+                val cx = r - f.width() * 0.3f
+                box(cx, top + 2, cx + 5, top + 10, INK); box(cx + 1, top + 3, cx + 4, top + 10, 0xFF8A6050.toInt())
+                for (i in 0 until 4) { val ph = (time * 0.5f + i * 0.25f + (v and 7) * 0.1f) % 1f; p.color = (((1f - ph) * 0x70).toInt() shl 24) or 0xD8D8E0
+                    sc.drawCircle(cx + 2.5f + sin(time + i) * 2f + ph * 6f, top - ph * 22f, 2f + ph * 3f, p) }
+            }
             WELL -> {
                 val st = 0xFF8E8878.toInt(); val stD = 0xFF5A544A.toInt(); val stL = 0xFFB8B2A0.toInt(); val wood = 0xFF7A5232.toInt()
                 p.color = INK; sc.drawOval(f.left - 1, f.top - 4, f.right + 1, f.bottom + 1, p)
@@ -3318,25 +3437,55 @@ class HallScreen(c: Context) : PixelView(c) {
                 for (k in 0 until 4) { val jx = f.left + 4 + k * 8f; box(jx, b.top - 1, jx + 4, b.top + 4, INK); box(jx + 1, b.top, jx + 3, b.top + 4, if (k % 2 == 0) 0xFF6AB04C.toInt() else 0xFF8CC8F0.toInt()) }
             }
             EXIT -> {
-                // the root door: an arch of twisted roots round a dark doorway, a keyhole glowing in it
-                val cx = f.centerX(); val bot = f.bottom; val top = bot - 34f
+                // the great stone door: a carved frame, two slabs, and behind them a sky full of stars
+                val cx = f.centerX(); val bot = f.bottom; val top = bot - 58f
                 val sealed = wild?.bossLevel == true && !beastWon
-                val root = 0xFF5A3A22.toInt(); val rootL = 0xFF8A6038.toInt()
-                p.color = INK; sc.drawOval(cx - 19, top - 2, cx + 19, top + 26, p); box(cx - 19, top + 12, cx + 19, bot, INK)
-                p.color = root; sc.drawOval(cx - 18, top - 1, cx + 18, top + 25, p); box(cx - 18, top + 12, cx + 18, bot - 1, root)
-                for (i in 0 until 6) { val a = 3.1416f + i * 0.63f; box(cx + cos(a) * 15f - 1, top + 12 + sin(a) * 11f - 1, cx + cos(a) * 15f + 2, top + 12 + sin(a) * 11f + 2, rootL) }
-                box(cx - 18, top + 14, cx - 15, bot - 1, rootL); box(cx + 15, top + 14, cx + 17, bot - 1, 0xFF3A2414.toInt())
-                p.color = 0xFF0C0A10.toInt(); sc.drawOval(cx - 11, top + 6, cx + 11, top + 26, p); box(cx - 11, top + 16, cx + 11, bot - 1, 0xFF0C0A10.toInt())
+                val k = if (doorT < 0f) 0f else ((doorT - 0.6f) / 1.8f).coerceIn(0f, 1f)
+                val st = 0xFF8A8478.toInt(); val stD = 0xFF5A554C.toInt(); val stL = 0xFFB8B2A2.toInt(); val stK = 0xFF3A3630.toInt()
+                val il = cx - 18; val ir = cx + 18; val it = top + 12; val ib = bot - 2
+                // the stars, deep blue, slowly turning
+                box(il, it, ir, ib, 0xFF080A1E.toInt()); box(il, it, ir, it + (ib - it) * 0.4f, 0xFF0C1030.toInt())
+                p.color = 0x302040A0; sc.drawCircle(cx + sin(time * 0.2f) * 6f, it + 18f, 12f, p)
+                for (i in 0 until 26) {
+                    val sx = il + 1 + ((i * 37 + 11) % 34); val sy = it + 1 + ((i * 53 + 7) % (ib - it - 2).toInt().coerceAtLeast(1))
+                    val tw = ((time * (1.5f + (i % 4) * 0.7f) + i).toInt() % 3)
+                    box(sx, sy, sx + 1, sy + 1, if (tw == 0) WHITE else if (i % 3 == 0) 0xFFA0C0FF.toInt() else 0xFF6070B0.toInt())
+                    if (i % 7 == 0 && tw == 0) { box(sx - 1, sy, sx + 2, sy + 1, 0x80FFFFFF.toInt()); box(sx, sy - 1, sx + 1, sy + 2, 0x80FFFFFF.toInt()) }
+                }
+                if (k > 0f) { p.color = (((k * 0x50).toInt()) shl 24) or 0xA0C0FF; sc.drawRect(il - 6, it - 4, ir + 6, ib + 6, p) }
+                // the two slabs, sliding apart into the frame
+                fun slab(l0: Float, r0: Float, left: Boolean) {
+                    if (r0 - l0 < 0.5f) return
+                    box(l0, it, r0, ib, stK); box(l0 + 0.5f, it + 1, r0 - 0.5f, ib, st)
+                    val off = if (left) -k * 18f else k * 18f
+                    var yy = it + 4; while (yy < ib - 3) { val gx = cx + off + (if (left) -9f else 9f)
+                        if (gx in l0 + 2..r0 - 2) { box(gx - 4, yy, gx + 4, yy + 1, stD); box(gx - 0.5f, yy - 3, gx + 0.5f, yy + 4, stD) }
+                        yy += 11 }
+                    if (left) box(l0 + 0.5f, it + 1, l0 + 2, ib, stL) else box(r0 - 2, it + 1, r0 - 0.5f, ib, stD)
+                }
+                slab(il, cx - 18f * k, true); slab(cx + 18f * k, ir, false)
+                if (k == 0f) {
+                    // shut: a hairline of starlight down the seam; the keyhole glows if you hold the key
+                    box(cx - 0.5f, it, cx + 0.5f, ib, if ((time * 2).toInt() % 2 == 0) 0xFF6070B0.toInt() else 0xFF3A4070.toInt())
+                    val g = 0.5f + 0.5f * sin(time * 3f)
+                    val kc = if (stoneKeys > 0) 0x60A0E0FF else 0x30F8E070
+                    p.color = ((((kc ushr 24) * (0.6f + 0.4f * g)).toInt()) shl 24) or (kc and 0xFFFFFF); sc.drawCircle(cx, it + 26, 7f, p)
+                    box(cx - 3, it + 22, cx + 3, it + 32, stK); box(cx - 1.5f, it + 23, cx + 1.5f, it + 26, if (stoneKeys > 0) 0xFFA0E0FF.toInt() else 0xFF20203A.toInt()); box(cx - 0.5f, it + 26, cx + 0.5f, it + 30, if (stoneKeys > 0) 0xFFA0E0FF.toInt() else 0xFF20203A.toInt())
+                }
+                // the frame: two great jambs and a lintel carved with runes
+                for (jx in floatArrayOf(il - 9, ir + 1)) { box(jx, it - 2, jx + 8, bot, INK); box(jx + 1, it - 1, jx + 7, bot - 1, st); box(jx + 1, it - 1, jx + 3, bot - 1, stL); box(jx + 6, it - 1, jx + 7, bot - 1, stD)
+                    var yy = it + 4; while (yy < bot - 4) { box(jx + 1, yy, jx + 7, yy + 1, stD); yy += 9 } }
+                box(il - 12, top, ir + 12, it, INK); box(il - 11, top + 1, ir + 11, it - 1, st); box(il - 11, top + 1, ir + 11, top + 3, stL); box(il - 11, it - 3, ir + 11, it - 1, stD)
+                val runeC = if (k > 0f || stoneKeys > 0) (if ((time * 4).toInt() % 2 == 0) 0xFFA0E0FF.toInt() else 0xFF6090D0.toInt()) else stD
+                for (i in 0 until 7) { val rx = il - 7 + i * 8f; box(rx, top + 5, rx + 1, top + 9, runeC); box(rx + 2, top + 4 + (i % 3), rx + 3, top + 8, runeC); box(rx, top + 6 + (i % 2) * 2, rx + 3, top + 7 + (i % 2) * 2, runeC) }
+                box(cx - 4, top - 4, cx + 4, top + 1, INK); box(cx - 3, top - 3, cx + 3, top, stL)       // the keystone
+                // moss and a fern at the foot
+                box(il - 12, top - 1, il - 2, top + 2, 0xFF4E8A34.toInt()); box(ir + 4, top, ir + 11, top + 2, 0xFF4E8A34.toInt()); box(il - 9, bot - 4, il - 4, bot, 0xFF4E8A34.toInt())
                 if (sealed) {
                     line2.color = 0xFF3E7A30.toInt()
-                    for (i in 0 until 4) sc.drawLine(cx - 11, top + 12 + i * 5, cx + 11, top + 16 + i * 5 - (i % 2) * 8, line2)
-                    for (i in 0 until 5) box(cx - 9 + i * 4.5f, top + 14 + (i % 2) * 6, cx - 8 + i * 4.5f, top + 15 + (i % 2) * 6, 0xFFE8E0C8.toInt())
-                } else {
-                    val g = 0.5f + 0.5f * sin(time * 3f)
-                    p.color = ((0x40 + (g * 0x40).toInt()) shl 24) or 0xF8E070; sc.drawCircle(cx, top + 20, 6f, p)
-                    box(cx - 2, top + 17, cx + 2, top + 21, GOLD); box(cx - 1, top + 21, cx + 1, top + 25, GOLD); box(cx - 1, top + 18, cx + 1, top + 20, INK)
+                    for (i in 0 until 5) sc.drawLine(il - 4, it + 6 + i * 8, ir + 4, it + 10 + i * 8 - (i % 2) * 10, line2)
+                    for (i in 0 until 6) box(il + i * 6.5f, it + 9 + (i % 2) * 9, il + 1 + i * 6.5f, it + 10 + (i % 2) * 9, 0xFFE8E0C8.toInt())
                 }
-                box(cx - 14, top - 4, cx - 8, top, 0xFF52A448.toInt()); box(cx + 6, top - 3, cx + 13, top + 1, 0xFF52A448.toInt()); box(cx - 12, top - 4, cx - 10, top - 3, 0xFF9AD068.toInt())
             }
             CHEST -> {
                 val wood = 0xFF8A5A30.toInt(); val woodD = 0xFF5A3A20.toInt(); val iron = 0xFF505064.toInt()
@@ -3937,7 +4086,7 @@ class HallScreen(c: Context) : PixelView(c) {
     private fun drawScene(time: Float) {
         entN = 0
         val vx0 = camX - 40f; val vx1 = camX + W + 40f; val vy0 = camY - 20f; val vy1 = camY + H + 70f
-        room.props.forEachIndexed { i, pp -> if (pp.kind != THICKET && pp.kind != PALISADE && pp.kind != PLAZA && pp.foot.right > vx0 && pp.foot.left < vx1 && pp.foot.bottom > vy0 && pp.foot.top < vy1) addEnt(pp.foot.bottom, 0, i) }
+        room.props.forEachIndexed { i, pp -> if (pp.kind != THICKET && pp.kind != PALISADE && pp.kind != PLAZA && pp.kind != CLIFF && pp.foot.right > vx0 && pp.foot.left < vx1 && pp.foot.bottom > vy0 && pp.foot.top < vy1) addEnt(pp.foot.bottom, 0, i) }
         addEnt(hy + 15, 1, 0)
         minions.forEachIndexed { i, m -> if (m.room == roomId) addEnt(m.y + 4, 2, i) }
         if (bossHere) addEnt(by, 3, 0)
@@ -4571,11 +4720,16 @@ class HallScreen(c: Context) : PixelView(c) {
         box(152f, 11f, 159f, 18f, INK); box(153f, 12f, 158f, 17f, GOLD); box(154f, 13f, 155f, 15f, WHITE)
         font.color = GOLD; sc.drawText("$coins", 162f, 18f, font)
         // keys: gold if held, outline if still to find
-        for (i in 0 until wl.keys.size) {
-            val kx = 198f + i * 9f
-            val held = i < keys; val found = i < keysTaken.size
-            box(kx, 2f, kx + 7, 8f, if (held) GOLD else if (found) DARK else 0xFF303040.toInt())
+        val nWood = wl.keys.size - 1; val woodFound = keysTaken.count { !wl.isStone(it) }
+        for (i in 0 until nWood) {
+            val kx = 190f + i * 9f
+            box(kx, 2f, kx + 7, 8f, if (i < keys) 0xFFB07E48.toInt() else if (i < woodFound) DARK else 0xFF303040.toInt())
             box(kx + 1, 3f, kx + 3, 5f, INK)
+        }
+        run {
+            val kx = 190f + nWood * 9f + 2f; val got = stoneKeys > 0; val found = keysTaken.any { wl.isStone(it) }
+            box(kx, 1f, kx + 9, 9f, if (got) 0xFF9A948A.toInt() else if (found) DARK else 0xFF303040.toInt())
+            box(kx + 2, 3f, kx + 5, 6f, if (got) 0xFFA0E0FF.toInt() else INK)
         }
         if (partyOn.isNotEmpty()) { font.color = 0xFFE08850.toInt(); sc.drawText("${(powerK * 100).toInt()}%", 120f, 9f, font) }
         font.color = INK
@@ -4687,20 +4841,25 @@ class HallScreen(c: Context) : PixelView(c) {
         sc.drawText("BAG ${bag.owned.size}/${bag.CAPACITY}", l + 8, t + 13, font)
         font.color = RUNE; sc.drawText("L: SAVE", r - 62, b - 4 - 24, font); font.color = INK
         font.color = DARK
-        sc.drawText("HALL ${bag.wornCount(Loot.FIELD)}/3  DUEL ${bag.wornCount(Loot.DUEL)}/3", l + 98, t + 13, font)
+        sc.drawText("HALL ${bag.wornCount(Loot.FIELD)}/${bag.SLOTS}  DUEL ${bag.wornCount(Loot.DUEL)}/${bag.SLOTS}", l + 98, t + 13, font)
         font.color = INK
         box(l + 6, t + 17, r - 6, t + 18, MID)
         if (rows.isEmpty() && pool.isEmpty()) sc.drawText("NOTHING YET. LOOT IS RARE!", l + 10, t + 34, font)
         // nine rows at a time, scrolling with the cursor: your party first, then your things
-        val view = 9; val np = pool.size; val total = rows.size + np
+        val view = 9; val np = pool.size + 1; val total = rows.size + np
         val first = (bagCursor - view + 1).coerceAtLeast(0).coerceAtMost((total - view).coerceAtLeast(0))
         for (i in first until minOf(total, first + view)) {
             val y = t + 31 + (i - first) * 11f
             if (i == bagCursor && (time * 3).toInt() % 2 == 0) sc.drawText(">", l + 6, y, font)
+            if (i == 0) {
+                box(l + 15, y - 8, l + 24, y + 1, 0xFFE07830.toInt()); font.color = WHITE; sc.drawText("R", l + 16, y, font)
+                font.color = 0xFFE07830.toInt(); sc.drawText("THE RADIO", l + 28, y, font); font.color = MID; sc.drawText("A: OPEN", r - 54, y, font); font.color = INK
+                continue
+            }
             if (i < np) {
-                val on = i in partyOn
+                val on = i - 1 in partyOn
                 box(l + 15, y - 8, l + 24, y + 1, 0xFF22A08A.toInt()); font.color = WHITE; sc.drawText("P", l + 16, y, font)
-                font.color = 0xFF22A08A.toInt(); sc.drawText(kindName(pool[i]), l + 28, y, font)
+                font.color = 0xFF22A08A.toInt(); sc.drawText(kindName(pool[i - 1]), l + 28, y, font)
                 font.color = if (on) 0xFF48A048.toInt() else MID; sc.drawText(if (on) "ALONG" else "RESTS", r - 48, y, font); font.color = INK
                 continue
             }
@@ -4714,12 +4873,14 @@ class HallScreen(c: Context) : PixelView(c) {
         }
         // what the selected one does
         box(l + 6, b - 24, r - 6, b - 23, MID)
-        if (bagCursor < pool.size) {
+        if (bagCursor == 0) { font.color = DARK; sc.drawText("LISTEN WHILE YOU PLAY", l + 8, b - 4, font); font.color = INK }
+        else if (bagCursor <= pool.size) {
             font.color = 0xFF22A08A.toInt(); sc.drawText("PARTY ${partyOn.size}/$extraSlots  POWER ${(powerK * 100).toInt()}%", l + 8, b - 14, font)
             font.color = DARK; sc.drawText("EACH ONE ALONG: -10% YOUR POWER", l + 8, b - 4, font); font.color = INK
         }
-        rows.getOrNull(bagCursor - pool.size)?.let {
-            if (!it.consumable) { font.color = rarityCol(it.rarity, time); sc.drawText(it.rarity.label + if (it.mode == Loot.FIELD) " - HALL" else " - DUEL", l + 8, b - 14, font) }
+        rows.getOrNull(bagCursor - pool.size - 1)?.let {
+            if (!it.consumable) { font.color = rarityCol(it.rarity, time); sc.drawText(it.rarity.label + if (it.mode == Loot.FIELD) " - HALL" else " - DUEL", l + 8, b - 14, font)
+                font.color = if (dropAsk === it) 0xFFE04848.toInt() else MID; sc.drawText(if (dropAsk === it) "R AGAIN: DROP!" else "R: DROP", r - 90, b - 14, font) }
             font.color = DARK; sc.drawText(it.about.take(27), l + 8, b - 4, font); font.color = INK
         }
     }
@@ -4931,7 +5092,7 @@ class HallScreen(c: Context) : PixelView(c) {
         }
         return best
     }
-    private fun actLabel(kind: Int) = when (kind) { EXIT -> if (keys > 0) "UNLOCK" else "THE ROOT DOOR"; MUSHROOM -> "PICK"; FOUNTAIN -> "DRINK"; TOMB -> "SEARCH"; TABLE -> "READ"; STATUE -> "LOOK"; BRAZIER -> "WARM UP"; else -> "RUMMAGE" }
+    private fun actLabel(kind: Int) = when (kind) { EXIT -> if (stoneKeys > 0) "UNLOCK" else "THE STONE DOOR"; MUSHROOM -> "PICK"; FOUNTAIN -> "DRINK"; TOMB -> "SEARCH"; TABLE -> "READ"; STATUE -> "LOOK"; BRAZIER -> "WARM UP"; else -> "RUMMAGE" }
     private val LORE = listOf(
         "\"HE HAS FIVE EYES AND NOT ONE OF THEM FORGETS.\"",
         "\"TRACE THE STAR WHEN HE DRAWS IT, OR DANCE.\"",
@@ -4966,14 +5127,14 @@ class HallScreen(c: Context) : PixelView(c) {
                 searched += key
                 val r = rnd.nextFloat()
                 when {
-                    r < 0.1f -> { drops += Drop(pp.foot.centerX(), pp.foot.bottom + 5, roomId, rollLoot(0.3f)); say("SOMETHING GLINTS INSIDE!") }
+                    r < 0.04f -> { drops += Drop(pp.foot.centerX(), pp.foot.bottom + 5, roomId, rollLoot(0.6f)); say("SOMETHING GLINTS INSIDE!") }
                     r < 0.45f -> { spawnMinion(pp.foot.centerX() to pp.foot.bottom + 8); say("SOMETHING CLIMBS OUT!") }
                     else -> say("ONLY DUST.")
                 }
             }
             STATUE -> if (key in searched) say("AN OLD BUST. IT STARES.") else {
                 searched += key
-                if (rnd.nextFloat() < 0.08f) { drops += Drop(pp.foot.centerX(), pp.foot.bottom + 5, roomId, rollLoot(0.6f)); say("A LOOSE STONE! SOMETHING FALLS OUT.") }
+                if (rnd.nextFloat() < 0.03f) { drops += Drop(pp.foot.centerX(), pp.foot.bottom + 5, roomId, rollLoot(0.7f)); say("A LOOSE STONE! SOMETHING FALLS OUT.") }
                 else say("AN OLD BUST. ONE EYE IS LOOSE.")
             }
             else -> if (key in searched) say("NOTHING MORE IN HERE.") else {
@@ -4989,7 +5150,7 @@ class HallScreen(c: Context) : PixelView(c) {
         val flame = bag.wearing(Loot.FLAMEDANCER)
         sprintT = if (flame) 0.56f else 0.28f
         sprintCd = (if (bag.wearing(Loot.WIND_BOOTS)) 0.6f else 1.2f) * (if (flame) 2f else 1f)
-        invulnT = maxOf(invulnT, if (flame) 0.5f else 0.25f)
+        invulnT = maxOf(invulnT, sprintT + 0.15f)
         rings += Ring(hx + 8, hy + 14); dashId++
         sfx.play(if (flame) HallSfx.S.FIREDASH else HallSfx.S.SPRINT)
     }
@@ -5001,19 +5162,32 @@ class HallScreen(c: Context) : PixelView(c) {
     }
     private fun openBag() { if (battle == null && (phase == Phase.FIGHT || phase == Phase.WON)) { bagOpen = true; bagCursor = 0 } }
     private fun bagRows(): List<Loot> = (if (bag.herbs > 0) listOf(Loot.HERB) else emptyList()) + (if (bag.blooms > 0) listOf(Loot.BLOOM) else emptyList()) + bag.owned
+    /** Thrown away for good (asked twice). */
+    private var dropAsk: Loot? = null
+    private fun bagDrop() {
+        val l = bagRows().getOrNull(bagCursor - pool.size - 1) ?: return
+        if (l.consumable) return
+        if (dropAsk !== l) { dropAsk = l; sfx.play(HallSfx.S.PICKUP, 0.3f); return }
+        bag.drop(l); dropAsk = null; say("DROPPED ${l.label}", 1.4f); sfx.play(HallSfx.S.SHATTER, 0.5f); saveSoon = true
+        bagCursor = bagCursor.coerceAtMost((bagRows().size + pool.size).coerceAtLeast(0))
+    }
+    /** Set by the app: opens the radio. */
+    var onRadio: (() -> Unit)? = null
     private fun useBag() {
-        if (bagCursor < pool.size) { toggleParty(bagCursor); return }
-        val l = bagRows().getOrNull(bagCursor - pool.size) ?: return
-        if (l == Loot.HERB) { if (hp < maxHp) { bag.herbs--; hp = minOf(maxHp, hp + 35); msg = "+35 HP"; msgT = 1f; sfx.play(HallSfx.S.ORB) } }
+        dropAsk = null
+        if (bagCursor == 0) { bagOpen = false; onRadio?.invoke(); return }
+        if (bagCursor <= pool.size) { toggleParty(bagCursor - 1); return }
+        val l = bagRows().getOrNull(bagCursor - pool.size - 1) ?: return
+        if (l == Loot.HERB) { if (hp < maxHp) { val hh = if (bag.wearing(Loot.HERB_POUCH)) 50 else 35; bag.herbs--; hp = minOf(maxHp, hp + hh); msg = "+$hh HP"; msgT = 1f; sfx.play(HallSfx.S.ORB) } }
         else if (l == Loot.BLOOM) reviveFriend()
-        else if (!bag.toggle(l)) { msg = "THREE ALREADY WORN"; msgT = 1.2f }
+        else if (!bag.toggle(l)) { msg = "TWO ALREADY WORN: TAKE ONE OFF FIRST"; msgT = 1.4f }
         else if (l == Loot.RUNECASTER && bag.wearing(l)) say(RUNE_HINT, 6f)
-        bagCursor = bagCursor.coerceAtMost((bagRows().size + pool.size - 1).coerceAtLeast(0))
+        bagCursor = bagCursor.coerceAtMost((bagRows().size + pool.size).coerceAtLeast(0))
     }
     private fun menuStep(d: Int) {
         if (choosing) { chooseCur = Math.floorMod(chooseCur + d, encounters().size); sfx.play(HallSfx.S.PICKUP, 0.3f); return }
         battle?.let { if (d < 0) it.up() else it.down(); return }
-        if (bagOpen) { val n = (bagRows().size + pool.size).coerceAtLeast(1); bagCursor = Math.floorMod(bagCursor + d, n) }
+        if (bagOpen) { val n = bagRows().size + pool.size + 1; bagCursor = Math.floorMod(bagCursor + d, n); dropAsk = null }
     }
     /** When he's done shouting, the fight starts. */
     private fun endTalk() {
@@ -5036,7 +5210,7 @@ class HallScreen(c: Context) : PixelView(c) {
                     bagRect.contains(x, y) -> { if (bagOpen) bagOpen = false else openBag(); performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP) }
                     selRect.contains(x, y) && bagOpen -> { saveGame(); bagOpen = false; say("GAME SAVED", 1.6f); sfx.play(HallSfx.S.COUNTER); performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP) }
                     selRect.contains(x, y) -> { selDown = true; selPointer = e.getPointerId(i); drawing.clear(); drawLen = 0f; performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP) }
-                    startRect.contains(x, y) -> { startDown = true; zap(); performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP) }
+                    startRect.contains(x, y) -> { startDown = true; if (bagOpen) bagDrop() else zap(); performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP) }
                     xyRect.contains(x, y) -> { xyPointer = e.getPointerId(i); stroke.clear(); aimFly(x, y) }
                     near(aKey, x, y) -> { aDown = true; pressA(); performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP) }
                     near(bKey, x, y) -> { bDown = true; pressB(); performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP) }

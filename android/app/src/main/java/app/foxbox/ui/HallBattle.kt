@@ -60,6 +60,15 @@ enum class Loot(val label: String, val mode: Int, val about: String, val rarity:
     SUN_LOCKET("SUN LOCKET", LOOT_DUEL, "HEAL A LITTLE EACH TURN", Rarity.COMMON),
     RUNE_LENS("RUNE LENS", LOOT_DUEL, "MORE TIME TO TRACE", Rarity.COMMON),
     ECHO_BELL("ECHO BELL", LOOT_DUEL, "ECHO: STRIKE TWICE", Rarity.EPIC),
+    // ---- everyday finds for the hall and the wood
+    MOSS_BOOTS("MOSS BOOTS", LOOT_FIELD, "WALK A LITTLE FASTER", Rarity.COMMON),
+    THICK_HIDE("THICK HIDE", LOOT_FIELD, "TAKE A TENTH LESS DAMAGE", Rarity.COMMON),
+    SPARK_FLINT("SPARK FLINT", LOOT_FIELD, "SPARK BITES +1", Rarity.COMMON),
+    STOMP_STONE("STOMP STONE", LOOT_FIELD, "STOMP REACHES FURTHER", Rarity.COMMON),
+    COIN_PURSE("COIN PURSE", LOOT_FIELD, "A COIN MORE FROM EACH FOE", Rarity.COMMON),
+    HERB_POUCH("HERB POUCH", LOOT_FIELD, "HERBS HEAL 15 MORE", Rarity.COMMON),
+    QUICK_GLOVE("QUICK GLOVE", LOOT_FIELD, "SPARK READY SOONER", Rarity.COMMON),
+    BRASS_BELL("BRASS BELL", LOOT_DUEL, "STRIKES +3", Rarity.COMMON),
     HERB("HERB", LOOT_EAT, "HEALS 35", Rarity.COMMON, dropped = false),
     /** Brings a fallen companion back where it lies. */
     BLOOM("SPIRIT BLOOM", LOOT_EAT, "REVIVES YOUR COMPANION", Rarity.RARE, dropped = false);
@@ -77,6 +86,10 @@ class Bag {
     var herbs = 0
     var blooms = 0
     val CAPACITY = 24
+    /** How many of each kind (hall, duel) can be worn at once. */
+    val SLOTS = 2
+    /** Throws something away for good. */
+    fun drop(l: Loot) { owned -= l; worn -= l }
     fun wearing(l: Loot) = l in worn
     fun wornCount(mode: Int) = worn.count { it.mode == mode }
     /** Adds a find; it's worn straight away if there's a free slot. Returns what to say. */
@@ -87,13 +100,13 @@ class Bag {
         if (owned.size >= CAPACITY) return "YOUR BAG IS FULL"
         owned += l
         val tier = if (l.rarity.ordinal >= Rarity.LEGENDARY.ordinal) l.rarity.label + "! " else ""
-        if (wornCount(l.mode) < 3) { worn += l; return "$tier${l.label}! WORN: ${l.about}" }
+        if (wornCount(l.mode) < SLOTS) { worn += l; return "$tier${l.label}! WORN: ${l.about}" }
         return "$tier${l.label}! (START TO WEAR)"
     }
-    /** Wear or take off; false if that kind's three slots are full. */
+    /** Wear or take off; false if that kind's two slots are full. */
     fun toggle(l: Loot): Boolean {
         if (l in worn) { worn -= l; return true }
-        if (wornCount(l.mode) >= 3) return false
+        if (wornCount(l.mode) >= SLOTS) return false
         worn += l; return true
     }
     fun clear() { owned.clear(); worn.clear(); herbs = 0; blooms = 0 }
@@ -261,7 +274,7 @@ class HallBattle(
 
     private fun strike(k: Float, twice: Boolean = false) {
         var total = 0
-        repeat(if (twice) 2 else 1) { total += ((rnd.nextInt(10, 15) + if (worn(Loot.FIVE_EYED_AXE)) 15 else 0) * k * host.power).toInt() }
+        repeat(if (twice) 2 else 1) { total += ((rnd.nextInt(10, 15) + (if (worn(Loot.FIVE_EYED_AXE)) 15 else 0) + (if (worn(Loot.BRASS_BELL)) 3 else 0)) * k * host.power).toInt() }
         val tags = ArrayList<String>()
         val crit = rnd.nextFloat() < 0.15f
         if (crit) {

@@ -162,7 +162,7 @@ class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost {
         screen = 3; hallFrom = from
         // the game has no radio or notebook keys
         topKeys = null
-        setContentView(app.foxbox.ui.HallScreen(this).apply { onExit = { leaveHall() } })
+        setContentView(app.foxbox.ui.HallScreen(this).apply { onExit = { leaveHall() }; onRadio = { app.foxbox.radio.RadioPanel.show(this@MainActivity, this@MainActivity) } })
     }
     private var hallFrom = 2
     /** A project is open everywhere but the title screen (and the hall when it was entered from there). */

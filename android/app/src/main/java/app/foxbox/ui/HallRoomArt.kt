@@ -37,7 +37,7 @@ internal class HallRoomArt {
         // prop kinds (as in HallScreen)
         const val PILLAR = 0; const val ROCK = 1; const val SHRUB = 2; const val STATUE = 3; const val FOUNTAIN = 4
         const val TABLE = 5; const val BRAZIER = 6; const val TOMB = 7; const val CHEST = 8
-        const val TREE = 9; const val THICKET = 14; const val PALISADE = 22; const val PLAZA = 33; const val FLOWERBED = 31
+        const val TREE = 9; const val THICKET = 14; const val PALISADE = 22; const val PLAZA = 33; const val FLOWERBED = 31; const val CLIFF = 38
         /** A screen of the Wildwood. */
         const val FOREST = 10
     }
@@ -495,7 +495,9 @@ internal class HallRoomArt {
         for ((k, f) in s.props) if (k == PLAZA) plaza(f, s.id)
         water(s)
         for (b in s.bridges) bridge(b)
-        for ((k, f) in s.props) when (k) { THICKET -> thicket(f, s.id); PALISADE -> palisade(f); PLAZA, FLOWERBED -> {}; else -> shadow(k, f) }
+        val cliffs = s.props.filter { it.first == CLIFF }.map { it.second }
+        for ((k, f) in s.props) when (k) { THICKET -> thicket(f, s.id); PALISADE -> palisade(f); CLIFF -> cliffTop(f, s.id); PLAZA, FLOWERBED -> {}; else -> shadow(k, f) }
+        for (f in cliffs) cliffFace(f, cliffs, s.id)
         if (s.open) return
         // the canopy along the top: a wall of round crowns over trunks
         box(0, 0, W, 31, CAN_D)
@@ -669,6 +671,42 @@ internal class HallRoomArt {
             var y = t; while (y < b) { box(l, y, r, y + 4, woodD); box(l + 1, y + 1, r - 1, y + 3, wood); box(l + 1, y + 1, r - 1, y + 2, woodL); y += 4 }
         }
         for (k in 0 until 2) box(l, b + k, r, b + k + 1, intArrayOf(0x40000000, 0x20000000)[k])
+    }
+    /** Rock: the top of the cliff, grey-green and grassed over, cut into blocks. */
+    private fun cliffTop(f: RectF, id: Int) {
+        val l = f.left.toInt(); val t = f.top.toInt(); val r = f.right.toInt(); val b = f.bottom.toInt()
+        box(l, t, r, b, 0xFF6C7560.toInt())
+        for (y in t until b) for (x in l until r) {
+            val v = h(x / 2, y / 2, id + 77)
+            when (v % 13) { 0 -> px(x, y, 0xFF7E876E.toInt()); 1 -> px(x, y, 0xFF5C6452.toInt()); 2 -> px(x, y, 0xFF5E8A3C.toInt()); 3 -> if (v % 3 == 0) px(x, y, 0xFF8CB050.toInt()) }
+        }
+        // block seams on the rock, and tufts of grass on top
+        for (x in l until r) if ((x / 12 + t / 11) % 2 == 0 && x % 12 == 0) box(x, t + 2, x + 1, b - 1, 0xFF545C4A.toInt())
+        for (k in 0 until (r - l) / 6) { val v = h(l + k, t, id); val x = l + k * 6 + v % 4; val y = t + 1 + (v shr 3) % maxOf(1, b - t - 3); px(x, y, 0xFF4E8A34.toInt()); px(x + 1, y - 1, 0xFF7AB02E.toInt()); px(x + 2, y, 0xFF4E8A34.toInt()) }
+    }
+    /** Where open ground lies below or beside the rock: a sheer face, cracked, with a shadow at its foot. */
+    private fun cliffFace(f: RectF, all: List<RectF>, id: Int) {
+        val l = f.left.toInt(); val t = f.top.toInt(); val r = f.right.toInt(); val b = f.bottom.toInt()
+        fun rock(x: Float, y: Float) = all.any { it.contains(x, y) }
+        var x = l
+        while (x < r) {
+            val below = rock(x + 0.5f, b + 1f)
+            if (!below) {
+                // the face: the lower 7 pixels of the block, stone in vertical strata
+                box(x, b - 7, x + 1, b, 0xFF4A4238.toInt())
+                val v = h(x, b, id)
+                val c = when ((x + v % 3) % 5) { 0 -> 0xFF5A5046.toInt(); 1, 2 -> 0xFF6E6254.toInt(); else -> 0xFF7E705E.toInt() }
+                box(x, b - 6, x + 1, b, c)
+                if (v % 7 == 0) box(x, b - 5, x + 1, b - 1, 0xFF3A322A.toInt())
+                px(x, b - 7, 0xFF9AA27E.toInt())
+                box(x, b, x + 1, b + 1, 0x50000000); box(x, b + 1, x + 1, b + 2, 0x30000000); box(x, b + 2, x + 1, b + 3, 0x18000000)
+            }
+            x++
+        }
+        // dark edges where the rock meets open ground at its sides and top
+        if (!rock(l - 1f, (t + b) / 2f)) box(l, t, l + 1, b, 0xFF3E4434.toInt())
+        if (!rock(r + 0.5f, (t + b) / 2f)) box(r - 1, t, r, b, 0xFF3E4434.toInt())
+        var xx = l; while (xx < r) { if (!rock(xx + 0.5f, t - 1f)) box(xx, t, xx + 1, t + 1, 0xFF9AA27E.toInt()); xx++ }
     }
     /** Dense thicket: a wall of leaf clusters, darker toward the ground, shadow along its foot. */
     private fun thicket(f: RectF, id: Int) {

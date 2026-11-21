@@ -493,9 +493,13 @@ internal class HallRoomArt {
         for (k in 0 until 22) {
             val x = k * 11 + (h(k, 2, s.id) % 7) - 3; val y = 4 + (h(k, 4, s.id) % 10); val r = 9 + (h(k, 5, s.id) % 5)
             if (s.doors[2] && x in 98..142) continue
+            p.color = 0xFF10261A.toInt(); c.drawCircle(x.toFloat(), y.toFloat(), r + 1f, p)
             p.color = CAN; c.drawCircle(x.toFloat(), y.toFloat(), r.toFloat(), p)
             p.color = CAN_L; c.drawCircle(x - r * 0.25f, y - r * 0.3f, r * 0.6f, p)
             p.color = CAN_H; c.drawCircle(x - r * 0.4f, y - r * 0.45f, r * 0.22f, p)
+            // notched leaf edges below, specks of light above
+            for (q in 0 until 5) { val a = 0.4f + q * 0.55f; px((x + Math.cos(a.toDouble()) * (r - 1)).toInt(), (y + Math.sin(a.toDouble()) * (r - 1)).toInt(), CAN_D) }
+            for (q in 0 until 3) { val v = h(k, q, s.id); px(x - r / 2 + v % maxOf(1, r), y - r / 2 + (v shr 5) % maxOf(1, r / 2), if (q == 0) 0xFFB8E080.toInt() else CAN_H) }
         }
         if (s.doors[2]) {
             // a dark way through the trees

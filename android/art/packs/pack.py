@@ -152,13 +152,35 @@ save(bramble(),'walls','bramble')
 def tree(rp,w=32,h=48,fruit=None,seed=0,pine=False):
     c=C(w,h); cx=w/2; bot=h-1
     # trunk and roots
-    c.poly([(cx-4,bot-20),(cx+4,bot-20),(cx+5,bot-2),(cx+8,bot),(cx-8,bot),(cx-5,bot-2)],BARK,0)
+    c.poly([(cx-4,bot-20),(cx+4,bot-20),(cx+5,bot-2),(cx+9,bot),(cx+3,bot-1),(cx,bot),(cx-3,bot-1),(cx-9,bot),(cx-5,bot-2)],BARK,0)
+    for k in range(4): c.put(cx-2+(k%3)*2,bot-17+k*4,BARK[0],0,-1); c.put(cx-2+(k%3)*2,bot-16+k*4,BARK[0],0,-1)
+    c.put(cx+1,bot-12,(20,12,8),0,-1); c.put(cx+2,bot-12,(20,12,8),0,-1); c.put(cx-3,bot-18,BARK[4],0,-1)
     if pine:
-        for k,(yy,ww) in enumerate([(bot-14,13),(bot-22,11),(bot-30,9),(bot-38,6)]):
-            c.poly([(cx-ww,yy),(cx,yy-14),(cx+ww,yy)],rp,1+k)
+        # tiers of drooping boughs, each with a ragged, needled hem and light on its upper side
+        for k,(yy,ww) in enumerate([(bot-12,12),(bot-19,11),(bot-26,9),(bot-33,7),(bot-39,4.5)]):
+            pts=[(cx,yy-12)]
+            for j in range(9):
+                t=j/8; xx=cx+ww-(2*ww)*t; pts.append((xx,yy+(1.5 if j%2 else -0.5)))
+            pts=[(cx,yy-12),(cx+ww,yy)]+[(cx+ww-(2*ww)*j/8,yy+(1.6 if j%2 else -0.4)) for j in range(9)]+[(cx-ww,yy)]
+            c.poly(pts,rp,1+k)
+            for j in range(int(ww)):
+                x=int(cx-ww*0.6+j*1.2); y=int(yy-3-(j%3))
+                if 0<=x<c.w and 0<=y<c.h and c.g[y][x] is not None: c.put(x,y,rp[3] if x<cx else rp[1],1+k)
+        c.put(cx,bot-52+2,rp[4],9); c.put(cx,bot-50,rp[4],9)
     else:
-        for (dx,dy,r) in [(0,-30,13),(-8,-24,9),(8,-24,9),(-3,-35,9),(5,-33,8)]:
-            c.blob(cx+dx,bot+dy,r,r*0.92,rp,1,fur=0.12,furn=14)
+        # branches forking into the crown, then clumps of leaves, back to front
+        c.poly([(cx-1,bot-20),(cx-9,bot-30),(cx-7,bot-31),(cx+1,bot-22)],BARK,1)
+        c.poly([(cx+1,bot-20),(cx+8,bot-32),(cx+10,bot-31),(cx+2,bot-19)],BARK,1)
+        rnd=random.Random(seed*7+3)
+        clumps=[(0,-31,10),(-9,-27,7),(9,-27,7),(-11,-20,6),(11,-20,6),(-5,-36,7),(5,-37,7),(0,-24,7),(-4,-17,5),(5,-17,5)]
+        for i,(dx,dy,r) in enumerate(clumps):
+            c.blob(cx+dx+rnd.uniform(-1,1),bot+dy+rnd.uniform(-1,1),r,r*0.9,rp,2+i%3,fur=0.18,furn=12)
+        c.inner()
+        # specks of light on the crowns, dark notches below them
+        for k in range(26):
+            x=int(cx+rnd.uniform(-13,13)); y=int(bot-24+rnd.uniform(-15,8))
+            if 0<=x<c.w and 0<=y<c.h and c.g[y][x] is not None and c.g[y][x] not in (INK,) and c.part[y][x]>=0 and c.ramps.get(c.part[y][x])==rp:
+                c.put(x,y,rp[4] if y<bot-26 else rp[0],c.layer[y][x],c.part[y][x])
     if fruit:
         rnd=random.Random(seed)
         for k in range(5): x=int(cx+rnd.randint(-10,10)); y=int(bot-24-rnd.randint(-6,12)); c.put(x,y,fruit); c.put(x+1,y,fruit); c.put(x,y-1,(255,255,255))
@@ -189,15 +211,17 @@ def boulder():
 save(boulder(),'props','boulder')
 def shrooms(rp,glow_ph=None):
     c=C(16,16)
-    if glow_ph is not None:
-        for y in range(16):
-            for x in range(16):
-                d=math.hypot(x-8,y-9)
-                if d<7.5: c.put(x,y,(150,220,255,int((50 if glow_ph==0 else 85)*(1-d/7.5))+10),-5)
     for (x,y,s) in [(5,8,1.0),(11,10,0.75)]:
         c.rect(x-1,y,x+1,15,BONE[3],1); c.blob(x,y,4.5*s,3*s,rp,2)
         c.put(x-2,y-1,(255,255,255)); c.put(x+1,y,(255,255,255))
-    c.outline(); return c.img()
+    c.outline()
+    if glow_ph is not None:
+        # a soft halo, behind (and never outlined)
+        for y in range(16):
+            for x in range(16):
+                d=math.hypot(x-8,y-9)
+                if d<7.5 and c.g[y][x] is None: c.g[y][x]=(150,220,255,int((50 if glow_ph==0 else 85)*(1-d/7.5))+10)
+    return c.img()
 save(shrooms(MUSH),'props','mushrooms')
 save(sheet([[shrooms(GLOWM,0),shrooms(GLOWM,1)]]),'props','glow_mushrooms_f2')
 def rootdoor(sealed=False):

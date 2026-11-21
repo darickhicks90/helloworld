@@ -100,6 +100,8 @@ class HallScreen(c: Context) : PixelView(c) {
         const val FOREST = 10
         fun propH(k: Int) = when (k) { PILLAR -> 70f; ROCK -> 12f; SHRUB -> 14f; STATUE -> 28f; FOUNTAIN -> 18f; TABLE -> 8f; BRAZIER -> 14f; TOMB -> 14f; TREE -> 46f; STUMP -> 9f; LOG -> 9f; MUSHROOM -> 9f; EXIT -> 34f; else -> 12f }
         const val BOSS_MAX = 400; const val LAST = 100
+        /** How long a seal on a behemoth waits for the strike before it fades (or the brainwash begins). */
+        const val SEAL_TIME = 1.1f
     }
 
     private val screen = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888)
@@ -379,7 +381,7 @@ class HallScreen(c: Context) : PixelView(c) {
         if (m.kind == 2 && m.hp <= 0) {
             // staggered: he drops to his knees. Now's the time to circle him.
             m.hp = 0; m.daze = 5.5f; m.slamT = 0f; m.rage = 0f
-            say("THE BEHEMOTH REELS! CIRCLE IT WITH L!", 2f); sfx.play(HallSfx.S.COUNTER); shakeT = maxOf(shakeT, 0.2f); sfx.rumbleBig()
+            say("IT REELS! CIRCLE IT, THEN STRIKE A LINE THROUGH!", 2.2f); sfx.play(HallSfx.S.COUNTER); shakeT = maxOf(shakeT, 0.2f); sfx.rumbleBig()
             return
         }
         if (!quiet && impSfxT <= 0f) { impSfxT = 0.06f; sfx.play(HallSfx.S.IMP_HIT, 0.6f) }
@@ -824,8 +826,52 @@ class HallScreen(c: Context) : PixelView(c) {
     }
 
     /** L let go: the drawn line stands for ten seconds; a closed shape curses whoever is inside. */
+    /**
+     * A sealed behemoth: a closed circle round a dazed one holds it for a moment. Strike a line
+     * through the circle (or through him) and he's banished; leave it, and with the Runecaster
+     * the brainwashing begins; without it, the seal fades.
+     */
+    private class Seal(val m: Minion, val pts: FloatArray) { var t = SEAL_TIME }
+    private var seal: Seal? = null
+    /** Did this stroke cut through the seal: across its ring twice, or right past him? */
+    private fun cutsSeal(sl: Seal, q: FloatArray): Boolean {
+        val n = q.size / 2; if (n < 2) return false
+        var crossings = 0; var near = Float.MAX_VALUE
+        for (i in 0 until n - 1) {
+            val ax = q[i * 2]; val ay = q[i * 2 + 1]; val bx2 = q[i * 2 + 2]; val by2 = q[i * 2 + 3]
+            var j = 0
+            while (j + 3 < sl.pts.size) { if (cross(ax, ay, bx2, by2, sl.pts[j], sl.pts[j + 1], sl.pts[j + 2], sl.pts[j + 3])) crossings++; j += 2 }
+            // how close the stroke passes to him
+            val vx = bx2 - ax; val vy = by2 - ay; val ll = (vx * vx + vy * vy).coerceAtLeast(0.01f)
+            val tt = (((sl.m.x - ax) * vx + (sl.m.y - 10 - ay) * vy) / ll).coerceIn(0f, 1f)
+            near = minOf(near, hypot(ax + vx * tt - sl.m.x, ay + vy * tt - (sl.m.y - 10)))
+        }
+        return crossings >= 2 || (crossings >= 1 && near < 14f) || near < 8f
+    }
+    private fun updateSeal(dt: Float) {
+        val sl = seal ?: return
+        val m = sl.m
+        if (m !in minions || m.room != roomId || m.daze <= 0f || m.ally) { seal = null; return }
+        if (drawing.isNotEmpty()) return            // still drawing: the moment waits for you
+        sl.t -= dt
+        if (sl.t <= 0f) {
+            seal = null
+            if (bag.wearing(Loot.RUNECASTER) && wash == null) beginWash(m)
+            else { wards.removeAll { it.pts === sl.pts }; say("THE SEAL FADES. CIRCLE HIM, THEN STRIKE THROUGH!", 1.8f) }
+        }
+    }
+
     private fun finishWard() {
         val n = drawing.size / 2
+        // a stroke through a fresh seal: banished
+        seal?.let { sl ->
+            if (n >= 2 && phase == Phase.FIGHT && cutsSeal(sl, drawing.toFloatArray())) {
+                seal = null; wards.removeAll { it.pts === sl.pts }
+                arcs += Arc(drawing[0], drawing[1], drawing[drawing.size - 2], drawing[drawing.size - 1])
+                banish(sl.m); minions.removeAll { it.kind == 2 && it.hp < 0 }
+                drawing.clear(); drawLen = 0f; return
+            }
+        }
         if (n >= 3) {
             var minX = Float.MAX_VALUE; var maxX = -Float.MAX_VALUE; var minY = Float.MAX_VALUE; var maxY = -Float.MAX_VALUE
             for (i in 0 until n) { val x = drawing[i * 2]; val y = drawing[i * 2 + 1]; minX = minOf(minX, x); maxX = maxOf(maxX, x); minY = minOf(minY, y); maxY = maxOf(maxY, y) }
@@ -849,10 +895,18 @@ class HallScreen(c: Context) : PixelView(c) {
             } else if (closed && phase == Phase.FIGHT) {
                 var hit = 0
                 // with the Runecaster, a circled foe can be brainwashed instead
-                val thrall = if (bag.wearing(Loot.RUNECASTER) && wash == null) minions.firstOrNull { it.room == roomId && !it.ally && it.hp >= 0 && it.popT <= 0f && inside(pts, it.x, it.y) && (it.kind != 2 || it.daze > 0f) } else null
+                // a dazed behemoth in the circle is sealed first (see Seal): a moment to strike through, or to let it be
+                val big = if (seal == null) minions.firstOrNull { it.room == roomId && !it.ally && it.kind == 2 && it.daze > 0f && inside(pts, it.x, it.y) } else null
+                if (big != null) {
+                    seal = Seal(big, pts); wards.last().life = maxOf(wards.last().life, SEAL_TIME + 0.5f)
+                    fxs += Fx(FX_BIND, big.x, big.y - 10, 0.6f); sfx.play(HallSfx.S.BOSS_RUNE, 0.7f); sfx.rumbleSoft()
+                    say(if (bag.wearing(Loot.RUNECASTER)) "SEALED! STRIKE THROUGH TO BANISH, OR WAIT TO BRAINWASH" else "SEALED! NOW STRIKE A LINE THROUGH IT!", 1.8f)
+                    drawing.clear(); drawLen = 0f; return
+                }
+                val thrall = if (bag.wearing(Loot.RUNECASTER) && wash == null) minions.firstOrNull { it.room == roomId && !it.ally && it.hp >= 0 && it.popT <= 0f && it.kind != 2 && inside(pts, it.x, it.y) } else null
                 if (thrall != null) { wards.removeAt(wards.size - 1); beginWash(thrall); drawing.clear(); drawLen = 0f; return }
                 for (m in minions) if (m.room == roomId && !m.ally && inside(pts, m.x, m.y)) {
-                    if (m.kind == 2) { if (m.daze > 0f) banish(m) else spurned(m); continue }
+                    if (m.kind == 2) { if (m.daze <= 0f) spurned(m); continue }
                     curse(m); hit++
                 }
                 minions.removeAll { it.kind == 2 && it.hp < 0 }
@@ -1541,7 +1595,7 @@ class HallScreen(c: Context) : PixelView(c) {
             return
         }
         if (m.daze > 0f) {
-            if (wash?.m !== m) m.daze -= dt
+            if (wash?.m !== m && seal?.m !== m) m.daze -= dt
             if (m.daze <= 0f) {
                 // too slow: he heals and rises in a fury
                 m.hp = BEH_HP; m.rage = 10f; m.slamCd = 1.2f
@@ -1809,7 +1863,7 @@ class HallScreen(c: Context) : PixelView(c) {
         }
         if (bossHere) { if (chapter == 2) updateBlossom(dt, px, py) else updateBoss(dt, px, py) }
         if (inWild) { wildChecks(dt); updateBeast(dt, px, py) }
-        updateWash(dt)
+        updateWash(dt); updateSeal(dt)
         updateGarden(dt, px, py)
         if (phase != Phase.FIGHT) return
 
@@ -2443,27 +2497,7 @@ class HallScreen(c: Context) : PixelView(c) {
                 if (v % 2 == 0) { box(f.right - 6, b.top + 5, f.right - 5, b.top + 9, DARK); box(f.right - 5, b.top + 8, f.right - 4, b.top + 11, DARK) }
                 box(f.left, f.bottom - 2, f.left + 4, f.bottom - 1, LEAF_D)
             }
-            TREE -> {
-                // a round-crowned tree: trunk with bark and roots, a crown in four tones with light on top
-                val cx = f.centerX(); val bot = f.bottom
-                val bark = 0xFF6A4628.toInt(); val barkD = 0xFF3E2814.toInt(); val barkL = 0xFF8A623A.toInt()
-                box(cx - 7, bot - 3, cx + 7, bot, barkD); box(cx - 5, bot - 4, cx + 5, bot - 1, bark)
-                box(cx - 4, bot - 24, cx + 4, bot - 2, barkD); box(cx - 3, bot - 24, cx + 3, bot - 2, bark); box(cx - 3, bot - 24, cx - 1, bot - 2, barkL)
-                box(cx + 1, bot - 16, cx + 2, bot - 9, barkD); box(cx - 2, bot - 12, cx - 1, bot - 7, barkD)
-                val hue = v % 7
-                val cD = when (hue) { 0 -> 0xFF8A4A1E.toInt(); 1 -> 0xFF6A3060.toInt(); else -> 0xFF1E5228.toInt() }
-                val cM = when (hue) { 0 -> 0xFFC8782A.toInt(); 1 -> 0xFFA85090.toInt(); else -> 0xFF2E7A34.toInt() }
-                val cL = when (hue) { 0 -> 0xFFF0B048.toInt(); 1 -> 0xFFE088C0.toInt(); else -> 0xFF52A448.toInt() }
-                val cH = when (hue) { 0 -> 0xFFFFE090.toInt(); 1 -> 0xFFFFD0F0.toInt(); else -> 0xFF9AD068.toInt() }
-                val sway = sin(time * 1.2f + v) * 0.8f
-                val ty = bot - 32f
-                p.color = INK; sc.drawCircle(cx + sway, ty, 16f, p); sc.drawCircle(cx - 9 + sway, ty + 5, 10f, p); sc.drawCircle(cx + 9 + sway, ty + 5, 10f, p)
-                p.color = cD; sc.drawCircle(cx + sway, ty, 15f, p); sc.drawCircle(cx - 9 + sway, ty + 5, 9f, p); sc.drawCircle(cx + 9 + sway, ty + 5, 9f, p)
-                p.color = cM; sc.drawCircle(cx - 2 + sway, ty - 2, 12f, p); sc.drawCircle(cx - 10 + sway, ty + 3, 6.5f, p); sc.drawCircle(cx + 7 + sway, ty + 3, 6.5f, p)
-                p.color = cL; sc.drawCircle(cx - 5 + sway, ty - 6, 7f, p); sc.drawCircle(cx + 5 + sway, ty - 3, 4f, p)
-                p.color = cH; sc.drawCircle(cx - 7 + sway, ty - 9, 2.5f, p); box(cx + 3 + sway, ty - 6, cx + 5 + sway, ty - 5, cH)
-                if (v % 3 == 0) { box(cx - 9 + sway, ty + 2, cx - 7 + sway, ty + 4, 0xFFE04848.toInt()); box(cx + 6 + sway, ty - 1, cx + 8 + sway, ty + 1, 0xFFE04848.toInt()) }
-            }
+            TREE -> drawTree(f, v, time)
             STUMP -> {
                 val bark = 0xFF6A4628.toInt(); val barkD = 0xFF3E2814.toInt()
                 box(f.left, b.top + 2, f.right, f.bottom, INK); box(f.left + 1, b.top + 3, f.right - 1, f.bottom - 1, bark)
@@ -2535,6 +2569,76 @@ class HallScreen(c: Context) : PixelView(c) {
                     if ((time * 3).toInt() % 2 == 0) box(f.centerX() - 1, b.top - 12, f.centerX() + 1, b.top - 10, WHITE)
                 }
             }
+        }
+    }
+
+    /**
+     * A tree of the wood, drawn in detail: roots flaring into the ground, a grooved trunk with a
+     * knot, two limbs forking into a crown of seven to nine leaf clumps, each with an ink edge,
+     * four tones, notched leaf edges and scattered highlights; dappled shade on the trunk; and,
+     * tree by tree, hanging vines, fruit or blossom. Its look comes from where it stands (v).
+     */
+    private fun drawTree(f: RectF, v: Int, time: Float) {
+        val cx = f.centerX(); val bot = f.bottom
+        val bark = 0xFF6A4628.toInt(); val barkD = 0xFF3E2814.toInt(); val barkL = 0xFF8A623A.toInt(); val barkH = 0xFFA8804E.toInt()
+        // roots, flaring out and down into the grass
+        for (side in intArrayOf(-1, 1)) {
+            box(cx + side * 4f - (if (side < 0) 4 else 0), bot - 4, cx + side * 4f + (if (side > 0) 4 else 0), bot - 1, barkD)
+            box(cx + side * 7f - (if (side < 0) 2 else 0), bot - 2, cx + side * 7f + (if (side > 0) 2 else 0), bot, barkD)
+        }
+        box(cx - 6, bot - 5, cx + 6, bot - 1, bark); box(cx - 1, bot - 3, cx + 1, bot, barkD)
+        box(cx - 6, bot - 5, cx - 3, bot - 2, barkL)
+        // the trunk, a little tapered, bark grooves, a knot hole
+        box(cx - 5, bot - 26, cx + 5, bot - 3, INK); box(cx - 4, bot - 26, cx + 4, bot - 3, bark)
+        box(cx - 4, bot - 26, cx - 2, bot - 3, barkL); box(cx - 3, bot - 24, cx - 2, bot - 6, barkH); box(cx + 2, bot - 26, cx + 4, bot - 3, barkD)
+        for (k in 0 until 4) { val gx0 = cx - 3 + ((v shr k) and 3) * 2f; val gy0 = bot - 22 + k * 5f; box(gx0, gy0, gx0 + 1, gy0 + 4, barkD) }
+        if (v % 3 != 0) { val ky = bot - 15f - (v % 5); box(cx, ky, cx + 3, ky + 3, INK); box(cx + 1, ky + 1, cx + 2, ky + 2, 0xFF1A1008.toInt()); box(cx - 1, ky - 1, cx + 3, ky, barkL) }
+        // two limbs forking up into the crown
+        line2.color = bark; sc.drawLine(cx - 1, bot - 24, cx - 8, bot - 31, line2); sc.drawLine(cx + 1, bot - 24, cx + 7, bot - 33, line2)
+        val hue = v % 7
+        val cD = when (hue) { 0 -> 0xFF7A3E16.toInt(); 1 -> 0xFF5E2856.toInt(); 2 -> 0xFF1A4A3A.toInt(); else -> 0xFF1E4A24.toInt() }
+        val cM = when (hue) { 0 -> 0xFFB8642A.toInt(); 1 -> 0xFF9A4A86.toInt(); 2 -> 0xFF2A7058.toInt(); else -> 0xFF2E7232.toInt() }
+        val cL = when (hue) { 0 -> 0xFFE8A040.toInt(); 1 -> 0xFFD880B8.toInt(); 2 -> 0xFF4A9A70.toInt(); else -> 0xFF4E9E40.toInt() }
+        val cH = when (hue) { 0 -> 0xFFFFD880.toInt(); 1 -> 0xFFFFC8EC.toInt(); 2 -> 0xFF8AD0A0.toInt(); else -> 0xFF94D060.toInt() }
+        val sway = sin(time * 1.2f + v) * 0.8f
+        val ty = bot - 34f
+        // the crown: clumps placed from v, back ones first
+        val n = 7 + v % 3
+        val cxs = FloatArray(n); val cys = FloatArray(n); val crs = FloatArray(n)
+        for (i in 0 until n) {
+            val a = -1.57f + (i - (n - 1) / 2f) * (3.4f / n) + ((v shr (i % 8)) and 3) * 0.08f
+            val ring = if (i % 2 == 0) 10f else 6f
+            cxs[i] = cx + cos(a) * ring * 1.15f + sway; cys[i] = ty + 4f + sin(a) * ring * 0.85f; crs[i] = 7.5f + ((v shr i) and 3)
+        }
+        // ink first, so clumps outline each other
+        p.color = INK
+        sc.drawCircle(cx + sway, ty, 14.5f, p)
+        for (i in 0 until n) sc.drawCircle(cxs[i], cys[i], crs[i] + 1f, p)
+        p.color = cD; sc.drawCircle(cx + sway, ty, 13.5f, p)
+        for (i in 0 until n) {
+            val x = cxs[i]; val y = cys[i]; val r = crs[i]
+            p.color = cD; sc.drawCircle(x, y, r, p)
+            p.color = cM; sc.drawCircle(x - r * 0.15f, y - r * 0.18f, r * 0.8f, p)
+            p.color = cL; sc.drawCircle(x - r * 0.32f, y - r * 0.38f, r * 0.45f, p)
+            // notched leaf edges along the lower rim, and highlight specks up top
+            for (k in 0 until 5) {
+                val a = 0.4f + k * 0.55f
+                box(x + cos(a) * (r - 1f), y + sin(a) * (r - 1f), x + cos(a) * (r - 1f) + 1, y + sin(a) * (r - 1f) + 1, INK)
+            }
+            box(x - r * 0.45f, y - r * 0.55f, x - r * 0.45f + 1, y - r * 0.55f + 1, cH)
+            box(x - r * 0.1f, y - r * 0.6f, x - r * 0.1f + 1, y - r * 0.6f + 1, cH)
+            box(x - r * 0.6f, y - r * 0.2f, x - r * 0.6f + 1, y - r * 0.2f + 1, cH)
+        }
+        // the top clump catches the most light
+        p.color = cL; sc.drawCircle(cx - 3 + sway, ty - 6, 6f, p); p.color = cH; sc.drawCircle(cx - 5 + sway, ty - 8, 2.2f, p)
+        // dappled shade on the trunk under the crown
+        for (k in 0 until 3) box(cx - 3 + k * 2f, bot - 25 + (k % 2) * 2f, cx - 2 + k * 2f, bot - 24 + (k % 2) * 2f, 0x60000000)
+        // and something of its own
+        when (v % 5) {
+            0 -> for (k in 0 until 4) { val fx0 = cxs[k * 2 % n] + 2f; val fy0 = cys[k * 2 % n] + 2f; box(fx0, fy0, fx0 + 2, fy0 + 2, 0xFFE04848.toInt()); box(fx0, fy0, fx0 + 1, fy0 + 1, WHITE) }
+            1 -> for (k in 0 until 3) { val vx = cxs[k + 1] ; val vy = cys[k + 1] + crs[k + 1] - 2; line1.color = 0xFF3E7A30.toInt(); sc.drawLine(vx, vy, vx + sin(time + k) * 1f, vy + 7f + k * 2f, line1); box(vx, vy + 4f, vx + 2, vy + 5f, 0xFF6AB04C.toInt()) }
+            2 -> for (k in 0 until 5) { val bx0 = cxs[k % n] - 3f + k; val by0 = cys[k % n] - 1f; box(bx0, by0, bx0 + 2, by0 + 2, 0xFFFFE8F4.toInt()); box(bx0 + 0.5f, by0 + 0.5f, bx0 + 1.5f, by0 + 1.5f, 0xFFF080B0.toInt()) }
+            else -> {}
         }
     }
 
@@ -3013,6 +3117,15 @@ class HallScreen(c: Context) : PixelView(c) {
         }
     }
 
+    private fun drawSeal(time: Float) {
+        val sl = seal ?: return
+        val m = sl.m; val k = (sl.t / SEAL_TIME).coerceIn(0f, 1f)
+        line2.color = if ((time * 8).toInt() % 2 == 0) GOLD else WHITE
+        sc.drawOval(m.x - 18, m.y - 22, m.x + 18, m.y + 6, line2)
+        // the cut to make, flickering across him
+        if ((time * 4).toInt() % 2 == 0) { line1.color = 0xFFE04848.toInt(); sc.drawLine(m.x - 22, m.y - 24, m.x + 22, m.y + 4, line1) }
+        box(m.x - 12, m.y + 8, m.x + 12, m.y + 10, INK); box(m.x - 11, m.y + 8.5f, m.x - 11 + 22f * k, m.y + 9.5f, if (bag.wearing(Loot.RUNECASTER)) 0xFF5CD8B0.toInt() else GOLD)
+    }
     private fun drawWards(time: Float) {
         for (w in wards) {
             if (w.room != roomId) continue
@@ -3614,6 +3727,7 @@ class HallScreen(c: Context) : PixelView(c) {
         drawLashes(time)
         drawMandalas(time)
         drawWards(time)
+        drawSeal(time)
         drawRings()
         drawScene(time)
         drawFx(time)

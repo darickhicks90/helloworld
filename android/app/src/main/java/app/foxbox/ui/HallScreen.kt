@@ -150,12 +150,11 @@ class HallScreen(c: Context) : PixelView(c) {
     private val legsSideStep = listOf(".....KPPKPPK....", "....KPPK.KPPK...", "....KKK...KKK...", "................")
     /** [facing][frame]: 0 down, 1 up, 2 left, 3 right (mirrored left). */
     /** The traveller, in more detail (20 x 30): red beanie, green flannel, brown trousers, boots. [facing][frame]: 0 down, 1 up, 2 left (right is mirrored). */
-    private val heroPal = mapOf('K' to 0xFF1A141E.toInt(), 'R' to 0xFFC82832.toInt(), 'r' to 0xFF841626.toInt(), 'h' to 0xFFF06860.toInt(), 'S' to 0xFFF4BE8E.toInt(), 's' to 0xFFCE8C66.toInt(), 'H' to 0xFF704020.toInt(), 'E' to 0xFF221A2C.toInt(), 'G' to 0xFF3E9248.toInt(), 'g' to 0xFF1E542E.toInt(), 'L' to 0xFF96CE78.toInt(), 'W' to 0xFFF4F4F0.toInt(), 'B' to 0xFF845632.toInt(), 'b' to 0xFF56361E.toInt(), 'O' to 0xFF3E281E.toInt(), 'o' to 0xFF6E5038.toInt(), 'Y' to 0xFFE8C048.toInt())
-    private val hero = arrayOf(
-        arrayOf(Sprite(listOf("........KWhK........", ".....KKKhhhhKKK.....", "....KRhhRRRRRRrK....", "....KRhhRRRRRRrK....", "....KRhhRRRRRRRK....", "...KRhRRRRRRRRRRK...", "...KRRRRRRRRRRRrK...", "...KRRRRRRRRRRRrK...", "...KrrrrrrrrrrrrK...", "...KrRrrRrRrRRrRK...", "...KHSSSSSSSSSSHK...", "...KHSSSESSESSSHK...", "....KSSSESSESSSK....", "....KSSSESSESSSK....", "....KSssSssSssSK....", "..KKKsssSSSSsssKKK..", ".KGGgGLGgWWggGLGGGK.", ".KGGKggggWWgKgggGGK.", ".KGGgGGGgWWGgGGGGGK.", ".KgggGLGgWWGgGLGggK.", ".KGGKgggKgggKgggGGK.", ".KGGgGGGgGGGgGGGSSK.", ".KSSgbbbbYYbbbbGKK..", ".KSSKbbbbYYbbbbgK...", "..KKKBBBBbbBBBBK....", "....KbbbbbBBBBBK....", "....KoOOOOoOOOOK....", "....KoOOOOoOOOOK....", "....KOOOOOOOOOOK....", ".....KKKKKKKKKK....."), heroPal, outline = null), Sprite(listOf("........KWhK........", ".....KKKhhhhKKK.....", "....KRhhRRRRRRrK....", "....KRhhRRRRRRrK....", "....KRhhRRRRRRRK....", "...KRhRRRRRRRRRRK...", "...KRRRRRRRRRRRrK...", "...KRRRRRRRRRRRrK...", "...KrrrrrrrrrrrrK...", "...KrRrrRrRrRRrRK...", "...KHSSSSSSSSSSHK...", "...KHSSSESSESSSHK...", "....KSSSESSESSSK....", "....KSSSESSESSSK....", "....KSssSssSssSK....", "..KKKsssSSSSsssKKK..", ".KGGgGLGgWWggGLGGGK.", ".KGGKggggWWgKgggGGK.", ".KGGgGGGgWWGgGGGGGK.", ".KgggGLGgWWGgGLGggK.", ".KGGKgggKgggKgggGGK.", ".KSSgGGGgGGGgGGGGGK.", "..KKgbbbbYYbbbbGSSK.", "...KKbbbbYYbbbbgSSK.", "....KbbbbbbBBBBKKK..", "....KoOOOOBBBBBK....", "....KOOOOOBBBBBK....", "....KOOOOOBBBBBK....", ".....KKKKKoOOOOK....", ".........KOOOOOK...."), heroPal, outline = null)),
-        arrayOf(Sprite(listOf("........KWhK........", ".....KKKhhhhKKK.....", "....KRhhRRRRRRrK....", "....KRhhRRRRRRrK....", "....KRhhRRRRRRRK....", "...KRhRRRRRRRRRRK...", "...KRRRRRRRRRRRrK...", "...KRRRRRRRRRRRrK...", "...KrrrrrrrrrrrrK...", "...KrRrrRrRrRRrRK...", "....KHHHHHHHHHHK....", "....KHHHHHHHHHHK....", "....KHHHHHHHHHHK....", "....KHHHHHHHHHHK....", "....KHHHHHHHHHHK....", "..KKKKssssssssKKKK..", ".KGGLGgGLGgGLGgGGGK.", ".KGGggKgggKgggKgGGK.", ".KGGGGgGGGgGGGgGGGK.", ".KGGLGgGLGgGLGgGGGK.", ".KGGggKgggKgggKgGGK.", ".KSSGGgGGGgGGGgGGGK.", "..KKLbbbbbbbbbbGSSK.", "...KgbbbbbbbbbbgSSK.", "....KBBBBbbBBBBKKK..", "....KbbbbbBBBBBK....", "....KoOOOOoOOOOK....", "....KoOOOOoOOOOK....", "....KOOOOOOOOOOK....", ".....KKKKKKKKKK....."), heroPal, outline = null), Sprite(listOf("........KWhK........", ".....KKKhhhhKKK.....", "....KRhhRRRRRRrK....", "....KRhhRRRRRRrK....", "....KRhhRRRRRRRK....", "...KRhRRRRRRRRRRK...", "...KRRRRRRRRRRRrK...", "...KRRRRRRRRRRRrK...", "...KrrrrrrrrrrrrK...", "...KrRrrRrRrRRrRK...", "....KHHHHHHHHHHK....", "....KHHHHHHHHHHK....", "....KHHHHHHHHHHK....", "....KHHHHHHHHHHK....", "....KHHHHHHHHHHK....", "..KKKKssssssssKKKK..", ".KGGLGgGLGgGLGgGGGK.", ".KGGggKgggKgggKgGGK.", ".KGGGGgGGGgGGGgGGGK.", ".KGGLGgGLGgGLGgGGGK.", ".KGGggKgggKgggKgGGK.", ".KGGGGgGGGgGGGgGSSK.", ".KSSLbbbbbbbbbbGKK..", ".KSSgbbbbbbbbbbgK...", "..KKKbbbbbbBBBBK....", "....KoOOOOBBBBBK....", "....KOOOOOBBBBBK....", "....KOOOOOBBBBBK....", ".....KKKKKoOOOOK....", ".........KOOOOOK...."), heroPal, outline = null)),
-        arrayOf(Sprite(listOf("............KKK.....", ".....KKKKKKKhhWK....", "....KRhhRRRRRRrK....", "....KRhhRRRRRRrK....", "....KRhhRRRRRRRK....", "...KRhRRRRRRRRRRK...", "...KRRRRRRRRRRRrK...", "...KRRRRRRRRRRRrK...", "...KrrrrrrrrrrrrK...", "...KrRrrRrRrRRrRK...", "...KSSSSSSSHHHHK....", "..KKSSEESSSHHHHK....", ".KSSSSEESSSHHHHK....", ".KSSSSEESSSHHHHK....", "..KKSsSSSSSHHHHK....", "...KSSSSssSSHHK.....", "....KWWWGGGgGLK.....", "....KWWWgGGKggK.....", "....KGGgGGGgGGK.....", "....KLGgGGggGLK.....", "....KggKgGGKggK.....", "....KGGgGGGgGGK.....", "....KbbbbbbbbbK.....", "....KbbbbbbbbbK.....", ".....KKKBBBBKK......", "......KKBBBbK.......", ".....KooOOOOK.......", ".....KooOOOOK.......", ".....KOOOOOOK.......", "......KKKKKK........"), heroPal, outline = null), Sprite(listOf("............KKK.....", ".....KKKKKKKhhWK....", "....KRhhRRRRRRrK....", "....KRhhRRRRRRrK....", "....KRhhRRRRRRRK....", "...KRhRRRRRRRRRRK...", "...KRRRRRRRRRRRrK...", "...KRRRRRRRRRRRrK...", "...KrrrrrrrrrrrrK...", "...KrRrrRrRrRRrRK...", "...KSSSSSSSHHHHK....", "..KKSSEESSSHHHHK....", ".KSSSSEESSSHHHHK....", ".KSSSSEESSSHHHHK....", "..KKSsSSSSSHHHHK....", "...KSSSSssSSHHK.....", "....KWWWGLGGGLK.....", "....KWWWggGGggK.....", "....KGGgGGGgGGK.....", "....KLGgGLGGGLK.....", "....KggKggGGggK.....", "....KGGgGGGSSSK.....", "....KbbbbbbbbbK.....", "....KbbbbbbbbbK.....", ".....KBBBBbbbbK.....", "....KKBBBBbbbbKK....", "...KoOOOOKKOOOOOK...", "...KoOOOOKKOOOOOK...", "...KOOOOOKKOOOOOK...", "....KKKKK..KKKKK...."), heroPal, outline = null)),
-    )
+    private val heroPal = mapOf('K' to 0xFF1A141E.toInt(), 'R' to 0xFFC82832.toInt(), 'r' to 0xFF841626.toInt(), 'h' to 0xFFF06860.toInt(), 'S' to 0xFFF4BE8E.toInt(), 's' to 0xFFCE8C66.toInt(), 'p' to 0xFFEC8C82.toInt(), 'H' to 0xFF704020.toInt(), 'J' to 0xFF965C2E.toInt(), 'E' to 0xFF221A2C.toInt(), 'W' to 0xFFFAFAF6.toInt(), 'G' to 0xFF3E9248.toInt(), 'g' to 0xFF1E542E.toInt(), 'L' to 0xFF96CE78.toInt(), 'T' to 0xFFECECE4.toInt(), 'B' to 0xFF845632.toInt(), 'b' to 0xFF56361E.toInt(), 'O' to 0xFF3E281E.toInt(), 'o' to 0xFF78563C.toInt(), 'Y' to 0xFFE8C048.toInt(), 'C' to 0xFFE2A834.toInt(), 'c' to 0xFFAA701E.toInt(), 'V' to 0xFF784E28.toInt(), 'v' to 0xFF54341A.toInt())
+    /** [facing][0 stand, 1 step]: 0 down, 1 up, 2 left (right is mirrored). */
+    private val hero = arrayOf(arrayOf(Sprite(listOf("....................", ".........KK.........", ".......KKhRKK.......", "......KRhRRRRK......", "......KRRRRRRK......", ".....KrrrrrrrrK.....", "....KHHHHHHHHHHK....", "...KHHHHHHHHHHHHK...", "..KHJHHSHSSJSHHKJK..", "...KKKSHHSSHHSKHK...", ".....KSWESSWESKK....", ".....KSEESSEESK.....", ".....KpSSSsESpK.....", ".....KSSSEESSSK.....", ".....KKssssssKK.....", "....KCCCCCCCCCCK....", "...KKcCCCCCCCCcKK...", "..KGgVVGgTTGgGLGGK..", "..KGKggVVTTgKgggGK..", ".KKGgGGGgVVGgGGGGK..", "KvvGvGLGgTTVVGLGGK..", "KVVLVgggKTTgKVVgLK..", "KVYSVbbbbYYbbbbVSK..", "KVVVVBBBBbbBBBBKK...", ".KKKKBbBBBBBBbBK....", "....KBBBBBBBBBBK....", "...KooooooooooooK...", "...KOOOOOOOOOOOOK...", "...KOOOOOOOOOOOOK...", "....KKKKKKKKKKKK...."), heroPal, outline = null), Sprite(listOf("....................", ".........KK.........", ".......KKhRKK.......", "......KRhRRRRK......", "......KRRRRRRK......", ".....KrrrrrrrrK.....", "....KHHHHHHHHHHK....", "...KHHHHHHHHHHHHK...", "..KHJHHSHSSJSHHKJK..", "...KKKSHHSSHHSKHK...", ".....KSWESSWESKK....", ".....KSEESSEESK.....", ".....KpSSSsESpK.....", ".....KSSSEESSSK.....", ".....KKssssssKK.....", "....KCCCCCCCCCCK....", "...KKcCCCCCCCCcKK...", "..KGgVVGgTTGgGLGGK..", "..KGKggVVTTgKgggGK..", ".KKGgGGGgVVGgGGGGK..", "KvvGvGLGgTTVVGLGGK..", "KVVLVgggKTTgKVVgLK..", "KVYSVbbbbYYbbbbVSK..", "KVVVVBbBBbbBBBBKK...", ".KKKKBBBBBBBBBBK....", "...KooooooBBBbBK....", "...KOOOOOOBBBBBK....", "...KOOOOOOooooooK...", "....KKKKKKOOOOOOK...", ".........KOOOOOOK..."), heroPal, outline = null)), arrayOf(Sprite(listOf("....................", ".........KK.........", ".......KKhRKK.......", "......KRRRRRRK......", "......KRRRRRRK......", ".....KrrrrrrrrK.....", "....KHHHHHHHHHHK....", "....KHHHHHHHHHHK....", "...KHHHHHHHHHHHHK...", "...KJHHHHHHHHHHK....", "....KHHHHHHHHHHJK...", "....KHHHHHHHHHHK....", "....KHJHJHJHJHHK....", "....KHHHHHHHHHHK....", ".....KKKKKKKKKK.....", "....KCCCCCCCCCCK....", "...KKCCCCCCCCCCKK...", "..KGLGgGLGgGLVVGGK..", "..KGggKgggKVVgKgGK..", "..KGGGgGGVVGGGgGGK..", "..KGLGgVVGgGLGgGGK..", "..KGgVVgggKgggKgGK..", "..KSVbbbbbbbbbbGSK..", "...KKBBBBbbBBBBKK...", "....KBbBBBBBBbBK....", "....KBBBBBBBBBBK....", "...KooooooooooooK...", "...KOOOOOOOOOOOOK...", "...KOOOOOOOOOOOOK...", "....KKKKKKKKKKKK...."), heroPal, outline = null), Sprite(listOf("....................", ".........KK.........", ".......KKhRKK.......", "......KRRRRRRK......", "......KRRRRRRK......", ".....KrrrrrrrrK.....", "....KHHHHHHHHHHK....", "....KHHHHHHHHHHK....", "...KHHHHHHHHHHHHK...", "...KJHHHHHHHHHHK....", "....KHHHHHHHHHHJK...", "....KHHHHHHHHHHK....", "....KHJHJHJHJHHK....", "....KHHHHHHHHHHK....", ".....KKKKKKKKKK.....", "....KCCCCCCCCCCK....", "...KKCCCCCCCCCCKK...", "..KGLGgGLGgGLVVGGK..", "..KGggKgggKVVgKgGK..", "..KGGGgGGVVGGGgGGK..", "..KGLGgVVGgGLGgGGK..", "..KGgVVgggKgggKgGK..", "..KSVbbbbbbbbbbGSK..", "...KKBbBBbbBBBBKK...", "....KBBBBBBBBBBK....", "...KooooooBBBbBK....", "...KOOOOOOBBBBBK....", "...KOOOOOOooooooK...", "....KKKKKKOOOOOOK...", ".........KOOOOOOK..."), heroPal, outline = null)), arrayOf(Sprite(listOf("....................", ".............K......", "......KKKKKKKhK.....", ".....KRRRRRRhK......", ".....KRRRRRRK.......", "....KrrrrrrrrK......", "....KHKHHHHHHHK.....", "...KHSSSSSHHHHK.....", "...KSHHSSSHHHHHK....", "...KSWESSSHHHHK.....", "..KSSEESSSHHHHJK....", "..KsSSSSpSHHHHK.....", "...KEESSSSHHHHK.....", "...KSSSSSSKKKHK.....", "....KsssssKKKK......", "....KCCCCCCCCKKK....", "....KCCCCCCCCCCCK...", ".....KTTGGGgGLCCcK..", ".....KTTgGGKggKcK...", ".....KTTGGGgGvvvK...", ".....KGgGGGgGVVVK...", ".....KgKgGLKgVVVK...", ".....KbbbbbbbbVVK...", "......KBBBBBKVVVK...", "......KBBBBBKKKK....", "......KBBBBbK.......", ".....KooooooK.......", ".....KOOOOOOK.......", ".....KOOOOOOK.......", "......KKKKKK........"), heroPal, outline = null), Sprite(listOf("....................", ".............K......", "......KKKKKKKhK.....", ".....KRRRRRRhK......", ".....KRRRRRRK.......", "....KrrrrrrrrK......", "....KHKHHHHHHHK.....", "...KHSSSSSHHHHK.....", "...KSHHSSSHHHHHK....", "...KSWESSSHHHHK.....", "..KSSEESSSHHHHJK....", "..KsSSSSpSHHHHK.....", "...KEESSSSHHHHK.....", "...KSSSSSSKKKHK.....", "....KsssssKKKK......", "....KCCCCCCCCKKK....", "....KCCCCCCCCCCCK...", ".....KGGGLGgGLCCcK..", ".....KGGgggKggKcK...", ".....KGGGGGgGvvvK...", ".....KGGGLGgGVVVK...", "....KSLKgggKgVVVK...", ".....KbbbbbbbbVVK...", ".....KBBBKbbbVVVK...", ".....KBBBKbbbKKK....", "....KKBBBKbbbKKK....", "...KoooooKKOOOOOK...", "...KOOOOOKKOOOOOK...", "...KOOOOOKKOOOOOK...", "....KKKKK..KKKKK...."), heroPal, outline = null)))
+    /** Standing still: breathing, a blink, the scarf stirring. */
+    private val heroIdle = arrayOf(arrayOf(Sprite(listOf("....................", ".........KK.........", ".......KKhRKK.......", "......KRhRRRRK......", "......KRRRRRRK......", ".....KrrrrrrrrK.....", "....KHHHHHHHHHHK....", "...KHHHHHHHHHHHHK...", "..KHJHHSHSSJSHHKJK..", "...KKKSHHSSHHSKHK...", ".....KSWESSWESKK....", ".....KSEESSEESK.....", ".....KpSSSsESpK.....", ".....KSSSEESSSK.....", ".....KKssssssKK.....", "....KCCCCCCCCCCK....", "...KKcCCCCCCCCcKK...", "..KGgVVGgTTGgGLGGK..", "..KGKggVVTTgKgggGK..", ".KKGgGGGgVVGgGGGGK..", "KvvGvGLGgTTVVGLGGK..", "KVVLVgggKTTgKVVgLK..", "KVYSVbbbbYYbbbbVSK..", "KVVVVBBBBbbBBBBKK...", ".KKKKBbBBBBBBbBK....", "....KBBBBBBBBBBK....", "...KooooooooooooK...", "...KOOOOOOOOOOOOK...", "...KOOOOOOOOOOOOK...", "....KKKKKKKKKKKK...."), heroPal, outline = null), Sprite(listOf("....................", "....................", ".........KK.........", ".......KKhRKK.......", "......KRhRRRRK......", "......KRRRRRRK......", ".....KrrrrrrrrK.....", "....KHHHHHHHHHHK....", "...KHHHHHHHHHHHHK...", "..KHJHHSHSSJSHHKJK..", "...KKKSHHSSHHSKHK...", ".....KSWESSWESKK....", ".....KSEESSEESK.....", ".....KpSSSsESpK.....", ".....KSSSEESSSK.....", "....KCCCCCCCCCCK....", "...KKcCCCCCCCCcKK...", "..KGgVVGgTTGgGLGGK..", "..KGKggVVTTgKgggGK..", ".KKGgGGGgVVGgGGGGK..", "KvvGvGLGgTTVVGLGGK..", "KVVLVgggKTTgKVVgLK..", "KVYSVbbbbYYbbbbVSK..", "KVVVVBBBBbbBBBBKK...", ".KKKKBbBBBBBBbBK....", "....KBBBBBBBBBBK....", "...KooooooooooooK...", "...KOOOOOOOOOOOOK...", "...KOOOOOOOOOOOOK...", "....KKKKKKKKKKKK...."), heroPal, outline = null), Sprite(listOf("....................", ".........KK.........", ".......KKhRKK.......", "......KRhRRRRK......", "......KRRRRRRK......", ".....KrrrrrrrrK.....", "....KHHHHHHHHHHK....", "...KHHHHHHHHHHHHK...", "..KHJHHSHSSJSHHKJK..", "...KKKSHHSSHHSKHK...", ".....KSEESSEESKK....", ".....KSSSSSSSSK.....", ".....KpSSSsESpK.....", ".....KSSSEESSSK.....", ".....KKssssssKK.....", "....KCCCCCCCCCCK....", "...KKcCCCCCCCCcKK...", "..KGgVVGgTTGgGLGGK..", "..KGKggVVTTgKgggGK..", ".KKGgGGGgVVGgGGGGK..", "KvvGvGLGgTTVVGLGGK..", "KVVLVgggKTTgKVVgLK..", "KVYSVbbbbYYbbbbVSK..", "KVVVVBBBBbbBBBBKK...", ".KKKKBbBBBBBBbBK....", "....KBBBBBBBBBBK....", "...KooooooooooooK...", "...KOOOOOOOOOOOOK...", "...KOOOOOOOOOOOOK...", "....KKKKKKKKKKKK...."), heroPal, outline = null), Sprite(listOf("....................", ".........KK.........", ".......KKhRKK.......", "......KRhRRRRK......", "......KRRRRRRK......", ".....KrrrrrrrrK.....", "....KHHHHHHHHHHK....", "...KHHHHHHHHHHHHK...", "..KHJHHSHSSJSHHKJK..", "...KKKSHHSSHHSKHK...", ".....KSWESSWESKK....", ".....KSEESSEESK.....", ".....KpSSSsESpK.....", ".....KSSSEESSSK.....", ".....KKssssssKK.....", "....KCCCCCCCCCCK....", "...KKcCCCCCCCCcKK...", "..KGgVVGgTTGgGLGGK..", "..KGKggVVTTgKgggGK..", ".KKGgGGGgVVGgGGGGK..", "KvvGvGLGgTTVVGLGGK..", "KVVLVgggKTTgKVVgLK..", "KVYSVbbbbYYbbbbVSK..", "KVVVVBBBBbbBBBBKK...", ".KKKKBbBBBBBBbBK....", "....KBBBBBBBBBBK....", "...KooooooooooooK...", "...KOOOOOOOOOOOOK...", "...KOOOOOOOOOOOOK...", "....KKKKKKKKKKKK...."), heroPal, outline = null)), arrayOf(Sprite(listOf("....................", ".........KK.........", ".......KKhRKK.......", "......KRRRRRRK......", "......KRRRRRRK......", ".....KrrrrrrrrK.....", "....KHHHHHHHHHHK....", "....KHHHHHHHHHHK....", "...KHHHHHHHHHHHHK...", "...KJHHHHHHHHHHK....", "....KHHHHHHHHHHJK...", "....KHHHHHHHHHHK....", "....KHJHJHJHJHHK....", "....KHHHHHHHHHHK....", ".....KKKKKKKKKK.....", "....KCCCCCCCCCCK....", "...KKCCCCCCCCCCKK...", "..KGLGgGLGgGLVVGGK..", "..KGggKgggKVVgKgGK..", "..KGGGgGGVVGGGgGGK..", "..KGLGgVVGgGLGgGGK..", "..KGgVVgggKgggKgGK..", "..KSVbbbbbbbbbbGSK..", "...KKBBBBbbBBBBKK...", "....KBbBBBBBBbBK....", "....KBBBBBBBBBBK....", "...KooooooooooooK...", "...KOOOOOOOOOOOOK...", "...KOOOOOOOOOOOOK...", "....KKKKKKKKKKKK...."), heroPal, outline = null), Sprite(listOf("....................", "....................", ".........KK.........", ".......KKhRKK.......", "......KRRRRRRK......", "......KRRRRRRK......", ".....KrrrrrrrrK.....", "....KHHHHHHHHHHK....", "....KHHHHHHHHHHK....", "...KHHHHHHHHHHHHK...", "...KJHHHHHHHHHHK....", "....KHHHHHHHHHHJK...", "....KHHHHHHHHHHK....", "....KHJHJHJHJHHK....", "....KHHHHHHHHHHK....", "....KCCCCCCCCCCK....", "...KKCCCCCCCCCCKK...", "..KGLGgGLGgGLVVGGK..", "..KGggKgggKVVgKgGK..", "..KGGGgGGVVGGGgGGK..", "..KGLGgVVGgGLGgGGK..", "..KGgVVgggKgggKgGK..", "..KSVbbbbbbbbbbGSK..", "...KKBBBBbbBBBBKK...", "....KBbBBBBBBbBK....", "....KBBBBBBBBBBK....", "...KooooooooooooK...", "...KOOOOOOOOOOOOK...", "...KOOOOOOOOOOOOK...", "....KKKKKKKKKKKK...."), heroPal, outline = null)), arrayOf(Sprite(listOf("....................", ".............K......", "......KKKKKKKhK.....", ".....KRRRRRRhK......", ".....KRRRRRRK.......", "....KrrrrrrrrK......", "....KHKHHHHHHHK.....", "...KHSSSSSHHHHK.....", "...KSHHSSSHHHHHK....", "...KSWESSSHHHHK.....", "..KSSEESSSHHHHJK....", "..KsSSSSpSHHHHK.....", "...KEESSSSHHHHK.....", "...KSSSSSSKKKHK.....", "....KsssssKKKK......", "....KCCCCCCCCKKK....", "....KCCCCCCCCCCCK...", ".....KTTGGGgGLCCcK..", ".....KTTgGGKggKcK...", ".....KTTGGGgGvvvK...", ".....KGgGGGgGVVVK...", ".....KgKgGLKgVVVK...", ".....KbbbbbbbbVVK...", "......KBBBBBKVVVK...", "......KBBBBBKKKK....", "......KBBBBbK.......", ".....KooooooK.......", ".....KOOOOOOK.......", ".....KOOOOOOK.......", "......KKKKKK........"), heroPal, outline = null), Sprite(listOf("....................", "....................", ".............K......", "......KKKKKKKhK.....", ".....KRRRRRRhK......", ".....KRRRRRRK.......", "....KrrrrrrrrK......", "....KHKHHHHHHHK.....", "...KHSSSSSHHHHK.....", "...KSHHSSSHHHHHK....", "...KSWESSSHHHHK.....", "..KSSEESSSHHHHJK....", "..KsSSSSpSHHHHK.....", "...KEESSSSHHHHK.....", "...KSSSSSSKKKHK.....", "....KCCCCCCCCKKK....", "....KCCCCCCCCCCCK...", ".....KTTGGGgGLCCcK..", ".....KTTgGGKggKcK...", ".....KTTGGGgGvvvK...", ".....KGgGGGgGVVVK...", ".....KgKgGLKgVVVK...", ".....KbbbbbbbbVVK...", "......KBBBBBKVVVK...", "......KBBBBBKKKK....", "......KBBBBbK.......", ".....KooooooK.......", ".....KOOOOOOK.......", ".....KOOOOOOK.......", "......KKKKKK........"), heroPal, outline = null), Sprite(listOf("....................", ".............K......", "......KKKKKKKhK.....", ".....KRRRRRRhK......", ".....KRRRRRRK.......", "....KrrrrrrrrK......", "....KHKHHHHHHHK.....", "...KHSSSSSHHHHK.....", "...KSHHSSSHHHHHK....", "...KSSSSSSHHHHK.....", "..KSSEESSSHHHHJK....", "..KsSSSSpSHHHHK.....", "...KEESSSSHHHHK.....", "...KSSSSSSKKKHK.....", "....KsssssKKKK......", "....KCCCCCCCCKKK....", "....KCCCCCCCCCCCK...", ".....KTTGGGgGLCCcK..", ".....KTTgGGKggKcK...", ".....KTTGGGgGvvvK...", ".....KGgGGGgGVVVK...", ".....KgKgGLKgVVVK...", ".....KbbbbbbbbVVK...", "......KBBBBBKVVVK...", "......KBBBBBKKKK....", "......KBBBBbK.......", ".....KooooooK.......", ".....KOOOOOOK.......", ".....KOOOOOOK.......", "......KKKKKK........"), heroPal, outline = null)))
 
     // ---- state
     private var hx = 112f; private var hy = 136f
@@ -299,7 +298,7 @@ class HallScreen(c: Context) : PixelView(c) {
     private fun speakToSpirit() {
         hp = maxHp; poisonT = 0f; paraT = 0f; invertT = 0f
         bursts += Burst(spiritX, spiritY - 6); bursts += Burst(hx + 8, hy + 8)
-        val fk = friend; if (fk != null && friendHere) frHp = fk.maxHp
+        eachComp { val fk = friend; if (fk != null && friendHere) frHp = fk.maxHp }
         talking = true; line = 0; shown = 0f
         if (!spiritGift) {
             spiritGift = true; talkLines = SPIRIT_FIRST
@@ -495,18 +494,18 @@ class HallScreen(c: Context) : PixelView(c) {
             }
             3 -> {   // HASTE: you and your companion quicker for a while
                 hasteT = 9f; swiftT = maxOf(swiftT, 9f)
-                fxs += Fx(FX_HASTE, px, py, 0.8f); if (fk != null && friendHere) fxs += Fx(FX_HASTE, frX, frY - 8, 0.8f)
+                fxs += Fx(FX_HASTE, px, py, 0.8f); eachComp { if (friendHere) fxs += Fx(FX_HASTE, frX, frY - 8, 0.8f) }
                 say("HASTE!", 1.4f); sfx.play(HallSfx.S.SPRINT)
             }
             4 -> {   // BULWARK: you and your companion take half damage
                 bulwarkT = 9f
-                fxs += Fx(FX_AEGIS, px, py - 4, 0.6f); if (fk != null && friendHere) fxs += Fx(FX_AEGIS, frX, frY - 10, 0.6f)
+                fxs += Fx(FX_AEGIS, px, py - 4, 0.6f); eachComp { if (friendHere) fxs += Fx(FX_AEGIS, frX, frY - 10, 0.6f) }
                 say("BULWARK! HALF DAMAGE", 1.4f); sfx.play(HallSfx.S.STOMP, 0.7f)
             }
             else -> {   // MEND: a great heal for you both, and every ailment lifted
                 hp = minOf(maxHp, hp + 60); poisonT = 0f; paraT = 0f; invertT = 0f
                 fxs += Fx(FX_MEND, px, py, 1.2f)
-                if (fk != null && friendHere) { frHp = minOf(fk.maxHp, frHp + fk.maxHp / 2); fxs += Fx(FX_MEND, frX, frY - 8, 1.2f) }
+                eachComp { val f2 = friend; if (f2 != null && friendHere) { frHp = minOf(f2.maxHp, frHp + f2.maxHp / 2); fxs += Fx(FX_MEND, frX, frY - 8, 1.2f) } }
                 say("MEND! +60", 1.4f); sfx.play(HallSfx.S.MEND)
             }
         }
@@ -520,35 +519,75 @@ class HallScreen(c: Context) : PixelView(c) {
     // it fell until a Spirit Bloom brings it back.
     // =====================================================================================
     private enum class Friend(val label: String, val maxHp: Int, val speed: Float, val dmg: Int, val atkCd: Float, val flies: Boolean, val skill: String, val skillCd: Float) {
-        BRAMBLE("BRAMBLE", 180, 1.0f, 3, 5.5f, false, "THORN NOVA", 16f),
-        PIP("PIP", 135, 1.15f, 3, 5f, true, "MOONFLASH", 16f),
-        TOVE("TOVE", 165, 1.1f, 3, 5f, false, "FROST BREATH", 15f),
-        GRUMBLE("GRUMBLE", 270, 0.85f, 4, 6.5f, false, "STONE AEGIS", 18f),
+        BRAMBLE("BRAMBLE", 450, 1.05f, 6, 2.8f, false, "THORN NOVA", 10f),
+        PIP("PIP", 340, 1.2f, 6, 2.5f, true, "MOONFLASH", 10f),
+        TOVE("TOVE", 410, 1.15f, 6, 2.6f, false, "FROST BREATH", 9f),
+        GRUMBLE("GRUMBLE", 680, 0.9f, 8, 3.2f, false, "STONE AEGIS", 11f),
     }
     /** Each companion's support: what its wall is made of, what its heal looks like. */
     private fun wallName(k: Friend) = when (k) { Friend.BRAMBLE -> "THORN HEDGE"; Friend.PIP -> "MOON VEIL"; Friend.TOVE -> "ICE WALL"; Friend.GRUMBLE -> "STONE WALL" }
     private fun healName(k: Friend) = when (k) { Friend.BRAMBLE -> "HEALING SAP"; Friend.PIP -> "MOTE OF LIGHT"; Friend.TOVE -> "COOL MIST"; Friend.GRUMBLE -> "EARTH'S MEND" }
-    private var frWallCd = 4f; private var frHealCd = 3f; private var frGuardCd = 0f
+    /** One companion's state. You travel with two; the code below works on "the current one" (cur). */
+    private class Comp {
+        var kind: Friend? = null; var wallCd = 4f; var healCd = 3f; var guardCd = 0f; var state = 0; var room = 3
+        var x = 0f; var y = 0f; var hp = 0; var tx = 0f; var ty = 0f; var repick = 0f; var atk = 0f; var skill = 6f
+        var hurt = 0f; var inv = 0f; var lunge = 0f; var lx = 0f; var ly = 0f; var face = 1; var step = 0f; var moving = false; var taunt = 0f
+    }
+    private val comps = arrayListOf(Comp(), Comp())
+    private var cur = comps[0]
+    /** Run something for each companion in turn (as "the current one"). */
+    private inline fun eachComp(f: () -> Unit) { val keep = cur; for (c in comps) { if (c.kind == null) continue; cur = c; f() }; cur = keep }
+    /** Make the companion nearest to (x, y), of those with you here, the current one. */
+    private fun pickComp(x: Float, y: Float) {
+        var best: Comp? = null; var bd = Float.MAX_VALUE
+        for (c in comps) if (c.kind != null && c.state == 1 && c.room == roomId) { val d = hypot(c.x - x, c.y - y); if (d < bd) { bd = d; best = c } }
+        if (best != null) cur = best
+    }
+    private var frWallCd: Float get() = cur.wallCd; set(v) { cur.wallCd = v }
+    private var frHealCd: Float get() = cur.healCd; set(v) { cur.healCd = v }
+    private var frGuardCd: Float get() = cur.guardCd; set(v) { cur.guardCd = v }
     /** The friend's size on screen (its 12 x 11 sprite, drawn twice as big). */
     private val FS = 1.5f
     private val STEP = 6f
-    private var friend: Friend? = null
+    private var friend: Friend? get() = cur.kind; set(v) { cur.kind = v }
     /** 0 waiting to be found, 1 with you, 2 knocked out. */
-    private var frState = 0
-    private var frRoom = 3; private var frX = 0f; private var frY = 0f; private var frHp = 0
-    private var frTx = 0f; private var frTy = 0f; private var frRepick = 0f; private var frAtk = 0f; private var frSkill = 6f
-    private var frHurt = 0f; private var frInv = 0f; private var frLunge = 0f; private var frLx = 0f; private var frLy = 0f
-    private var frFace = 1; private var frStep = 0f; private var frMoving = false
-    private var tauntT = 0f; private var shieldHits = 0; private var shieldT = 0f
+    private var frState: Int get() = cur.state; set(v) { cur.state = v }
+    private var frRoom: Int get() = cur.room; set(v) { cur.room = v }
+    private var frX: Float get() = cur.x; set(v) { cur.x = v }
+    private var frY: Float get() = cur.y; set(v) { cur.y = v }
+    private var frHp: Int get() = cur.hp; set(v) { cur.hp = v }
+    private var frTx: Float get() = cur.tx; set(v) { cur.tx = v }
+    private var frTy: Float get() = cur.ty; set(v) { cur.ty = v }
+    private var frRepick: Float get() = cur.repick; set(v) { cur.repick = v }
+    private var frAtk: Float get() = cur.atk; set(v) { cur.atk = v }
+    private var frSkill: Float get() = cur.skill; set(v) { cur.skill = v }
+    private var frHurt: Float get() = cur.hurt; set(v) { cur.hurt = v }
+    private var frInv: Float get() = cur.inv; set(v) { cur.inv = v }
+    private var frLunge: Float get() = cur.lunge; set(v) { cur.lunge = v }
+    private var frLx: Float get() = cur.lx; set(v) { cur.lx = v }
+    private var frLy: Float get() = cur.ly; set(v) { cur.ly = v }
+    private var frFace: Int get() = cur.face; set(v) { cur.face = v }
+    private var frStep: Float get() = cur.step; set(v) { cur.step = v }
+    private var frMoving: Boolean get() = cur.moving; set(v) { cur.moving = v }
+    private var tauntT: Float get() = cur.taunt; set(v) { cur.taunt = v }
+    private var shieldHits = 0; private var shieldT = 0f
+    private var savedFriend2: Friend? = null
     private val friendHere get() = friend != null && frState == 1 && frRoom == roomId
 
     /** Your companion comes with you from the start of every match (the same one, once chosen). */
     private fun spawnFriend() {
         val all = Friend.values(); val k = savedFriend ?: all[rnd.nextInt(all.size)]
         savedFriend = k
-        friend = k; frState = 1; frHp = k.maxHp; frSkill = 6f; tauntT = 0f; shieldHits = 0; frWallCd = 4f; frHealCd = 3f
-        frRoom = roomId; placeFriendNear()
-        fxs += Fx(FX_JOIN, frX, frY - 6, 0.8f)
+        val k2 = savedFriend2?.takeIf { it != k } ?: all.filter { it != k }[rnd.nextInt(all.size - 1)]
+        savedFriend2 = k2
+        shieldHits = 0
+        for ((i, kk) in listOf(k, k2).withIndex()) {
+            cur = comps[i]
+            friend = kk; frState = 1; frHp = kk.maxHp; frSkill = 6f + i * 3f; tauntT = 0f; frWallCd = 4f + i * 2f; frHealCd = 3f + i * 2f
+            frRoom = roomId; placeFriendNear()
+            fxs += Fx(FX_JOIN, frX, frY - 6, 0.8f)
+        }
+        cur = comps[0]
     }
     private fun frSolid(x: Float, y: Float): Boolean {
         if (x - 7 < 6 || x + 7 > W - 6 || y - 4 < 36 || y > H - 4) return true
@@ -587,12 +626,17 @@ class HallScreen(c: Context) : PixelView(c) {
     private fun hurtFriend(n: Int) {
         val k = friend ?: return
         if (frState != 1 || frInv > 0f || phase != Phase.FIGHT) return
-        val n5 = kotlin.math.ceil(n * 1.05f).toInt()
+        val n5 = kotlin.math.ceil(n * 0.5f).toInt()      // companions shrug off half of everything
         frHp -= if (bulwarkT > 0f) (n5 + 1) / 2 else n5; frInv = 0.8f; frHurt = 0.3f
         sfx.play(HallSfx.S.FRIEND_HURT, 0.7f)
         if (frHp <= 0) { frHp = 0; frState = 2; say("${k.label} IS KNOCKED OUT!", 2.4f); sfx.play(HallSfx.S.FRIEND_DOWN); sfx.rumbleSoft() }
     }
     private fun reviveFriend() {
+        // the one that's down (here, if one is)
+        comps.firstOrNull { it.kind != null && it.state == 2 && it.room == roomId }?.let { cur = it } ?: comps.firstOrNull { it.kind != null && it.state == 2 }?.let { cur = it }
+        reviveCur(); cur = comps[0]
+    }
+    private fun reviveCur() {
         val k = friend
         when {
             k == null || frState == 0 -> say("NO COMPANION YET", 1.4f)
@@ -607,9 +651,13 @@ class HallScreen(c: Context) : PixelView(c) {
     }
 
     private fun updateFriend(dt: Float) {
+        if (shieldT > 0f) { shieldT -= dt; if (shieldT <= 0f) shieldHits = 0 }
+        for (c in comps) { if (c.kind == null) continue; cur = c; updateOneFriend(dt) }
+        cur = comps[0]
+    }
+    private fun updateOneFriend(dt: Float) {
         val k = friend ?: return
         frHurt -= dt; frInv -= dt; frLunge -= dt; tauntT -= dt; frAtk -= dt * (if (hasteT > 0f) 1.6f else 1f); frWallCd -= dt; frHealCd -= dt; frGuardCd -= dt
-        if (shieldT > 0f) { shieldT -= dt; if (shieldT <= 0f) shieldHits = 0 }
         if (talking) return
         val px = hx + 8; val py = hy + 13
         if (frState == 0) {
@@ -653,6 +701,11 @@ class HallScreen(c: Context) : PixelView(c) {
                     killDead()
                 }
             }
+            // all quiet: fall in, in a line behind you
+            calm() -> {
+                val (sx, sy) = lineSlot(comps.indexOf(cur), false, null)
+                frMove(sx, sy, sp * (if (hypot(sx - frX, sy - frY) > 30f) 1.4f else 0.8f), dt)
+            }
             // otherwise patrol about you, between three and twelve steps out (closer when hurt)
             else -> {
                 frRepick -= dt
@@ -670,11 +723,15 @@ class HallScreen(c: Context) : PixelView(c) {
      */
     private fun support(k: Friend, px: Float, py: Float) {
         // a small heal for you (or itself) when either is hurt
-        if (frHealCd <= 0f && (hp < maxHp - 8 || frHp < k.maxHp * 0.7f)) {
-            frHealCd = 7.5f
-            if (hp < maxHp - 8) { hp = minOf(maxHp, hp + 8); beams += Beam(frX, frY - 8, false); say("${healName(k)} +8", 1f) }
+        if (frHealCd <= 0f && (hp < maxHp - 8 || frHp < k.maxHp * 0.7f || minions.any { it.ally && it.room == roomId && it.hp in 1 until it.maxHp })) {
+            frHealCd = 5f
+            if (hp < maxHp - 8) { hp = minOf(maxHp, hp + 14); beams += Beam(frX, frY - 8, false); say("${healName(k)} +14", 1f) }
             if (frHp < k.maxHp) { frHp = minOf(k.maxHp, frHp + 10); fxs += Fx(FX_MEND, frX, frY - 8, 0.7f) }
             sfx.play(HallSfx.S.ORB, 0.6f)
+        }
+        // and the hurt thralls near it, a stream of light to each
+        if (frHealCd > 3.5f) for (m in minions) if (m.ally && m.room == roomId && m.hp in 1 until m.maxHp && hypot(m.x - frX, m.y - frY) < 70f) {
+            m.hp = minOf(m.maxHp, m.hp + 8); arcs += Arc(frX, frY - 8, m.x, m.y - 6); fxs += Fx(FX_MEND, m.x, m.y - 6, 0.5f)
         }
         // a wall between you and the nearest danger
         if (frWallCd <= 0f) {
@@ -719,7 +776,7 @@ class HallScreen(c: Context) : PixelView(c) {
         when (k) {
             Friend.BRAMBLE -> {
                 fxs += Fx(FX_NOVA, frX, frY - 4, 0.55f); shakeT = 0.15f
-                for (m in minions) if (m.room == roomId) {
+                for (m in minions) if (m.room == roomId && !m.ally) {
                     val dx = m.x - frX; val dy = m.y - frY; val d = hypot(dx, dy)
                     if (d < 42f) { hitImp(m, 2, true); m.stun = 1.2f; val dd = d.coerceAtLeast(1f); m.kx = dx / dd * 140f; m.ky = dy / dd * 140f }
                 }
@@ -728,7 +785,7 @@ class HallScreen(c: Context) : PixelView(c) {
             Friend.PIP -> {
                 fxs += Fx(FX_MOON, frX, frY - 10, 0.6f); flashT = 0.25f
                 shots.removeAll { s0 -> (hypot(s0.x - frX, s0.y - frY) < 100f).also { if (it) bursts += Burst(s0.x, s0.y) } }
-                for (m in minions) if (m.room == roomId && hypot(m.x - frX, m.y - frY) < 85f) m.conf = 4f
+                for (m in minions) if (m.room == roomId && !m.ally && hypot(m.x - frX, m.y - frY) < 85f) m.conf = 4f
                 if (bigHere && hypot(gx - frX, gy - frY) < 85f) bossConf = maxOf(bossConf, 2f)
             }
             Friend.TOVE -> {
@@ -740,7 +797,7 @@ class HallScreen(c: Context) : PixelView(c) {
                 }
                 frFace = if (cos(a) >= 0f) 1 else -1
                 fxs += Fx(FX_FROST, frX + frFace * 4, frY - 6, 0.7f, a)
-                for (m in minions) if (m.room == roomId) {
+                for (m in minions) if (m.room == roomId && !m.ally) {
                     val dx = m.x - frX; val dy = m.y - frY
                     if (hypot(dx, dy) < 60f && abs(wrapAngle(atan2(dy, dx) - a)) < 0.55f) { m.ice = 2.6f; hitImp(m, 1, true) }
                 }
@@ -760,31 +817,15 @@ class HallScreen(c: Context) : PixelView(c) {
     }
 
     // ---- the companions: original 12×11 critters, two frames each, facing right
-    private val friendPal = mapOf(
-        'K' to INK, 'G' to 0xFF5A8A3A.toInt(), 'g' to 0xFF8AB85A.toInt(), 'b' to 0xFFB08A60.toInt(), 'E' to INK, 'N' to 0xFF3A2A2A.toInt(),
-        'O' to 0xFF8A6A4A.toInt(), 'o' to 0xFFC8A880.toInt(), 'W' to WHITE, 'Y' to 0xFFF8D048.toInt(),
-        'F' to 0xFFE8F0F8.toInt(), 'f' to 0xFFB8D0E8.toInt(), 'C' to 0xFF68C8E8.toInt(),
-        'S' to 0xFF9A9AAA.toInt(), 's' to 0xFF6A6A7A.toInt(), 'l' to 0xFFC8C8D4.toInt(), 'M' to 0xFF7C9C74.toInt(),
-    )
+    /** The companions, 24 x 22 in the monster style: Bramble, Pip, Tove, Grumble; two frames each. */
+    private val friendPal = mapOf('K' to 0xFF16121A.toInt(), 'W' to 0xFFFFFFFF.toInt(), 'Y' to 0xFFFFDC46.toInt(), 'y' to 0xFFC88C1E.toInt(), 'N' to 0xFF281814.toInt(), 'a' to 0xFF1A4622.toInt(), 'b' to 0xFF2E6E2E.toInt(), 'c' to 0xFF509A3A.toInt(), 'd' to 0xFF96CE60.toInt(), 'e' to 0xFF462C1C.toInt(), 'f' to 0xFF744C2C.toInt(), 'g' to 0xFFA47446.toInt(), 'h' to 0xFFD0A670.toInt(), 'i' to 0xFF788096.toInt(), 'j' to 0xFFB0BACE.toInt(), 'k' to 0xFFDEE6F4.toInt(), 'l' to 0xFFFFFFFF.toInt(), 'm' to 0xFF3C3E48.toInt(), 'n' to 0xFF666876.toInt(), 'o' to 0xFF9496A6.toInt(), 'p' to 0xFFC6C8D6.toInt(), 'q' to 0xFF2878A0.toInt(), 'r' to 0xFF5ABEE6.toInt(), 's' to 0xFFAAECFF.toInt(), 'B' to 0xFFC82832.toInt(), 'T' to 0xFFECE2C4.toInt(), 'G' to 0xFF46823C.toInt(), 'P' to 0xFFFAF0DC.toInt())
     private val friendRows = listOf(
-        listOf(
-            listOf("...g.g.g....", "..gGgGgGg...", ".gGGgGGgGg..", "gGGGGGGGGbb.", "GGgGGGGGbbbb", "GGGGGGGbbEbb", "GgGGGGGbbbbN", ".GGGGGGbbbb.", "..KbbbbbbK..", "..Kb.KK.bK..", "..KK....KK.."),
-            listOf("...g.g.g....", "..gGgGgGg...", ".gGGgGGgGg..", "gGGGGGGGGbb.", "GGgGGGGGbbbb", "GGGGGGGbbEbb", "GgGGGGGbbbbN", ".GGGGGGbbbb.", "..KbbbbbbK..", ".Kb.K..Kb.K.", ".KK......KK."),
-        ),
-        listOf(
-            listOf("............", "KK........KK", "KOK.KKKK.KOK", "KOOKOOOOKOOK", ".KOOWWOWWOK.", ".KOWYKWYKWK.", ".KOOWWOWWOK.", ".KOOOoNoOOK.", "..KOoWWWoK..", "..KOoWWWoK..", "...KOoooK...", "....K..K...."),
-            listOf("............", "....KKKK....", "...KOOOOK...", "..KOOWWOWWK.", ".KKOWYKWYKWK", "KOKOOWWOWWOK", "KOKOOoNoOOKO", "KOOKOoWWoKOK", ".KK.KoWWoK.K", "....KOoooK..", ".....K..K...", "............"),
-        ),
-        listOf(
-            listOf(".......K..K.", "......KfKKfK", "KK....KFFFFK", "KCK...KFEFFN", "KCfK.KFFFFK.", ".KffKKFFFFK.", "..KfFFFFFfK.", "..KFFFFFFfK.", "..KFfFFFFfK.", "..KfK..KfK..", "..KK...KK..."),
-            listOf(".......K..K.", "......KfKKfK", ".KK...KFFFFK", "KCCK..KFEFFN", "KCfK.KFFFFK.", ".KffKKFFFFK.", "..KfFFFFFfK.", "..KFFFFFFfK.", "..KFfFFFFfK.", ".KfK....KfK.", ".KK......KK."),
-        ),
-        listOf(
-            listOf("...KKKKKK...", "..KlllSSSK..", "..KlElSEsK..", "..KSSSSSSK..", ".KKKSSSSKKK.", "KlSSKSSKSSsK", "KlSSSSSSSSsK", "KSMSSSSSSMsK", ".KKSSSSSSKK.", "..KSsK.KSsK.", "..KKKK.KKKK."),
-            listOf("...KKKKKK...", "..KlllSSSK..", "..KlElSEsK..", "..KSSSSSSK..", ".KKKSSSSKKK.", "KlSSKSSKSSsK", "KlSSSSSSSSsK", "KSMSSSSSSMsK", ".KKSSSSSSKK.", ".KSsK...KSsK", ".KKKK...KKKK"),
-        ),
+        listOf(listOf("........KKccKK..........", ".......KdddccbK.........", "....KKKddddccbbKKK......", "..KKccKdTccccbaKccKK....", ".KdddcccccccbbTddccbK...", "KdddccccccbbbdddcccbaK..", "KcdcccbbbbbbacdcccbbaK..", "KccccbbaaaaaBccccbbaaK..", "KbbbbbaaaaaaabaaaaaaTK..", ".KbTaaaaacaacaBhhggfK...", ".KddccaBccccahhhhggffK..", "KdddccbaccccahhhgggffK..", "KdcccbbacccaghggYgfYeeK.", "KcccbbaaccbaggggyffyeeK.", "KbbbbaaabbbbaggfffeeeK..", ".KaaaaabbBbbaffffNNeeK..", "..KKaaTbbbbaaaeeeeeeK...", "...KabbbbaaaaaaaaaKK....", "....KKaaaaaaaaaaKK......", ".....KeeaaaaaaeefK......", ".....KgfeeKKKeffeK......", "......KeeK...KeeK......."), listOf("........KKccKK..........", ".......KdddccbK.........", "....KKKddddccbbKKK......", "..KKccKdTccccbaKccKK....", ".KdddcccccccbbTddccbK...", "KdddccccccbbbdddcccbaK..", "KcdcccbbbbbbacdcccbbaK..", "KccccbbaaaaaBccccbbaaK..", "KbbbbbaaaaaaabaaaaaaTK..", ".KbTaaaaacaacaBhhggfK...", ".KddccaBccccahhhhggffK..", "KdddccbaccccahhhgggffK..", "KdcccbbacccaghggYgfYeeK.", "KcccbbaaccbaggggyffyeeK.", "KbbbbaaabbbbaggfffeeeK..", ".KaaaaabbBbbaffffNNeeK..", "..KKaaTbbbbaaaeeeeeeK...", "...KabbbbaaaaaaaaaKK....", "....KKaaaaaaaaaaKK......", "......KeaaaaaaeeK.......", "......KgeeeKeefeK.......", ".......KeeK.KeeK........")),
+        listOf(listOf("........................", "........K......K.......K", "K......KgK....KgK.....Kh", "gK....KggK....KggK...KgK", "KgK...KgggKKKKgggK..KggK", "KggK...KKehhggeKK..KgggK", "KgggK..KhhhhgggfK.KgggK.", ".KgggKKhhhhhgggffKggggK.", ".KgggehhhWYYggWYYeegggK.", ".KgggehhhYKYggYKYeegggK.", "KggggehhhYKYeeYKYeegggK.", "KggggegggePyyTefeeeggggK", "KggggeggePPPyTheeeeggggK", ".KKKfegePPPTTThheeefKKK.", "....KKgeTPTTThgheeKK....", ".....KfeTTgThhhheeK.....", "......KehThhhghheK......", ".......KehhhhhheK.......", "........KehhgheK........", ".........KKKKKK.........", "..........yy.yy.........", "........................"), listOf("........................", "........K......K........", ".......KgK....KgK.......", "......KggK....KggK......", "......KgggKKKKgggK......", ".......KKehhggeKK.......", ".......KhhhhgggfK.......", "....KKKhhhhhgggffKKK....", ".KKKgehhhWYYggWYYeegKKK.", "KggggehhhYKYggYKYeeggggK", "KggggehhhYKYeeYKYeeggggK", "KggggegggePyyTefeeegggK.", ".KgggeggePPPyTheeeegggK.", ".KgggKgePPPTTThheeKgggK.", ".KffKKgeTPTTThgheeKKffK.", "KffK.KfeTTgThhhheeK.KffK", "KfK...KehThhhghheK...KfK", "fK.....KehhhhhheK.....Kf", "K.......KehhgheK.......K", ".........KKKKKK.........", "..........yy.yy.........", "........................")),
+        listOf(listOf("...KKKK.................", "..KsssrK........K.......", ".KssssrqK......KkK...K..", ".KssssrqK......KkK..KqK.", "KlsssrrqK......KkqKKKkK.", "KlrrrqqqK......KkkkikkK.", "lllqqqqiK.....KikiikiijK", "lllkkjjiK.....KlilkkkjjK", "kkkkkjjiK..KKKrlkkksqjii", "kkkkjjiiKKKrkiskkkkqKiii", "kkkjjjiilllslkikkjjjilkj", "jjjjjiillrlllkijjjjiikjK", "KjjjiilllslkkkkiiiiiiKKK", "KiiiiiklkkkkkkkjiiiiKK..", ".KiiiikkkkkkkjjjjiiiK...", "..KKKKkkkkjjjjjjiiiiK...", "......KjjjiijiiiiiiK....", "......KiiilkiiiiilkK....", ".....KkkikkjiiiikkjiK...", ".....KkkikkjiiiikkjiK...", "......KjiKjiKKjiKjiK....", ".......KK.KK..KK.KK....."), listOf("...KKKK.................", "..KsssrK........K.......", ".KssssrqK......KkK...K..", ".KssssrqK......KkK..KqK.", "KlsssrrqK......KkqKKKkK.", "KlrrrqqqK......KkkkikkK.", "lllqqqqiK.....KikiikiijK", "lllkkjjiK.....KlilkkkjjK", "kkkkkjjiK..KKKrlkkksqjii", "kkkkjjiiKKKrkiskkkkqKiii", "kkkjjjiilllslkikkjjjilkj", "jjjjjiillrlllkijjjjiikjK", "KjjjiilllslkkkkiiiiiiKKK", "KiiiiiklkkkkkkkjiiiiKK..", ".KiiiikkkkkkkjjjjiiiK...", "..KKKKkkkkijjjjjiiiiK...", "......KjjikijiiiikiK....", "......KiilkjiiiilkjK....", "......KlilkjiiiilkjK....", "......KkikjiKKiikjiK....", "......KjijiiKKjijiiK....", ".......KiKiK..KiKiK.....")),
+        listOf(listOf("........KKKKKKKK........", ".......KddddccbbK.......", "......KccccccbbaaK......", "......KmbbbbaaaamK......", "......KpmmmmmmmmmK......", ".....KooooooonnnmmK.....", "......KoosrnnnsrmK......", ".....KmnnqqnnmqqmmK.....", "..KKKcpmmnmmmmmmmnmKKK..", ".KppomppmmmmmmmmnnmcpoK.", "KppoonmppommmmnnmpppoonK", "pppoonmpoooooonnmpppoonm", "opoonnmmoooonnnnmopoonnm", "ooonnmmmoooncnnnmooonnmm", "nonnnmmmnnnnnnnmmnonnnmm", "KnnmmmmnnnnmpmmmmmnnmmmK", ".KmmmKnnnnnmmmmmmmmpmmK.", "..KKKpmmmpmmmmmmmmnKKK..", "....KppmmmmmmmmmmnmK....", "....KooonmmKKmmonnmK....", "....KnnnmmmKKnnnmmmK....", ".....KKmmKK..KKmmKK....."), listOf("........KKKKKKKK........", ".......KddddccbbK.......", "......KccccccbbaaK......", "......KmbbbbaaaamK......", "......KpmmmmmmmmmK......", ".....KooooooonnnmmK.....", "......KoosrnnnsrmK......", ".....KmnnqqnnmqqmmKKKK..", "....KcpmmnmmmmmmmnmppoK.", "..KKKpppmmmmmmmmnmpcoonK", ".Kppompppommmmnnmpppoonm", "Kppoonmpoooooonnmopoonnm", "pppoonmmoooonnnnmooonnmm", "opoonnmmoooncnnnmnonnnmm", "ooonnmmmnnnnnnnmmmnnmmmK", "nonnnmmmnnnmpmmmmmmmmmK.", "KnnmmmmnnnnmmmmmmmmpKK..", ".KmmmKmmmpmmmmmmmmnK....", "..KKKppmmmmmmmmmmnmK....", "....KooonmmKKmmnnmmK....", "....KnnnnmmK.KnmmmK.....", ".....KmmmmK...KKKK......")),
     )
-    private val friendSprites = friendRows.mapIndexed { i, frames -> frames.map { Sprite(it, if (i == 3) friendPal + ('E' to 0xFF68E8F8.toInt()) else friendPal, outline = null) } }
+    private val friendSprites = friendRows.map { frames -> frames.map { Sprite(it, friendPal, outline = null) } }
     private val friendFlash = friendRows.map { frames -> frames.map { rows -> Sprite(rows.map { r -> r.map { ch -> if (ch == '.') '.' else 'W' }.joinToString("") }, friendPal, outline = null) } }
 
     private fun hasDoor(d: Int): Boolean {
@@ -900,15 +941,16 @@ class HallScreen(c: Context) : PixelView(c) {
             if (mine.size >= 2) wards.remove(mine.first())
             wards += Ward(pts, roomId, closed, if (bag.wearing(Loot.WARD_STONE)) 16f else 10f)
             val selfIn = closed && inside(pts, hx + 8, hy + 12)
-            val friendIn = closed && friendHere && inside(pts, frX, frY - 6)
+            var friendIn = false; var inComp: Comp? = null
+            if (closed) eachComp { if (!friendIn && friendHere && inside(pts, frX, frY - 6)) { friendIn = true; inComp = cur } }
             if (selfIn && phase == Phase.FIGHT) {
                 wards.removeAt(wards.size - 1)
                 if (bag.wearing(Loot.RUNECASTER)) openRuneBook()
-                else { teleport(); if (friendIn) { blinkFriend(true) } }
+                else { teleport(); if (friendIn) { cur = inComp!!; blinkFriend(true); cur = comps[0] } }
             } else if (friendIn && (phase == Phase.FIGHT || phase == Phase.WON)) {
                 // a circle round your companion: it's whisked to safety, near you
                 wards.removeAt(wards.size - 1)
-                blinkFriend(false)
+                cur = inComp!!; blinkFriend(false); cur = comps[0]
             } else if (closed && phase == Phase.FIGHT) {
                 var hit = 0
                 // with the Runecaster, a circled foe can be brainwashed instead
@@ -1153,6 +1195,23 @@ class HallScreen(c: Context) : PixelView(c) {
         }
         coins -= price; sfx.play(HallSfx.S.PICKUP); sfx.rumbleSoft(); saveSoon = true
     }
+    /** Nothing hostile here (no foes, no boss on the prowl). */
+    private fun calm() = !bigHere && minions.none { it.room == roomId && !it.ally && it.hp > 0 }
+    /**
+     * A place in the line. Behind you when calm (companions, then thralls), each a step apart across
+     * the way you face; or, for thralls when there's a fight, a front line a little way toward it.
+     */
+    private fun lineSlot(i: Int, front: Boolean, toward: Minion?): Pair<Float, Float> {
+        val px = hx + 8; val py = hy + 13
+        var fx = when (facing) { 2 -> -1f; 3 -> 1f; else -> 0f }; var fy = when (facing) { 0 -> 1f; 1 -> -1f; else -> 0f }
+        if (front && toward != null) { val d = hypot(toward.x - px, toward.y - py).coerceAtLeast(1f); fx = (toward.x - px) / d; fy = (toward.y - py) / d }
+        val n = if (front) maxOf(1, minions.count { it.ally && it.room == roomId && it.hp > 0 }) else comps.count { it.kind != null && it.state == 1 && it.room == roomId } + minions.count { it.ally && it.room == roomId && it.hp > 0 }
+        val back = if (front) 26f else -20f
+        val cx = px + fx * back; val cy = py + fy * back * 0.8f
+        val k = i - (n - 1) / 2f
+        val x = (cx - fy * k * 15f).coerceIn(14f, W - 14f); val y = (cy + fx * k * 12f).coerceIn(44f, H - 8f)
+        return x to y
+    }
     private fun kindName(k: Int) = when (k) { 1 -> "STALKER"; 2 -> "BEHEMOTH"; 3 -> "GAZER"; else -> "IMP" }
     private fun useExit() {
         val wl = wild ?: return
@@ -1228,7 +1287,7 @@ class HallScreen(c: Context) : PixelView(c) {
         if (bossBurn > 0f) { bossBurn -= dt; bossBurnTick -= dt; if (bossBurnTick <= 0f) { bossBurnTick = 0.7f; damageBoss(3) } }
         if (bossFireCd <= 0f && fires.any { it.room == roomId && abs(it.x - b.x) < b.radius && abs(it.y - b.y) < 6f }) { bossFireCd = 0.7f; damageBoss(5); bossBurn = 2.5f; bossBurnTick = 0.7f }
         b.update(dt, px, py + 4f, beastHost)
-        if (friendHere && !b.dead && hypot(frX - b.x, frY - b.y) < b.radius * 0.8f) hurtFriend(12)
+        eachComp { if (friendHere && !b.dead && hypot(frX - b.x, frY - b.y) < b.radius * 0.8f) hurtFriend(12) }
         for (m in minions) if (m.ally && m.room == roomId && !b.dead && hypot(m.x - b.x, m.y - b.y) < b.radius * 0.8f) hurtAlly(m, 10)
     }
 
@@ -1296,34 +1355,37 @@ class HallScreen(c: Context) : PixelView(c) {
     private fun updateAlly(m: Minion, dt: Float, px: Float, py: Float) {
         m.atkCd -= dt
         if (m.para > 0f || m.ice > 0f || m.stun > 0f || m.hp <= 0) return
-        var t: Minion? = null; var td = 140f
-        for (o in minions) if (o.room == roomId && !o.ally && o.hp > 0 && o.popT <= 0f) { val d = hypot(o.x - m.x, o.y - m.y); if (d < td) { td = d; t = o } }
-        val big = bigHere && phase == Phase.FIGHT
-        val bd = if (big) hypot(gx - m.x, gy - 6 - m.y) else Float.MAX_VALUE
-        val sp = when (m.kind) { 1 -> HERO_SPEED * 1.1f; 2 -> HERO_SPEED * 0.7f; else -> 16f * 1.1f * 1.45f } * SLOW * dt
+        // the foe nearest you (thralls guard you; they don't roam off hunting)
+        var t: Minion? = null; var td = 95f
+        for (o in minions) if (o.room == roomId && !o.ally && o.hp > 0 && o.popT <= 0f) { val d = hypot(o.x - px, o.y - py); if (d < td) { td = d; t = o } }
+        val big = bigHere && phase == Phase.FIGHT && hypot(gx - px, gy - py) < 110f
+        val sp = when (m.kind) { 1 -> HERO_SPEED * 1.0f; 2 -> HERO_SPEED * 0.65f; else -> 16f * 1.1f * 1.4f } * SLOW * dt
         val k = if (m.kind == 2) 1 else 0
-        val r = if (m.kind == 2) 8f else 3f
-        val tx: Float; val ty: Float; val d: Float
-        if (t != null && td < bd + 20f) { tx = t.x; ty = t.y; d = td } else if (big) { tx = gx; ty = gy - 6; d = bd } else {
-            val dh = hypot(px - m.x, py + 3 - m.y)
-            if (dh > 26f) { chase(m, px, py + 3, sp * 1.1f, k, true, dt); m.step += dt }
-            return
-        }
-        val reach = when (m.kind) { 2 -> 24f; 1 -> 12f; else -> 9f }
-        if (d > reach) { chase(m, tx, ty, sp, k, false, dt); m.step += dt }
+        val mine = minions.filter { it.ally && it.room == roomId && it.hp > 0 }
+        val idx = mine.indexOf(m)
+        // where it stands: in the front line toward the fight, or in the line behind you
+        val (sx, sy) = if (t != null || big) lineSlot(idx, true, t) else lineSlot(comps.count { it.kind != null && it.state == 1 && it.room == roomId } + idx, false, null)
+        val ds = hypot(sx - m.x, sy - m.y)
+        if (ds > 3f) { chase(m, sx, sy, sp * (if (ds > 40f) 1.3f else 0.8f), k, ds > 60f, dt); m.step += dt }
+        if (t == null && !big) return
+        val tx = t?.x ?: gx; val ty = t?.y ?: (gy - 6)
+        val d = hypot(tx - m.x, ty - m.y)
+        m.face = if (tx > m.x) 1f else -1f
         if (m.atkCd > 0f) return
+        // slow, steady blows from the line
         when (m.kind) {
-            0, 3 -> {
-                if (d < 10f) { m.atkCd = 0.9f; if (t != null) hitImp(t, 1) else damageBoss(2); bursts += Burst(tx, ty) }
-                else if (d < 90f) { m.atkCd = 1.6f; val a = atan2(ty - m.y, tx - m.x); shots += Shot(m.x, m.y, cos(a) * 96f * SLOW, sin(a) * 96f * SLOW, false, false).also { it.ally = true } }
+            0, 3 -> if (d < 12f) { m.atkCd = 1.8f; if (t != null) hitImp(t, 1) else damageBoss(2); bursts += Burst(tx, ty) }
+                else if (d < 110f) { m.atkCd = 2.6f; val a = atan2(ty - m.y, tx - m.x); shots += Shot(m.x, m.y, cos(a) * 96f * SLOW, sin(a) * 96f * SLOW, false, false).also { it.ally = true } }
+            1 -> if (d < 30f) {
+                // a short lunge out of the line and back
+                m.atkCd = 2.2f; if (t != null) { hitImp(t, 2); t.kx = (t.x - m.x) * 5f; t.ky = (t.y - m.y) * 5f } else damageBoss(4)
+                fxs += Fx(FX_STRIKE, tx, ty - 2, 0.3f, m.face)
             }
-            1 -> if (d < 13f) { m.atkCd = 1.1f; if (t != null) { hitImp(t, 2); t.kx = (t.x - m.x) * 5f; t.ky = (t.y - m.y) * 5f } else damageBoss(4); fxs += Fx(FX_STRIKE, tx, ty - 2, 0.3f, m.face) }
-            else -> if (d < 26f) {
-                // the slam: everything round it reels
-                m.atkCd = 2.4f; m.slamT = 0f
-                rings += Ring(m.x, m.y + 2); shakeT = maxOf(shakeT, 0.15f); sfx.play(HallSfx.S.STOMP, 0.6f)
-                for (o in minions) if (o.room == roomId && !o.ally && hypot(o.x - m.x, o.y - m.y) < 32f) { hitImp(o, 3); o.stun = 0.6f }
-                if (big && bd < 44f) damageBoss(8)
+            else -> if (d < 36f) {
+                m.atkCd = 3.6f
+                rings += Ring(m.x, m.y + 2); shakeT = maxOf(shakeT, 0.12f); sfx.play(HallSfx.S.STOMP, 0.5f)
+                for (o in minions) if (o.room == roomId && !o.ally && hypot(o.x - m.x, o.y - m.y) < 36f) { hitImp(o, 3); o.stun = 0.6f }
+                if (big && hypot(gx - m.x, gy - m.y) < 48f) damageBoss(8)
             }
         }
     }
@@ -1376,7 +1438,7 @@ class HallScreen(c: Context) : PixelView(c) {
         }
         wash = null
         if (blocked(hx, hy)) unstick()
-        if (friend != null && frState == 1) { frRoom = roomId; placeFriendNear() }
+        eachComp { if (frState == 1) { frRoom = roomId; placeFriendNear() } }
         if (chapter == 2 && phase == Phase.FIGHT && stage == Stage.CHASE && bossRoom != roomId) { followT = 2.2f; entryX = hx + 8; entryY = hy + 14 }
         shots.clear(); drawing.clear(); drawLen = 0f
         if (castRune >= 0) { castRune = -1; stroke.clear(); spellT = 4f }
@@ -1386,7 +1448,7 @@ class HallScreen(c: Context) : PixelView(c) {
         val more = if (inWild) minOf(3, depth / 3) else 0
         if (room.kind != 6 && !throne && !heart && phase == Phase.FIGHT && minions.count { it.room == id && !it.ally } < 2) repeat(2 + rnd.nextInt(2) + more) { val r = rnd.nextFloat(); spawnMinion(null, if (r < 0.25f) 1 else if (r < 0.47f) 3 else 0) }
         // now and then, something far worse claws its way up through the floor
-        val bigChance = if (inWild) minOf(0.4f, 0.2f + depth * 0.02f) else 0.3f
+        val bigChance = if (inWild) minOf(0.12f, 0.05f + depth * 0.006f) else 0.07f
         if (room.kind != 6 && !throne && !heart && !bossHere && phase == Phase.FIGHT && minions.none { it.room == id && it.kind == 2 && !it.ally } && rnd.nextFloat() < bigChance) spawnBehemoth()
         fieldT = 0f
     }
@@ -1458,7 +1520,7 @@ class HallScreen(c: Context) : PixelView(c) {
             if (shieldHits == 0) say("THE STONE AEGIS CRUMBLES", 1.2f)
             return
         }
-        val n5 = kotlin.math.ceil(n * 1.05f).toInt()      // the foes hit a little harder
+        val n5 = kotlin.math.ceil(n * 0.9f).toInt()      // a touch gentler than before, now foes come in numbers
         val nn = if (bulwarkT > 0f) (n5 + 1) / 2 else n5
         hp -= if (bag.wearing(Loot.IRON_SKIN)) (nn * 0.8f).toInt() else nn; invulnT = 1f; hurtFlashT = 0.3f
         if (n >= 25) { sfx.play(HallSfx.S.HURT_BIG); sfx.rumbleBig() } else { sfx.play(HallSfx.S.HURT); sfx.rumbleHit() }
@@ -1669,7 +1731,7 @@ class HallScreen(c: Context) : PixelView(c) {
                 rings += Ring(m.x, m.y + 2); bursts += Burst(m.x - 10, m.y + 2); bursts += Burst(m.x + 10, m.y + 2)
                 shakeT = maxOf(shakeT, 0.35f); sfx.play(HallSfx.S.STOMP); sfx.rumbleSoft()
                 if (d < BEH_SLAM_R && m.weak <= 0f) hurt(20)
-                if (friendHere && hypot(frX - m.x, frY - m.y) < BEH_SLAM_R) hurtFriend(14)
+                eachComp { if (friendHere && hypot(frX - m.x, frY - m.y) < BEH_SLAM_R) hurtFriend(14) }
                 for (o in minions) if (o.ally && o.room == roomId && hypot(o.x - m.x, o.y - m.y) < BEH_SLAM_R) hurtAlly(o, 18)
                 m.slamCd = (if (rage) 1.6f else 2.8f) + rnd.nextFloat() * 1.6f
             }
@@ -1687,7 +1749,7 @@ class HallScreen(c: Context) : PixelView(c) {
             m.step += dt * (if (rage) 1.3f else 1f)
         }
         if (d < 14f && m.weak <= 0f) hurt(22)
-        if (friendHere && hypot(frX - m.x, frY - 6 - m.y) < 15f && m.weak <= 0f) hurtFriend(16)
+        eachComp { if (friendHere && hypot(frX - m.x, frY - 6 - m.y) < 15f && m.weak <= 0f) hurtFriend(16) }
     }
     /** The gazer: an eye on bat wings. It flies over anything, hangs back, spits three at a time, and blinks to a new spot. */
     private fun gazeSolid(x: Float, y: Float) = x < 10f || x > W - 10f || y < 44f || y > H - 8f
@@ -1761,7 +1823,7 @@ class HallScreen(c: Context) : PixelView(c) {
                 val nx = m.x + m.dvx * sp; val ny = m.y + m.dvy * sp
                 if (foeSolid(nx, ny, 3f) || wardBlocks(m.x, m.y, nx, ny)) m.stT = 0f else { m.x = nx; m.y = ny }
                 if (!m.lunged && hypot(px - m.x, py - m.y) < 10f && m.weak <= 0f) { m.lunged = true; hurt(14) }
-                if (!m.lunged && friendHere && hypot(frX - m.x, frY - 6 - m.y) < 12f) { m.lunged = true; hurtFriend(10) }
+                eachComp { if (!m.lunged && friendHere && hypot(frX - m.x, frY - 6 - m.y) < 12f) { m.lunged = true; hurtFriend(10) } }
                 if (!m.lunged) for (o in minions) if (o.ally && o.room == roomId && hypot(o.x - m.x, o.y - m.y) < 10f) { m.lunged = true; hurtAlly(o, 14); break }
                 m.step += dt * 2f
                 if (m.stT <= 0f) { m.st = 3; m.stT = 0.75f }
@@ -1946,6 +2008,7 @@ class HallScreen(c: Context) : PixelView(c) {
             if (m.kind == 1) { updateStalker(m, dt, px, py); continue }
             if (m.kind == 3) { updateGazer(m, dt, px, py); continue }
             if (m.para > 0f || m.stun > 0f || m.ice > 0f) continue
+            pickComp(m.x, m.y)
             val dF = if (friendHere) hypot(frX - m.x, frY - 8 - m.y) else Float.MAX_VALUE
             val dH = hypot(px - m.x, py - m.y)
             var foe: Minion? = null; var dA = Float.MAX_VALUE
@@ -2027,7 +2090,7 @@ class HallScreen(c: Context) : PixelView(c) {
             val hitAlly = minions.firstOrNull { it.ally && it.room == roomId && it.hp > 0 && abs(it.x - s.x) < 6f && abs(it.y - s.y) < 7f }
             if (hitAlly != null) { if (!s.weak) hurtAlly(hitAlly, if (s.boss) 12 else 8); iter.remove() }
             else if (s.x > hx + 3 && s.x < hx + 13 && s.y > hy + 2 && s.y < hy + 15) { if (!s.weak) hurt(if (s.petal) 8 else if (s.boss) 15 else 10); iter.remove() }
-            else if (friendHere && abs(s.x - frX) < 8f && s.y > frY - 16f && s.y < frY + 1f) { if (!s.weak) hurtFriend(if (s.boss) 12 else 8); iter.remove() }
+            else { var hitF = false; eachComp { if (!hitF && friendHere && abs(s.x - frX) < 8f && s.y > frY - 16f && s.y < frY + 1f) { if (!s.weak) hurtFriend(if (s.boss) 12 else 8); hitF = true } }; if (hitF) iter.remove() }
         }
     }
 
@@ -2079,7 +2142,7 @@ class HallScreen(c: Context) : PixelView(c) {
                 if (!moved && bWanderT <= 0f) { val sgn = if (rnd.nextBoolean()) 1f else -1f; bwx = -my * sgn; bwy = mx * sgn; bWanderT = 0.7f }
                 // his touch in the last stand hurts a lot more (your companion, too)
                 if (bossWeak <= 0f && hypot(bx - px, (by - 6) - (hy + 12)) < 14f) hurt(30)
-                if (bossWeak <= 0f && friendHere && hypot(bx - frX, (by - 6) - (frY - 8)) < 18f) hurtFriend(22)
+                eachComp { if (bossWeak <= 0f && friendHere && hypot(bx - frX, (by - 6) - (frY - 8)) < 18f) hurtFriend(22) }
                 // walking through the firewall
                 if (bossFireCd <= 0f && fires.any { it.room == roomId && abs(it.x - bx) < 11f && abs(it.y - by) < 6f }) { bossFireCd = 0.7f; damageBoss(5); bossBurn = 2.5f; bossBurnTick = 0.7f }
             }
@@ -2093,7 +2156,7 @@ class HallScreen(c: Context) : PixelView(c) {
         var fromX = flyX; var fromY = flyY
         val star = bag.wearing(Loot.STARHEART)
         val reach = (if (bag.wearing(Loot.EMBER_RING)) 38f else 32f) + (if (star) 6f else 0f) + flySize() * 2f
-        val bite = 1 + (if (bag.wearing(Loot.EMBER_RING)) 1 else 0) + (if (star) 1 else 0)
+        val bite = 2 + (if (bag.wearing(Loot.EMBER_RING)) 1 else 0) + (if (star) 1 else 0)
         val chain = when { star -> 6; bag.wearing(Loot.STORM_RING) -> 5; else -> 3 }
         val splash = if (star) 20f else SPLASH
         val hit = minions.filter { it.room == roomId && !it.ally && hypot(it.x - flyX, it.y - flyY) < reach }.sortedBy { hypot(it.x - flyX, it.y - flyY) }.take(chain)
@@ -2108,15 +2171,17 @@ class HallScreen(c: Context) : PixelView(c) {
         for (m in hit) { arcs += Arc(fromX, fromY, m.x, m.y); fromX = m.x; fromY = m.y; if (struck.add(m)) hitImp(m, pw(bite), true); burst(m.x, m.y) }
         if (bag.wearing(Loot.BLOSSOM_DAGGER) && struck.isNotEmpty() && hp < maxHp) { hp = minOf(maxHp, hp + minOf(3, struck.size)); fxs += Fx(FX_MEND, hx + 8, hy + 6, 0.4f) }
         if (bigHere && hypot(gx - flyX, gy - 24 - flyY) < 34f + flySize() * 2f) {
-            arcs += Arc(flyX, flyY, gx, gy - 24); bursts += Burst(gx, gy - 24); damageBoss(pw(if (star) 8 else 5))
+            arcs += Arc(flyX, flyY, gx, gy - 24); bursts += Burst(gx, gy - 24); damageBoss(pw(if (star) 12 else 9))
         }
-        // touching your companion with the light mends it a little
-        val fk = friend
-        if (fk != null && friendHere && frHp < fk.maxHp && hypot(frX - flyX, frY - 10 - flyY) < reach) {
-            val heal = maxOf(4, fk.maxHp / 30)
-            frHp = minOf(fk.maxHp, frHp + heal)
-            arcs += Arc(flyX, flyY, frX, frY - 10); fxs += Fx(FX_MEND, frX, frY - 8, 0.5f)
-            sfx.play(HallSfx.S.ORB, 0.5f)
+        // touching a companion with the light mends it a little
+        eachComp {
+            val fk = friend
+            if (fk != null && friendHere && frHp < fk.maxHp && hypot(frX - flyX, frY - 10 - flyY) < reach) {
+                val heal = maxOf(4, fk.maxHp / 30)
+                frHp = minOf(fk.maxHp, frHp + heal)
+                arcs += Arc(flyX, flyY, frX, frY - 10); fxs += Fx(FX_MEND, frX, frY - 8, 0.5f)
+                sfx.play(HallSfx.S.ORB, 0.5f)
+            }
         }
         // brainwashed allies mend as well, at about half the rate a companion does
         var mended = false
@@ -2223,7 +2288,7 @@ class HallScreen(c: Context) : PixelView(c) {
                 if (!moved && bWanderT <= 0f) { val sgn = if (rnd.nextBoolean()) 1f else -1f; bwx = -my * sgn; bwy = mx * sgn; bWanderT = 0.7f }
                 // her dagger, if she reaches you
                 if (bossWeak <= 0f && hypot(bx - px, (by - 6) - (hy + 12)) < 13f) hurt(26)
-                if (bossWeak <= 0f && friendHere && hypot(bx - frX, (by - 6) - (frY - 7)) < 15f) hurtFriend(20)
+                eachComp { if (bossWeak <= 0f && friendHere && hypot(bx - frX, (by - 6) - (frY - 7)) < 15f) hurtFriend(20) }
                 if (bossFireCd <= 0f && fires.any { it.room == roomId && abs(it.x - bx) < 11f && abs(it.y - by) < 6f }) { bossFireCd = 0.7f; damageBoss(5); bossBurn = 2.5f; bossBurnTick = 0.7f }
             }
         }
@@ -2254,7 +2319,7 @@ class HallScreen(c: Context) : PixelView(c) {
                 fxs += Fx(FX_PETALS, m.x, m.y - 8, 0.7f)
                 if (m.room == roomId && phase == Phase.FIGHT) {
                     if (hypot((hx + 8 - m.x) / MANDALA_R, (hy + 13 - m.y) / (MANDALA_R * 0.55f)) < 1f) hurt(16)
-                    if (friendHere && hypot((frX - m.x) / MANDALA_R, (frY - m.y) / (MANDALA_R * 0.55f)) < 1f) hurtFriend(12)
+                    eachComp { if (friendHere && hypot((frX - m.x) / MANDALA_R, (frY - m.y) / (MANDALA_R * 0.55f)) < 1f) hurtFriend(12) }
                 }
             }
             if (m.t >= MANDALA_CHARGE + 0.5f) mi.remove()
@@ -2267,7 +2332,7 @@ class HallScreen(c: Context) : PixelView(c) {
                 l.hit = true; shakeT = maxOf(shakeT, 0.12f); sfx.play(HallSfx.S.STOMP, 0.6f)
                 if (l.room == roomId && phase == Phase.FIGHT) {
                     if (segDist(px, hy + 12, l) < 8f) hurt(14)
-                    if (friendHere && segDist(frX, frY - 4, l) < 9f) hurtFriend(10)
+                    eachComp { if (friendHere && segDist(frX, frY - 4, l) < 9f) hurtFriend(10) }
                 }
             }
             if (l.t >= 1.4f) li.remove()
@@ -2295,7 +2360,7 @@ class HallScreen(c: Context) : PixelView(c) {
                 .putString("owned", bag.owned.joinToString(",") { it.name }).putString("worn", bag.worn.joinToString(",") { it.name })
                 .putInt("herbs", bag.herbs).putInt("blooms", bag.blooms)
                 .putInt("chapter", if (chapter == 2 && !(phase == Phase.WON && bossGone)) 2 else if (chapter == 1 && phase == Phase.WON && chestOpen) 2 else 1)
-                .putString("friend", savedFriend?.name ?: "")
+                .putString("friend", savedFriend?.name ?: "").putString("friend2", savedFriend2?.name ?: "")
                 .putInt("depth", depth).putInt("beastDepth", beastDepth).putLong("wildSeed", wildSeed).putBoolean("forest", forestOpen)
                 .putInt("coins", coins)
                 .putString("pool", pool.joinToString(",")).putString("party", partyOn.joinToString(",")).apply()
@@ -2310,6 +2375,7 @@ class HallScreen(c: Context) : PixelView(c) {
         sp.getString("worn", "")!!.split(',').mapNotNull { n -> Loot.values().firstOrNull { it.name == n } }.forEach { if (it in bag.owned && bag.wornCount(it.mode) < 3) bag.worn += it }
         bag.herbs = sp.getInt("herbs", 0).coerceIn(0, 9); bag.blooms = sp.getInt("blooms", 0).coerceIn(0, 5)
         savedFriend = Friend.values().firstOrNull { it.name == sp.getString("friend", "") }
+        savedFriend2 = Friend.values().firstOrNull { it.name == sp.getString("friend2", "") }
         if (sp.getInt("chapter", 1) == 2) { chapter = 2; bossHp = bossMax; crackOpen = true; talkLines = RANT2; line = 0; shown = 0f }
         pool.clear(); sp.getString("pool", "")!!.split(',').mapNotNull { it.toIntOrNull() }.filter { it in 0..3 }.forEach { pool += it }
         partyOn.clear(); sp.getString("party", "")!!.split(',').mapNotNull { it.toIntOrNull() }.filter { it in pool.indices }.forEach { partyOn += it }
@@ -2865,8 +2931,18 @@ class HallScreen(c: Context) : PixelView(c) {
     private fun drawHero(time: Float) {
         if (invulnT > 0f && phase == Phase.FIGHT && (time * 16).toInt() % 2 == 0) return
         val moving = (dirX != 0 || dirY != 0) && paraT <= 0f
-        val f = if (moving && (walkT * 6f).toInt() % 2 == 1) 1 else 0
-        val s = hero[if (facing == 3) 2 else facing][f]
+        val dirI = if (facing == 3) 2 else facing
+        val s = if (moving) hero[dirI][if ((walkT * 6f).toInt() % 2 == 1) 1 else 0] else {
+            // idle: breathe in and out, blink every few seconds, the scarf stirs now and then
+            val idle = heroIdle[dirI]; val cyc = time % 4.2f
+            val k = when {
+                cyc in 3.0f..3.16f && idle.size > 2 -> 2
+                dirI == 0 && cyc in 1.6f..2.1f -> 3
+                ((time * 1.6f).toInt() % 2 == 1) -> 1
+                else -> 0
+            }
+            idle[k.coerceAtMost(idle.size - 1)]
+        }
         val x = hx.toInt().toFloat(); val y = hy.toInt().toFloat()
         p.color = 0x40000000; sc.drawOval(x + 3, y + 13, x + 13, y + 17, p)
         // 24 tall, standing on the same feet as ever
@@ -3103,7 +3179,7 @@ class HallScreen(c: Context) : PixelView(c) {
         val k = friend ?: return
         val ko = frState == 2
         val fl = k.flies && !ko
-        val w = 12 * FS; val h = 11 * FS
+        val w = 24f; val h = 22f
         var x = frX - w / 2; var y = frY - h
         if (fl) y -= 8 + sin(time * 4f) * 2f
         if (frLunge > 0f) { val t = frLunge / 0.25f; x += (frLx - frX) * 0.5f * t; y += (frLy - frY) * 0.5f * t }
@@ -3254,7 +3330,7 @@ class HallScreen(c: Context) : PixelView(c) {
         orbs.forEachIndexed { i, o -> if (o.room == roomId) addEnt(o.y + 4, 4, i) }
         drops.forEachIndexed { i, d -> if (d.room == roomId) addEnt(d.y + 4, 5, i) }
         if (roomId == 1) addEnt(spiritY + 14, 6, 0)
-        if (friend != null && frRoom == roomId) addEnt(frY, 7, 0)
+        comps.forEachIndexed { i, c -> if (c.kind != null && c.room == roomId) addEnt(c.y, 7, i) }
         java.util.Arrays.sort(ents, 0, entN, entOrder)
         for (k in 0 until entN) {
             val e = ents[k]
@@ -3265,7 +3341,7 @@ class HallScreen(c: Context) : PixelView(c) {
                 3 -> drawBoss(time)
                 4 -> drawOrb(orbs[e.idx], time)
                 6 -> drawSpirit(time)
-                7 -> drawFriend(time)
+                7 -> { cur = comps[e.idx]; drawFriend(time); cur = comps[0] }
                 8 -> drawSeed(seeds[e.idx], time)
                 9 -> beast?.let { drawWoodBlossom(it, time) }
                 10 -> drawNpc(npcs[e.idx], time)
@@ -3689,19 +3765,24 @@ class HallScreen(c: Context) : PixelView(c) {
         if (shieldHits > 0) tag("S", DARK)
         if (hasteT > 0f) tag("H", 0xFF3CA0C8.toInt())
         if (bulwarkT > 0f) tag("W", GOLD_D)
-        // your companion's health
-        val k = friend
-        if (k != null && frState != 0) {
-            box(0f, 10f, 74f, 19f, INK)
-            font.color = if (frState == 2) 0xFFE04848.toInt() else WHITE; sc.drawText(k.label.take(1), 2f, 18f, font)
-            box(11f, 12f, 71f, 17f, DARK)
-            if (frState == 2) { if ((time * 2).toInt() % 2 == 0) { font.color = 0xFFE04848.toInt(); sc.drawText("K.O.", 26f, 18f, font) } }
-            else {
-                box(12f, 13f, 12f + 58f * frHp / k.maxHp, 16f, 0xFF58B0E0.toInt())
-                if (frSkill <= 0f && (time * 3).toInt() % 2 == 0) box(68f, 13f, 70f, 16f, WHITE)
+        // your companions' health, one under the other
+        comps.forEachIndexed { i, c ->
+            cur = c
+            val k = friend
+            if (k != null && frState != 0) {
+                val oy = i * 9f
+                box(0f, 10f + oy, 74f, 19f + oy, INK)
+                font.color = if (frState == 2) 0xFFE04848.toInt() else WHITE; sc.drawText(k.label.take(1), 2f, 18f + oy, font)
+                box(11f, 12f + oy, 71f, 17f + oy, DARK)
+                if (frState == 2) { if ((time * 2).toInt() % 2 == 0) { font.color = 0xFFE04848.toInt(); sc.drawText("K.O.", 26f, 18f + oy, font) } }
+                else {
+                    box(12f, 13f + oy, 12f + 58f * frHp / k.maxHp, 16f + oy, 0xFF58B0E0.toInt())
+                    if (frSkill <= 0f && (time * 3).toInt() % 2 == 0) box(68f, 13f + oy, 70f, 16f + oy, WHITE)
+                }
+                font.color = INK
             }
-            font.color = INK
         }
+        cur = comps[0]
         // the Runecaster's three runes, and how soon each is ready
         if (bag.wearing(Loot.RUNECASTER)) {
             box(76f, 10f, 150f, 21f, INK)
@@ -4329,7 +4410,7 @@ class HallScreen(c: Context) : PixelView(c) {
 }
 
 
-private val MON_PAL = mapOf('K' to 0xFF1C1428.toInt(), 'W' to 0xFFFFFFFF.toInt(), 'r' to 0xFFB0222E.toInt(), 'M' to 0xFF3C0A18.toInt(), 'X' to 0xFFFF4646.toInt(), 'Y' to 0xFFFFEC6E.toInt(), 'v' to 0xFF461846.toInt(), 'p' to 0xFF802860.toInt(), 'q' to 0xFFB44678.toInt(), 'P' to 0xFFE68CAA.toInt(), 'm' to 0xFF301428.toInt(), 'n' to 0xFF542440.toInt(), 'o' to 0xFF783858.toInt(), 'O' to 0xFFAA6078.toInt(), 'b' to 0xFF967850.toInt(), 'c' to 0xFFD2B888.toInt(), 'd' to 0xFFF0E2BE.toInt(), 'D' to 0xFFFFFAE8.toInt(), 'f' to 0xFF8C3C46.toInt(), 'g' to 0xFFC46468.toInt(), 'h' to 0xFFEC968C.toInt(), 'G' to 0xFFFFCEBE.toInt(), 'a' to 0xFF1E1E40.toInt(), 'j' to 0xFF2A2C5C.toInt(), 'e' to 0xFF383A6E.toInt(), 'E' to 0xFF6E76BE.toInt(), 's' to 0xFF143C50.toInt(), 't' to 0xFF1E6E82.toInt(), 'u' to 0xFF3CAAB4.toInt(), 'U' to 0xFFA0F0F0.toInt(), 'R' to 0xFF5A0C1C.toInt(), 'H' to 0xFFF07860.toInt(), 'A' to 0xFF283418.toInt(), 'B' to 0xFF465622.toInt(), 'C' to 0xFF6C8030.toInt(), 'F' to 0xFF9EB050.toInt(), 'L' to 0xFF968E60.toInt(), 'N' to 0xFFC4BA80.toInt(), 'Q' to 0xFFE2DAA6.toInt(), 'S' to 0xFFF6F0CE.toInt(), 'w' to 0xFF968496.toInt(), 'x' to 0xFFCEC0CC.toInt(), 'y' to 0xFFEEE6EC.toInt(), 'z' to 0xFFFFFCFA.toInt(), 'i' to 0xFFC82428.toInt(), 'I' to 0xFFFF8C46.toInt())
+private val MON_PAL = mapOf('K' to 0xFF1C1428.toInt(), 'W' to 0xFFFFFFFF.toInt(), 'r' to 0xFFB0222E.toInt(), 'M' to 0xFF3C0A18.toInt(), 'X' to 0xFFFF4646.toInt(), 'Y' to 0xFFFFEC6E.toInt(), 'v' to 0xFF0E0C12.toInt(), 'p' to 0xFF1E1A26.toInt(), 'q' to 0xFF342E40.toInt(), 'P' to 0xFF5C5470.toInt(), 'm' to 0xFF141018.toInt(), 'n' to 0xFF26202E.toInt(), 'o' to 0xFF3C3448.toInt(), 'O' to 0xFF605670.toInt(), 'b' to 0xFF967850.toInt(), 'c' to 0xFFD2B888.toInt(), 'd' to 0xFFF0E2BE.toInt(), 'D' to 0xFFFFFAE8.toInt(), 'f' to 0xFF8C3C46.toInt(), 'g' to 0xFFC46468.toInt(), 'h' to 0xFFEC968C.toInt(), 'G' to 0xFFFFCEBE.toInt(), 'a' to 0xFF1E1E40.toInt(), 'j' to 0xFF2A2C5C.toInt(), 'e' to 0xFF383A6E.toInt(), 'E' to 0xFF6E76BE.toInt(), 's' to 0xFF143C50.toInt(), 't' to 0xFF1E6E82.toInt(), 'u' to 0xFF3CAAB4.toInt(), 'U' to 0xFFA0F0F0.toInt(), 'R' to 0xFF5A0C1C.toInt(), 'H' to 0xFFF07860.toInt(), 'A' to 0xFF283418.toInt(), 'k' to 0xFF282430.toInt(), 'l' to 0xFF3E384A.toInt(), 'T' to 0xFF585066.toInt(), 'V' to 0xFF7C728C.toInt(), 'B' to 0xFF465622.toInt(), 'C' to 0xFF6C8030.toInt(), 'F' to 0xFF9EB050.toInt(), 'L' to 0xFF968E60.toInt(), 'N' to 0xFFC4BA80.toInt(), 'Q' to 0xFFE2DAA6.toInt(), 'S' to 0xFFF6F0CE.toInt(), 'w' to 0xFF968496.toInt(), 'x' to 0xFFCEC0CC.toInt(), 'y' to 0xFFEEE6EC.toInt(), 'z' to 0xFFFFFCFA.toInt(), 'i' to 0xFFC82428.toInt(), 'I' to 0xFFFF8C46.toInt())
 /** Mercenaries: leathery olive-brown, so they don't look like foes or thralls. */
 private val MON_MERC = mapOf('v' to 0xFF3A3020.toInt(), 'a' to 0xFF3A3020.toInt(), 'm' to 0xFF3A3020.toInt(), 's' to 0xFF3A3020.toInt(), 'R' to 0xFF3A3020.toInt(), 'w' to 0xFF3A3020.toInt(), 'p' to 0xFF645434.toInt(), 'j' to 0xFF645434.toInt(), 'n' to 0xFF645434.toInt(), 't' to 0xFF645434.toInt(), 'r' to 0xFF645434.toInt(), 'x' to 0xFF645434.toInt(), 'q' to 0xFF8E7C4C.toInt(), 'e' to 0xFF8E7C4C.toInt(), 'o' to 0xFF8E7C4C.toInt(), 'u' to 0xFF8E7C4C.toInt(), 'h' to 0xFF8E7C4C.toInt(), 'y' to 0xFF8E7C4C.toInt(), 'P' to 0xFFC4B07A.toInt(), 'E' to 0xFFC4B07A.toInt(), 'O' to 0xFFC4B07A.toInt(), 'U' to 0xFFC4B07A.toInt(), 'H' to 0xFFC4B07A.toInt(), 'z' to 0xFFC4B07A.toInt())
 private val MON_ICE = mapOf('v' to 0xFF4A7AB0.toInt(), 'a' to 0xFF4A7AB0.toInt(), 'm' to 0xFF4A7AB0.toInt(), 's' to 0xFF4A7AB0.toInt(), 'R' to 0xFF4A7AB0.toInt(), 'w' to 0xFF4A7AB0.toInt(), 'p' to 0xFF78A8D8.toInt(), 'j' to 0xFF78A8D8.toInt(), 'n' to 0xFF78A8D8.toInt(), 't' to 0xFF78A8D8.toInt(), 'r' to 0xFF78A8D8.toInt(), 'x' to 0xFF78A8D8.toInt(), 'q' to 0xFFA8D0F0.toInt(), 'e' to 0xFFA8D0F0.toInt(), 'o' to 0xFFA8D0F0.toInt(), 'u' to 0xFFA8D0F0.toInt(), 'h' to 0xFFA8D0F0.toInt(), 'y' to 0xFFA8D0F0.toInt(), 'P' to 0xFFE0F4FF.toInt(), 'E' to 0xFFE0F4FF.toInt(), 'O' to 0xFFE0F4FF.toInt(), 'U' to 0xFFE0F4FF.toInt(), 'H' to 0xFFE0F4FF.toInt(), 'z' to 0xFFE0F4FF.toInt())
@@ -4338,8 +4419,8 @@ private val MON_ALLY = mapOf('v' to 0xFF14605A.toInt(), 'a' to 0xFF14605A.toInt(
 private val MON_RAGE = mapOf('R' to 0xFF9A1010.toInt(), 'r' to 0xFFE02A20.toInt(), 'h' to 0xFFFF7050.toInt(), 'H' to 0xFFFFC080.toInt(), 'Y' to 0xFFFFFFFF.toInt())
 
 private val IMP_ROWS = listOf(
-    listOf("............K...", "...K.......KdK..", "..KdK.....KddK..", "...KdKKKKKddK..K", "K..KdvPPqqvdK.Ko", "oKKPKPPPqqqKpKoo", "ooKPPKKqqKKppmoK", "KmPPPYYKKYYppvmK", "KmqPqYXqqXYpvvmK", ".KqqqqqqppppvvK.", ".KqqqWMWMMWvvvK.", ".KpppvMMWMvvvvvK", "..KpvGGhhggvvKqK", "...KvhhggffvK.K.", "..KqvvvffvvvvK..", "..KDpvvKKvvvDK.."),
-    listOf("..KdK.....KddK..", "...KdKKKKKddK..K", "K..KdKPPqqKdK.Ko", "oKKPKPPPqqqKpKoo", "omPPPKKPqKKpppmK", "KmPPPYYKKYYppvmK", "KqPPqYXqqXYppvvK", "KqqqqqqqppppvvvK", "KqqqqWMWMMWvvvvK", ".KpppvMMWMvvvvvK", "..KpvGGhhggvvKqK", "...KvhhggffvK.K.", "....KKKffKKK....", "...KPPqKKPPqK...", "..KqqqpvqqqpvK..", "..KDpvvKKpvvDK.."),
+    listOf("............K...", "...K.......KdK..", "..KdK.....KddK..", "...KdKKKKKddK..K", "K..KdvPPqqvdK.Ko", "oKKPKPPPqqqKpKoo", "ooKPPKKqqKKppmoK", "KmPPPYYKKYYppvmK", "KmqPqYXqqXYpvvmK", ".KqqqqqqppppvvK.", ".KqqqWMWMMWvvvK.", ".KpppvMMWMvvvvvK", "..KpvVVTTllvvKqK", "...KvTTllkkvK.K.", "..KqvvvkkvvvvK..", "..KDpvvKKvvvDK.."),
+    listOf("..KdK.....KddK..", "...KdKKKKKddK..K", "K..KdKPPqqKdK.Ko", "oKKPKPPPqqqKpKoo", "omPPPKKPqKKpppmK", "KmPPPYYKKYYppvmK", "KqPPqYXqqXYppvvK", "KqqqqqqqppppvvvK", "KqqqqWMWMMWvvvvK", ".KpppvMMWMvvvvvK", "..KpvVVTTllvvKqK", "...KvTTllkkvK.K.", "....KKKkkKKK....", "...KPPqKKPPqK...", "..KqqqpvqqqpvK..", "..KDpvvKKpvvDK.."),
 )
 
 private val STALK_ROWS = listOf(

@@ -196,15 +196,18 @@ class HallBattle(
     private var ambT = 0f
     /** Where things are, in the little screen's units: his chest and the traveller. */
     private val BX = 180f; private val BY = 72f; private val HX = 50f; private val HY = 96f
+    /** The particle flourishes were a step too far: off. */
+    private val FANCY = false
     private fun spray(x: Float, y: Float, n: Int, speed: Float, cols: IntArray, kind: Int = 0, g: Float = 80f, life: Float = 0.6f, size: Float = 2f, up: Float = 0f) {
+        if (!FANCY) return
         repeat(n) {
             val a = rnd.nextFloat() * 6.2832f; val v = speed * (0.35f + rnd.nextFloat() * 0.65f)
             pts += Pt(x, y, cos(a) * v, sin(a) * v - up, life * (0.6f + rnd.nextFloat() * 0.5f), cols[rnd.nextInt(cols.size)], size * (0.6f + rnd.nextFloat() * 0.7f), g, kind)
         }
         if (pts.size > 420) pts.subList(0, pts.size - 420).clear()
     }
-    private fun pop(text: String, x: Float, y: Float, col: Int, big: Boolean = false) { pops += Pop(text, x, y, col, big) }
-    private fun flashOf(col: Int, a: Float) { flashCol = col; flash = maxOf(flash, a) }
+    private fun pop(text: String, x: Float, y: Float, col: Int, big: Boolean = false) { if (FANCY) pops += Pop(text, x, y, col, big) }
+    private fun flashOf(col: Int, a: Float) { if (FANCY) { flashCol = col; flash = maxOf(flash, a) } }
     private val SPARK = intArrayOf(0xFFFFFFFF.toInt(), 0xFFF8E070.toInt(), 0xFFF8B030.toInt())
     private val FIRE = intArrayOf(0xFFF8D050.toInt(), 0xFFF88030.toInt(), 0xFFE04020.toInt())
     private val FROST = intArrayOf(0xFFFFFFFF.toInt(), 0xFFA8E8FF.toInt(), 0xFF68C8F0.toInt())
@@ -394,7 +397,7 @@ class HallBattle(
         pops.removeAll { it.life -= dt; it.y -= 22f * dt; it.life <= 0f }
         // the air of the duel: drifting motes (petals for her), never still
         ambT -= dt
-        if (ambT <= 0f) {
+        if (FANCY && ambT <= 0f) {
             ambT = 0.09f
             val c = bossCols
             pts += Pt(rnd.nextFloat() * 240f, if (queen) -4f else 130f, (rnd.nextFloat() - 0.5f) * 20f, if (queen) 26f + rnd.nextFloat() * 20f else -16f - rnd.nextFloat() * 16f, 3.5f, c[rnd.nextInt(c.size)] and 0x00FFFFFF or (0x90 shl 24), if (queen) 2.5f else 1.5f, 0f, if (queen) 1 else 3)
@@ -402,11 +405,11 @@ class HallBattle(
             pts += Pt(BX - 30f + rnd.nextFloat() * 60f, BY + 40f, 0f, -30f - rnd.nextFloat() * 30f, 0.9f, c[rnd.nextInt(c.size)] and 0x00FFFFFF or (0x70 shl 24), 3f, 0f, 1)
         }
         // winding up: power drawn into him from all round
-        if (st == St.ATTACK && rnd.nextFloat() < 0.8f) {
+        if (FANCY && st == St.ATTACK && rnd.nextFloat() < 0.8f) {
             val a = rnd.nextFloat() * 6.2832f; val c = bossCols
             pts += Pt(BX + cos(a) * 60f, BY + sin(a) * 50f, -cos(a) * 120f, -sin(a) * 100f, 0.45f, c[rnd.nextInt(c.size)], 2f, 0f, 2)
         }
-        if (st == St.INTRO && t < 0.1f && pts.size < 50) { flashOf(0xFFFFFF, 0.7f); for (i in 0 until 40) { val a = i * 0.157f; pts += Pt(120f, 88f, cos(a) * 300f, sin(a) * 220f, 0.5f, 0xFFFFFFFF.toInt(), 1.5f, 0f, 2) } }
+        if (FANCY && st == St.INTRO && t < 0.1f && pts.size < 50) { flashOf(0xFFFFFF, 0.7f); for (i in 0 until 40) { val a = i * 0.157f; pts += Pt(120f, 88f, cos(a) * 300f, sin(a) * 220f, 0.5f, 0xFFFFFFFF.toInt(), 1.5f, 0f, 2) } }
         when (st) {
             St.INTRO -> if (t > 2.2f) { st = St.MENU; cursor = 0 }
             St.ATTACK -> if (t > 1.5f) { st = St.DEF1; t = 0f; lastScore = -1f }
@@ -597,7 +600,7 @@ class HallBattle(
             if (bossHurtT > 0f) { fxp.color = 0x55FFFFFF; c.drawRect(dst, fxp) }
         }
         drawFx(c, ::X, ::Y, k, time)
-        drawParticles(c, ::X, ::Y, k, time)
+        if (FANCY) drawParticles(c, ::X, ::Y, k, time)
         // the windows and runes, over everything
         c.save(); c.translate(r.left, r.top); c.scale(k, k)
         drawUi(c, time, strokeNorm)

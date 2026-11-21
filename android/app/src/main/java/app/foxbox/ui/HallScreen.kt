@@ -2432,7 +2432,11 @@ class HallScreen(c: Context) : PixelView(c) {
         }
         run {
             // the view follows you, easing a little
-            val tx = (hx + 8 - W / 2f).coerceIn(0f, WW - W); val ty = (hy + 12 - H / 2f).coerceIn(0f, WH - H)
+            var tx = (hx + 8 - W / 2f).coerceIn(0f, WW - W); var ty = (hy + 12 - H / 2f).coerceIn(0f, WH - H)
+            // a boss's room is a room: the view holds still on it, and you leave by its sides
+            val wl0 = wild
+            if (wl0 != null && wl0.bossLevel && ry * wl0.w + rx == wl0.exit) { tx = rx * 240f; ty = ry * 176f }
+            else if (wl0 == null && zone == 4) { tx = TX; ty = TY }
             camX += (tx - camX) * minOf(1f, dt * 10f); camY += (ty - camY) * minOf(1f, dt * 10f)
         }
         updateFriend(dt)

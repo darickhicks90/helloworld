@@ -79,12 +79,34 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
     }
 
     private val sides = Array(n) { BooleanArray(4) }
-    private fun nb(r: Int, d: Int): Int { val x = r % w + DX[d]; val y = r / w + DY[d]; return if (x < 0 || y < 0 || x >= w || y >= h) -1 else y * w + x }
+    /** Screens of solid wood: no way in, nothing to find (the rest have room to breathe). */
+    val dead = BooleanArray(n)
+    /** The block kept for the fort: no solid screens in it, no gate cutting through it. */
+    private val fortKeep = HashSet<Int>()
+    private fun nbAll(r: Int, d: Int): Int { val x = r % w + DX[d]; val y = r / w + DY[d]; return if (x < 0 || y < 0 || x >= w || y >= h) -1 else y * w + x }
+    private fun nb(r: Int, d: Int): Int { val o = nbAll(r, d); return if (o >= 0 && dead[o]) -1 else o }
     private fun open(r: Int, d: Int) { val o = nb(r, d); if (o < 0) return; sides[r][d] = true; sides[o][OPP[d]] = true }
 
     init {
-        // 1. a maze: a random depth-first spanning tree, starting from the bottom row
+        // 0. a few whole screens of solid wood (the rest must all still join up)
         start = (h - 1) * w + rnd.nextInt(w)
+        run {
+            val want = 6 + rnd.nextInt(4)
+            // a fort-sized block near the start is kept alive
+            val sx = start % w; val ox = (sx - 1 + rnd.nextInt(-1, 2)).coerceIn(0, w - 3)
+            val keepAlive = fortKeep; for (y in h - 3 until h - 1) for (x in ox until ox + 3) keepAlive += y * w + x
+            var made = 0; var tries = 0
+            while (made < want && tries++ < 200) {
+                val c = rnd.nextInt(n); if (c == start || dead[c] || c in keepAlive) continue
+                dead[c] = true
+                // still all one piece?
+                val live = (0 until n).filter { !dead[it] }
+                val seen0 = BooleanArray(n); val q0 = ArrayDeque<Int>(); q0 += start; seen0[start] = true; var cnt = 1
+                while (q0.isNotEmpty()) { val r = q0.removeFirst(); for (d in 0 until 4) { val o = nb(r, d); if (o >= 0 && !seen0[o]) { seen0[o] = true; cnt++; q0 += o } } }
+                if (cnt == live.size) made++ else dead[c] = false
+            }
+        }
+        // 1. a maze: a random depth-first spanning tree, starting from the bottom row
         val seen = BooleanArray(n); val stack = ArrayList<Int>(); stack += start; seen[start] = true
         val parent = IntArray(n) { -1 }; val parentDir = IntArray(n) { -1 }
         while (stack.isNotEmpty()) {
@@ -98,14 +120,17 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
         val dist = IntArray(n) { -1 }; dist[start] = 0
         val q = ArrayDeque<Int>(); q += start
         while (q.isNotEmpty()) { val r = q.removeFirst(); for (d in 0 until 4) if (sides[r][d]) { val o = nb(r, d); if (dist[o] < 0) { dist[o] = dist[r] + 1; q += o } } }
-        exit = (0 until n).maxByOrNull { dist[it] }!!
+        exit = if (bossLevel) (0 until n).filter { !dead[it] && dist[it] in 1..2 }.maxByOrNull { dist[it] * 10 + rnd.nextInt(10) } ?: (0 until n).maxByOrNull { dist[it] }!!
+               else (0 until n).maxByOrNull { dist[it] }!!
         // 3. gates along the way: keys = gates + 1 (the root door takes one too)
-        val keyCount = minOf(3, 2 + depth / 5)
+        val keyCount = if (bossLevel) 1 else minOf(3, 2 + depth / 5)
         val gates = keyCount - 1
         val path = ArrayList<Int>(); run { var r = exit; while (r >= 0) { path.add(0, r); r = parent[r] } }
         val gateRooms = ArrayList<Int>()   // the room on the far side of each gate
+        fun guardsFort(g: Int) = fortKeep.any { b -> var x = b; var hit = false; while (x >= 0) { if (x == g) { hit = true; break }; x = parent[x] }; hit }
         for (i in 1..gates) {
-            val at = (path.size * i / (gates + 1)).coerceIn(1, path.size - 1)
+            var at = (path.size * i / (gates + 1)).coerceIn(1, path.size - 1)
+            while (at < path.size - 1 && (guardsFort(path[at]) || path[at] in gateRooms)) at++
             val r = path[at]
             if (r !in gateRooms) gateRooms += r
         }
@@ -124,7 +149,7 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
         val used = HashSet<Int>(); used += start; used += exit
         for (i in 0 until keyCount) {
             val reg = minOf(i, gateRooms.size)
-            val cands = (0 until n).filter { region[it] == reg && it !in used }.ifEmpty { (0 until n).filter { region[it] <= reg && it !in used } }
+            val cands = (0 until n).filter { !dead[it] && region[it] == reg && it !in used }.ifEmpty { (0 until n).filter { !dead[it] && region[it] <= reg && it !in used } }.ifEmpty { listOf(start) }
             // prefer dead ends and far corners
             // not tucked away at the far ends: a middling walk, easy to come across
             val mid = (cands.maxOfOrNull { dist[it] } ?: 0) / 2
@@ -141,7 +166,7 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
             for ((bw, bh) in listOf(3 to 2, 2 to 3, 2 to 2, 2 to 1, 1 to 2, 1 to 1)) {
                 for (oy in 0..h - bh) for (ox in 0..w - bw) {
                     val block = ArrayList<Int>(); for (y in oy until oy + bh) for (x in ox until ox + bw) block += y * w + x
-                    if (block.any { it == start || it == exit }) continue
+                    if (block.any { it == start || it == exit || dead[it] }) continue
                     val reg = region[block[0]]; if (block.any { region[it] != reg }) continue
                     val score = -reg * 10f - block.minOf { dist[it] } * 0.5f + rnd.nextFloat()
                     if (score > bestScore) { bestScore = score; best = block }
@@ -157,7 +182,7 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
             }
         }
         repeat(if (depth >= 3) 2 else 1) { river() }
-        for (r in 0 until n) if (shaped[r] && r !in fortRooms) fillMass(r)
+        for (r in 0 until n) if (shaped[r] && r !in fortRooms && !dead[r]) fillMass(r)
         for (k in keys) { val spot = clearSpot(k[0]); k[1] = spot.first; k[2] = spot.second }
         for (r in 0 until n) names[r] = A[rnd.nextInt(A.size)] + " " + B[rnd.nextInt(B.size)]
         for ((r, nm) in special) names[r] = nm
@@ -165,7 +190,7 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
         if (fort >= 0) { val fn = listOf("THE STOCKADE", "BRAMBLE FORT", "THE WARDEN'S CAMP", "MOSSWALL KEEP")[rnd.nextInt(4)]; for (r in fortRooms) names[r] = fn }
         // 7. fog banks, drawn last so the rest of the wood comes out the same
         repeat(if (depth >= 2) 2 else 1) {
-            val no = HashSet<Int>().apply { add(start); add(exit); for (f in fortRooms) { add(f); for (d in 0 until 4) nb(f, d).let { if (it >= 0) add(it) } } }
+            val no = HashSet<Int>().apply { add(start); add(exit); for (r in 0 until n) if (dead[r]) add(r); for (f in fortRooms) { add(f); for (d in 0 until 4) nb(f, d).let { if (it >= 0) add(it) } } }
             val cands = (0 until n).filter { it !in no && it !in fog }
             if (cands.isEmpty()) return@repeat
             val bank = arrayListOf(cands[rnd.nextInt(cands.size)])
@@ -269,13 +294,13 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
         val total = GX * GY
         fun closed() = open.count { !it }
         var guard = 0
-        while (closed() > total * 0.45f && guard++ < 40) {
+        while (closed() > total * 0.28f && guard++ < 60) {
             val i = (0 until total).filter { !open[it] && listOf(-1, 1, -GX, GX).any { o -> it + o in 0 until total && open[it + o] } }.let { if (it.isEmpty()) -1 else it[rnd.nextInt(it.size)] }
             if (i < 0) break
             carve((i % GX) * CW + CW / 2f, (i / GX) * CH + CH / 2f, 12f + rnd.nextFloat() * 10f, false)
         }
         guard = 0
-        while (closed() < total * 0.28f && guard++ < 30) {
+        while (closed() < total * 0.12f && guard++ < 30) {
             val x = 20f + rnd.nextInt(200); val y = 24f + rnd.nextInt(128); val rad = 10f + rnd.nextFloat() * 12f
             var hitsCore = false
             for (gy in 0 until GY) for (gx in 0 until GX) { val dd = kotlin.math.hypot(gx * CW + CW / 2f - x, gy * CH + CH / 2f - y); if (dd < rad + 8f && cr[gy * GX + gx]) hitsCore = true }
@@ -354,6 +379,7 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
     }
 
     private fun furnish(r: Int) {
+        if (dead[r]) { shaped[r] = true; java.util.Arrays.fill(mass[r], M_FOREST.toByte()); java.util.Arrays.fill(core[r], false); return }
         if (r == exit) {
             // the great stone door, against a wall with no way through it; for the boss, an open arena
             val sd = sides[r]
@@ -474,7 +500,7 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
     private fun lanes(r: Int): List<IntArray> = ways[r].ifEmpty { listOf(intArrayOf(96, 80, 144, 128)) }
     /** A river from a pond to another pond some five screens away, under the hedges between screens. */
     private fun river() {
-        val bad = HashSet<Int>().apply { addAll(fortRooms) }
+        val bad = HashSet<Int>().apply { addAll(fortRooms); for (r in 0 until n) if (dead[r]) add(r) }
         val a = (0 until n).filter { it !in bad && rivers[it].isEmpty() }.let { if (it.isEmpty()) return else it[rnd.nextInt(it.size)] }
         // the grid's own neighbours (rivers don't need doors)
         val dist = IntArray(n) { -1 }; val par = IntArray(n) { -1 }; dist[a] = 0

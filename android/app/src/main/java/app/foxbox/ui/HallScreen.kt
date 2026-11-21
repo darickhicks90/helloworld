@@ -2507,6 +2507,8 @@ class HallScreen(c: Context) : PixelView(c) {
         } else {
             val cx = ((hx + 8) / 240f).toInt().coerceIn(0, 2); val cy = ((hy + 12) / 176f).toInt().coerceIn(0, 2)
             if (cx != rx || cy - 1 != ry) enterZone(cx, cy - 1)
+            // walking up through the open garden door: out into the wood
+            if (phase == Phase.WON && chapter == 2 && bossGone && nearGlassDoor() && dirY < 0 && hy + 12 < 46f) { forestOpen = true; sfx.play(HallSfx.S.DOOR_OPEN, 0.7f); startWild(1); return }
         }
 
         if (phase == Phase.WON && perishT > 0f && !bossGone) {
@@ -2515,7 +2517,7 @@ class HallScreen(c: Context) : PixelView(c) {
                 bossGone = true
                 if (chapter == 2) {
                     drops += Drop(bx, by - 6, bossRoom, Loot.BLOSSOM_DAGGER).also { it.life = 1e9f }
-                    msg = "SHE IS GONE. HER DAGGER REMAINS. BEYOND THE GLASS, THE WILDWOOD. (A)"; msgT = 3.4f
+                    msg = "SHE IS GONE. HER DAGGER REMAINS. THE GARDEN DOOR STANDS OPEN."; msgT = 3.4f
                 } else { drops += Drop(bx, by - 6, bossRoom, Loot.FIVE_EYED_AXE).also { it.life = 1e9f }; msg = "HE IS GONE. HIS AXE REMAINS."; msgT = 2.4f }
                 saveSoon = true
             }
@@ -3073,6 +3075,27 @@ class HallScreen(c: Context) : PixelView(c) {
             sc.restore()
         }
         drawTunnel(time)
+        drawGlassDoor(time)
+    }
+    /** The garden door at the back of the glasshouse: shut and dark while she lives, then open on the wood beyond. */
+    private fun drawGlassDoor(time: Float) {
+        if (wild != null) return
+        val cx = GDOOR_X; val l = cx - 14; val r = cx + 14; val t = 4f; val b = 31f
+        val open = chapter == 2 && bossGone && phase == Phase.WON
+        val iron = 0xFF1E2A24.toInt()
+        // beyond: the wood (open) or a dark pane (shut)
+        box(l, t, r, b, if (open) 0xFF2E6232.toInt() else 0xFF2A3A40.toInt())
+        if (open) { for (k in 0 until 5) { p.color = 0xFF4E8A30.toInt(); sc.drawCircle(l + 3 + k * 6f, t + 8 + (k % 2) * 3, 5f, p) }; box(cx - 4, t + 14, cx + 4, b, 0xFF7AB02E.toInt())
+            val g = 0.5f + 0.5f * sin(time * 3f); p.color = (((0x30 + 0x30 * g).toInt()) shl 24) or 0xF8F0A0; sc.drawRect(l - 3, t - 2, r + 3, b + 3, p) }
+        // the doors: two leaves of iron-framed glass under a round arch, swung back when open
+        val sw = if (open) 9f else 0f
+        for (side in 0..1) {
+            val dl = if (side == 0) l - sw else cx + sw; val dr = dl + 14f
+            if (!open || true) { box(dl, t + 2, dr, b, iron); box(dl + 2, t + 4, dr - 2, b - 2, if (open) 0x60D8F0F8 else 0xA0B8DCE8.toInt()); box(dl + 2, t + 14, dr - 2, t + 15, iron); box(dl + 3, t + 5, dl + 4, t + 12, 0x90FFFFFF.toInt()) }
+        }
+        for (q in 0 until 11) { val a = 3.1416f * q / 10f; box(cx + cos(a) * 14f - 1, t + 3 - sin(a) * 5f, cx + cos(a) * 14f + 1, t + 5 - sin(a) * 5f, iron) }
+        box(cx - 1, t - 3, cx + 1, t, GOLD)
+        if (!open) box(cx - 1, t + 16, cx + 1, t + 19, GOLD_D)
     }
     private val hallArt = Array(9) { HallRoomArt() }
     /** The tunnel between treasury and glasshouse: shut (a cracked stone plug), or a dark arched passage. */
@@ -4923,13 +4946,16 @@ class HallScreen(c: Context) : PixelView(c) {
         if (msgT > 0f && msg.isNotEmpty() && !talking && wash == null) banner(msg, H - 58f)
         if (talking) return
         if (phase == Phase.LOST) { banner("YOU FELL...", 70f); if ((time * 2).toInt() % 2 == 0) banner("A: TRY AGAIN", 86f) }
-        if (phase == Phase.WON && chapter == 2 && bossGone && zone == 2 && wild == null && (time * 2).toInt() % 2 == 0) banner("A: INTO THE WILDWOOD", 86f)
+        if (phase == Phase.WON && chapter == 2 && bossGone && nearGlassDoor() && (time * 2).toInt() % 2 == 0) banner("A: OUT INTO THE WILDWOOD", 86f)
         if (nearSpirit()) banner("A: SPEAK", 90f)
         if (inWild && phase == Phase.FIGHT && msgT <= 0f) nearNpc()?.let { banner("A: TALK", H - 58f) }
         if (phase == Phase.WON && zone == 1 && wild == null && !chestOpen && nearChest() && !nearSpirit()) banner("A: OPEN", 90f)
         else if ((phase == Phase.FIGHT || phase == Phase.WON) && msgT <= 0f) reachable().takeIf { it >= 0 }?.let { banner("A: " + actLabel(room.props[it].kind), H - 58f) }
     }
     private fun nearChest() = false
+    /** The glasshouse's garden door, in the middle of its glass wall: out into the wildwood. */
+    private val GDOOR_X = 480f + 120f
+    private fun nearGlassDoor() = wild == null && abs(hx + 8 - GDOOR_X) < 22f && hy + 12 < 58f
 
     // =====================================================================================
     // The handheld around the screen: D-pad and L on the left; R, A / B and the XY pad on the right
@@ -5245,7 +5271,7 @@ class HallScreen(c: Context) : PixelView(c) {
                 val b = if (Loot.THUNDER_CROWN in bag.owned) rollLoot(0f) else Loot.THUNDER_CROWN
                 takeLoot(a); takeLoot(b)
                 talking = true; talkLines = CHEST_LINES + "BENEATH THE GOLD, TWO CHARMS: ${a.label} AND ${b.label}!"; line = 0; shown = 0f
-            } else if (chapter == 2 && bossGone && zone == 2) { forestOpen = true; startWild(1) }
+            } else if (chapter == 2 && bossGone && nearGlassDoor()) { forestOpen = true; sfx.play(HallSfx.S.DOOR_OPEN, 0.7f); startWild(1) }
             else actOrSprint()
         } else if (phase == Phase.FIGHT) { val n0 = if (inWild) nearNpc() else null; if (n0 != null) npcAct(n0) else actOrSprint() }
     }

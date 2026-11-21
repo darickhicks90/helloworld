@@ -87,7 +87,8 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
             val reg = minOf(i, gateRooms.size)
             val cands = (0 until n).filter { region[it] == reg && it !in used }.ifEmpty { (0 until n).filter { region[it] <= reg && it !in used } }
             // prefer dead ends and far corners
-            val best = cands.sortedByDescending { dist[it] + (if (doors[it].length == 1) 6 else 0) + rnd.nextInt(6) }.firstOrNull() ?: start
+            val score = cands.associateWith { dist[it] + (if (doors[it].length == 1) 6 else 0) + rnd.nextInt(6) }
+            val best = cands.maxByOrNull { score.getValue(it) } ?: start
             used += best
             keys += intArrayOf(best, 0, 0)
         }

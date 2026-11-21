@@ -1336,7 +1336,7 @@ class HallScreen(c: Context) : PixelView(c) {
 
     /** A fresh match: from the first foe, or (a retry after she beat you) straight back into her fight. */
     private fun restart(ch: Int = 1) {
-        wild = null; depth = 0; beast = null; wash = null
+        wild = null; depth = 0; beast = null; wash = null; rx = 1; ry = 1
         hp = maxHp; invulnT = 0f; paraT = 0f; poisonT = 0f; invertT = 0f
         perishT = 0f; bossGone = false; spiritGift = false; spiritTalks = 0
         chapter = 1; bossRoom = 4; followT = 0f; seeds.clear(); lashes.clear(); mandalas.clear()

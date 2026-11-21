@@ -23,6 +23,8 @@ internal class HallRoomArt {
         val rivers: List<RectF> = emptyList(), val bridges: List<RectF> = emptyList(),
         /** A stretch of the open wood: no walls of its own (its hedgerows are props). */
         val open: Boolean = false,
+        /** A room of the open great hall: which of its sides (W, E, N, S) open onto the next room. */
+        val hallOpen: BooleanArray? = null,
     )
 
     private companion object {
@@ -73,6 +75,25 @@ internal class HallRoomArt {
         for (w in s.pools) pool(w, s.kind)
         for ((k, f) in s.props) shadow(k, f)
         decor(s, crypt)
+        if (s.hallOpen?.get(2) == true) archway(s, crypt)
+    }
+    /** A wide archway through the top wall into the room beyond: floor runs on through it, columns either side. */
+    private fun archway(s: Spec, crypt: Boolean) {
+        val a = if (crypt) 0xFFDCDCE4.toInt() else 0xFFF6F6FA.toInt(); val hi = if (crypt) 0xFFE8E8EE.toInt() else 0xFFFFFFFF.toInt()
+        val lo = if (crypt) 0xFFC6C6D2.toInt() else 0xFFE2E2EA.toInt(); val grout = if (crypt) MID else 0xFFD4D4DE.toInt()
+        box(72, 0, 168, 31, a)
+        for (ty in 0 until 3) for (tx in 0 until 6) {
+            val x0 = 72 + tx * 16; val y0 = -1 + ty * 16
+            box(x0 + 1, y0 + 1, x0 + 16, y0 + 2, hi); box(x0 + 1, y0 + 1, x0 + 2, y0 + 16, hi)
+            box(x0 + 1, y0 + 15, x0 + 16, y0 + 16, lo); box(x0 + 15, y0 + 1, x0 + 16, y0 + 16, lo)
+            box(x0, y0, x0 + 16, y0 + 1, grout); box(x0, y0, x0 + 1, y0 + 16, grout)
+        }
+        // the columns that hold the arch, lit from the left
+        for (x in intArrayOf(66, 168)) {
+            box(x - 1, 0, x + 7, 33, DARK); box(x, 0, x + 6, 32, PALE); box(x, 0, x + 2, 32, WHITE); box(x + 5, 0, x + 6, 32, MID)
+            box(x - 2, 29, x + 8, 33, MID); box(x - 2, 29, x + 8, 30, WHITE)
+        }
+        for (k in 0 until 3) box(72, k, 168, k + 1, intArrayOf(0x18000000, 0x10000000, 0x08000000)[k])
     }
 
     private fun floor(s: Spec, crypt: Boolean) {
@@ -189,13 +210,14 @@ internal class HallRoomArt {
 
     private fun sides(s: Spec, crypt: Boolean) {
         for (side in 0..1) {
+            if (s.hallOpen?.get(side) == true) continue
             val x0 = if (side == 0) 0 else W - 4
             box(x0, 31, x0 + 4, H, MID); box(if (side == 0) 3 else W - 4, 31, if (side == 0) 4 else W - 3, H, DARK)
             box(if (side == 0) 1 else W - 3, 31, if (side == 0) 2 else W - 2, H, PALE)
             for (y in 40 until H step 24) box(x0, y, x0 + 4, y + 1, DARK)
             if (s.doors[side]) { box(x0, 82, x0 + 4, 122, if (crypt) PALE else WHITE); box(x0, 81, x0 + 4, 82, DARK); box(x0, 122, x0 + 4, 123, DARK) }
         }
-        box(0, H - 3, W, H, MID); box(0, H - 3, W, H - 2, DARK)
+        if (s.hallOpen?.get(3) != true) { box(0, H - 3, W, H, MID); box(0, H - 3, W, H - 2, DARK) }
         if (s.doors[3]) box(104, H - 3, 136, H, if (crypt) PALE else WHITE)
         if (crypt) for (k in 0 until 6) { box(4 + k * 2, 31, 5 + k * 2, 31 + (6 - k) * 2, MID); box(W - 5 - k * 2, 31, W - 4 - k * 2, 31 + (6 - k) * 2, MID) }
     }
@@ -205,9 +227,10 @@ internal class HallRoomArt {
         val a = intArrayOf(0x26000000, 0x1A000000, 0x10000000, 0x08000000, 0x04000000)
         for (k in a.indices) {
             box(4, 31 + k, W - 4, 32 + k, a[k])
-            box(4 + k, 31, 5 + k, H - 3, a[k]); box(W - 5 - k, 31, W - 4 - k, H - 3, a[k])
+            if (s.hallOpen?.get(0) != true) box(4 + k, 31, 5 + k, H - 3, a[k])
+            if (s.hallOpen?.get(1) != true) box(W - 5 - k, 31, W - 4 - k, H - 3, a[k])
         }
-        for (k in 0 until 3) box(4, H - 4 - k, W - 4, H - 3 - k, a[k + 1])
+        if (s.hallOpen?.get(3) != true) for (k in 0 until 3) box(4, H - 4 - k, W - 4, H - 3 - k, a[k + 1])
     }
 
     /** A stone-rimmed pool: a deep shaded edge under the rim, lighter water toward you, and lilies. */

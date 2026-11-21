@@ -16,7 +16,7 @@ import kotlin.math.*
 class CircuitsMode(app: MainActivity) : DrawingMode(app) {
     override val id = "circuit"
     override val title = "Circuits"
-    override val padTitle = "CIRCUIT · ANSWER"
+    override val padTitle = "NOTEPAD"
     override val tools = listOf(
         ToolSpec("shape", "✎", "1 Draw", Ink.PENCIL),
         ToolSpec("mark", "12", "2 Values", Ink.KNOWN),
@@ -115,7 +115,15 @@ class CircuitsMode(app: MainActivity) : DrawingMode(app) {
                     else -> comp.name
                 }
                 val horizontalBody = comp.body.w >= comp.body.h
-                val at = if (horizontalBody) Pt(comp.body.cx, comp.body.y0 - 18) else Pt(comp.body.x1 + 12 + text.length * 3.3, comp.body.cy)
+                val num = a.reading?.numbers?.firstOrNull { it.second === comp }?.first?.box
+                val half = text.length * 3.6 + 10
+                val at = if (horizontalBody) {
+                    val numAbove = num != null && num.cy < comp.body.cy
+                    if (numAbove) Pt(comp.body.cx, comp.body.y1 + 18) else Pt(comp.body.cx, comp.body.y0 - 18)
+                } else {
+                    val numRight = num != null && num.cx > comp.body.cx
+                    if (numRight) Pt(comp.body.x0 - half, comp.body.cy) else Pt(comp.body.x1 + half, comp.body.cy)
+                }
                 labels += PaperLabel("comp:${comp.name}", text, at, when {
                     isT && main != null && main.r.ok -> PaperLabel.ANSWER
                     isT -> PaperLabel.TARGET

@@ -90,12 +90,12 @@ class FormulasMode(app: MainActivity) : Mode(app) {
             background = GradientDrawable().apply { cornerRadius = app.dp(4f); setColor(if (sel) 0xFFFFF7D6.toInt() else 0xFFFFFFFF.toInt()); setStroke(app.dp(if (sel) 2 else 1), if (sel) Ink.FIND else 0x44000000) }
             setPadding(app.dp(12), app.dp(8), app.dp(12), app.dp(10))
             elevation = app.dp(2f)
-            minimumWidth = app.dp(230)
+            layoutParams = android.view.ViewGroup.LayoutParams(app.dp(250), android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
             setOnClickListener { open = f; renderList(); renderPad() }
         }
-        col.addView(View(app).apply { setBackgroundColor(0x66E05555) }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, app.dp(1)))
-        col.addView(TextView(app).apply { text = f.name; setTextColor(Ink.TEXT); typeface = android.graphics.Typeface.DEFAULT_BOLD; setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f); setPadding(0, app.dp(4), 0, 0); maxWidth = app.dp(320) })
-        col.addView(TextView(app).apply { text = Expr.show(ast(f)); setTextColor(0xFF2B4C7E.toInt()); typeface = Ink.serif; setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f); maxWidth = app.dp(320) })
+        col.addView(View(app).apply { setBackgroundColor(0x66E05555) }, LinearLayout.LayoutParams(app.dp(226), app.dp(1)))
+        col.addView(TextView(app).apply { text = f.name; setTextColor(Ink.TEXT); typeface = android.graphics.Typeface.DEFAULT_BOLD; setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f); setPadding(0, app.dp(4), 0, 0); maxWidth = app.dp(226) })
+        col.addView(TextView(app).apply { text = Expr.show(ast(f)); setTextColor(0xFF2B4C7E.toInt()); typeface = Ink.serif; setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f); maxWidth = app.dp(226) })
         return col
     }
 

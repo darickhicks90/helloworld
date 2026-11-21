@@ -56,8 +56,8 @@ abstract class DrawingMode(app: MainActivity) : Mode(app), PaperHost {
 
     protected fun editTools() = listOf(
         ToolSpec("erase", "⌫", "Erase", 0xFF8A5A2B.toInt()),
-        ToolSpec("undo", "↶", "Undo", 0xFF4A4A4A.toInt()),
-        ToolSpec("redo", "↷", "Redo", 0xFF4A4A4A.toInt()),
+        ToolSpec("undo", "↶", "Undo", 0xFF2E2A26.toInt()),
+        ToolSpec("redo", "↷", "Redo", 0xFF2E2A26.toInt()),
         ToolSpec("clear", "✕", "Clear", 0xFF9B3434.toInt()))
 
     fun strokesJson() = MainActivity.strokesToJson(paper.strokes)

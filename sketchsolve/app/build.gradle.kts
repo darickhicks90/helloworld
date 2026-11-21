@@ -32,4 +32,24 @@ android {
 
 dependencies {
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("androidx.test:core:1.6.1")
+}
+
+// Robolectric's Android runtime, fetched by Gradle and used offline by the tests.
+val robolectricRuntime: Configuration by configurations.creating
+dependencies {
+    robolectricRuntime("org.robolectric:android-all-instrumented:14-robolectric-10818077-i7")
+    robolectricRuntime("org.robolectric:android-all-instrumented:15-robolectric-12650502-i7")
+}
+val robolectricDir = layout.buildDirectory.dir("robolectric-deps")
+val copyRobolectricRuntime by tasks.registering(Copy::class) {
+    from(robolectricRuntime)
+    into(robolectricDir)
+}
+tasks.withType<Test>().configureEach {
+    dependsOn(copyRobolectricRuntime)
+    systemProperty("robolectric.offline", "true")
+    systemProperty("robolectric.dependency.dir", robolectricDir.get().asFile.absolutePath)
+    maxHeapSize = "3g"
 }

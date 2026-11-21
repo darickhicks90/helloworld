@@ -17,7 +17,7 @@ import kotlin.math.*
 class ShapesMode(app: MainActivity) : DrawingMode(app) {
     override val id = "shape"
     override val title = "Shapes"
-    override val padTitle = "SHAPE · ANSWER"
+    override val padTitle = "NOTEPAD"
     override val tools = listOf(
         ToolSpec("shape", "✎", "1 Shape", Ink.PENCIL),
         ToolSpec("mark", "[ ]", "2 Known", Ink.KNOWN),

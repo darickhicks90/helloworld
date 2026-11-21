@@ -96,10 +96,10 @@ class Pad(val ctx: Context, val box: LinearLayout) {
             if (isTarget) background = GradientDrawable().apply { cornerRadius = ctx.dp(8f); setColor(0x33C2255C) }
             else if (value.isNotEmpty()) background = GradientDrawable().apply { cornerRadius = ctx.dp(8f); setColor(0x2214864F) }
         }
-        row.addView(TextView(ctx).apply { text = name; setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f); typeface = Ink.serifBold; setTextColor(Ink.TEXT) },
-            LinearLayout.LayoutParams(ctx.dp(74), ViewGroup.LayoutParams.WRAP_CONTENT))
-        row.addView(TextView(ctx).apply { text = desc; setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f); setTextColor(Ink.MUTED); maxLines = 2 },
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        val label = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+        label.addView(TextView(ctx).apply { text = name; setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f); typeface = Ink.serifBold; setTextColor(Ink.TEXT); maxLines = 1 })
+        label.addView(TextView(ctx).apply { text = desc; setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f); setTextColor(Ink.MUTED); maxLines = 2 })
+        row.addView(label, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         val et = EditText(ctx).apply {
             setText(value)
             hint = if (isTarget) "find" else "—"
@@ -189,7 +189,8 @@ class FlowRow(ctx: Context) : ViewGroup(ctx) {
         var x = 0; var y = 0; var rowH = 0
         for (i in 0 until childCount) {
             val c = getChildAt(i)
-            c.measure(MeasureSpec.makeMeasureSpec(maxW, MeasureSpec.AT_MOST), MeasureSpec.UNSPECIFIED)
+            val lpw = c.layoutParams?.width ?: ViewGroup.LayoutParams.WRAP_CONTENT
+            c.measure(if (lpw > 0) MeasureSpec.makeMeasureSpec(lpw, MeasureSpec.EXACTLY) else MeasureSpec.makeMeasureSpec(maxW, MeasureSpec.AT_MOST), MeasureSpec.UNSPECIFIED)
             if (x > 0 && x + c.measuredWidth > maxW) { x = 0; y += rowH + gap; rowH = 0 }
             x += c.measuredWidth + gap
             rowH = kotlin.math.max(rowH, c.measuredHeight)

@@ -176,13 +176,16 @@ class ToolToken(ctx: Context, val tool: String, val icon: String, val caption: S
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
     private val tp = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
 
+    private val compact get() = resources.configuration.screenHeightDp < 480
+
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        setMeasuredDimension(dp(64), dp(60))
+        setMeasuredDimension(dp(64), dp(if (compact) 50 else 60))
     }
 
     override fun onDraw(canvas: Canvas) {
         val d = resources.displayMetrics.density
-        val cx = width / 2f; val cy = 23 * d; val r = 19 * d
+        val r = (if (compact) 16 else 19) * d
+        val cx = width / 2f; val cy = r + 4 * d
         p.color = 0x55000000
         canvas.drawCircle(cx + 1.5f * d, cy + 2.5f * d, r, p)
         p.shader = RadialGradient(cx - r / 3, cy - r / 3, r * 1.4f, if (active) intArrayOf(0xFFFFFDF2.toInt(), 0xFFF1E6C8.toInt()) else intArrayOf(0xFFE9D3AE.toInt(), 0xFFC9A877.toInt()), null, Shader.TileMode.CLAMP)
@@ -193,14 +196,24 @@ class ToolToken(ctx: Context, val tool: String, val icon: String, val caption: S
             canvas.drawCircle(cx, cy, r + 1.5f * d, p)
             p.style = Paint.Style.FILL
         }
-        tp.color = tint
-        tp.textSize = 17 * d
-        tp.typeface = Ink.serifBold
-        val fm = tp.fontMetrics
-        canvas.drawText(icon, cx, cy - (fm.ascent + fm.descent) / 2, tp)
+        if (tool == "erase") {
+            // a pink rubber eraser with a blue sleeve
+            canvas.save(); canvas.rotate(-30f, cx, cy)
+            p.color = 0xFFF28BA8.toInt(); canvas.drawRoundRect(cx - 11 * d, cy - 6 * d, cx + 2 * d, cy + 6 * d, 2 * d, 2 * d, p)
+            p.color = 0xFF3F6FB5.toInt(); canvas.drawRoundRect(cx + 1 * d, cy - 6 * d, cx + 11 * d, cy + 6 * d, 2 * d, 2 * d, p)
+            canvas.restore()
+        } else {
+            tp.color = tint
+            tp.textSize = (if (icon.length > 1) 15 else 20) * d
+            tp.typeface = Ink.serifBold
+            tp.isFakeBoldText = true
+            val fm = tp.fontMetrics
+            canvas.drawText(icon, cx, cy - (fm.ascent + fm.descent) / 2, tp)
+            tp.isFakeBoldText = false
+        }
         tp.color = 0xEEFFF6E4.toInt()
         tp.textSize = 11 * d
         tp.typeface = Typeface.DEFAULT_BOLD
-        canvas.drawText(caption, cx, 56 * d, tp)
+        canvas.drawText(caption, cx, cy + r + 13 * d, tp)
     }
 }

@@ -40,7 +40,8 @@ class TeachMode(app: MainActivity) : Mode(app) {
         val row = LinearLayout(app).apply { orientation = LinearLayout.HORIZONTAL; setPadding(app.dp(24), app.dp(34), app.dp(20), app.dp(20)) }
         val left = LinearLayout(app).apply { orientation = LinearLayout.VERTICAL }
         left.addView(TextView(app).apply { text = "Write ONE symbol here:"; typeface = Ink.handBold; setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f); setTextColor(Ink.TEXT) })
-        left.addView(teachPad, LinearLayout.LayoutParams(app.dp(230), app.dp(230)).apply { topMargin = app.dp(6) })
+        val side = if (app.resources.configuration.screenHeightDp < 480) 180 else 230
+        left.addView(teachPad, LinearLayout.LayoutParams(app.dp(side), app.dp(side)).apply { topMargin = app.dp(6) })
         row.addView(left)
         val right = LinearLayout(app).apply { orientation = LinearLayout.VERTICAL; setPadding(app.dp(20), 0, 0, 0) }
         val pad = Pad(app, right)

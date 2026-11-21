@@ -18,7 +18,7 @@ import kotlin.math.max
 class EquationsMode(app: MainActivity) : DrawingMode(app) {
     override val id = "eq"
     override val title = "Equations"
-    override val padTitle = "WHAT I READ · ANSWER"
+    override val padTitle = "NOTEPAD"
     override val tools = listOf(
         ToolSpec("pen", "✎", "Write", Ink.PENCIL),
         ToolSpec("select", "◯", "Circle", Ink.SELECT)) + editTools()

@@ -43,7 +43,6 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        immersive()
         val d = resources.displayMetrics.density
 
         val root = FrameLayout(this).apply { background = DeskDrawable(d) }
@@ -78,10 +77,12 @@ class MainActivity : Activity() {
         val padBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(32), dp(6), dp(12), dp(20)) }
         val padScroll = ScrollView(this).apply { addView(padBox) }
         padCol.addView(padScroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-        row.addView(padCol, LinearLayout.LayoutParams(dp(300), ViewGroup.LayoutParams.MATCH_PARENT).apply { leftMargin = dp(12); topMargin = dp(10) })
+        val padW = minOf(300, (resources.configuration.screenWidthDp * 0.31).toInt()).coerceAtLeast(220)
+        row.addView(padCol, LinearLayout.LayoutParams(dp(padW), ViewGroup.LayoutParams.MATCH_PARENT).apply { leftMargin = dp(12); topMargin = dp(10) })
         pad = Pad(this, padBox)
 
         setContentView(root)
+        immersive()
 
         loadSamples()
         modes = listOf(EquationsMode(this), ShapesMode(this), CircuitsMode(this), FormulasMode(this), TeachMode(this))

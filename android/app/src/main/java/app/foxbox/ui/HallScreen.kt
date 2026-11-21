@@ -1590,7 +1590,7 @@ class HallScreen(c: Context) : PixelView(c) {
             override fun buzz() { performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP) }
             override val power get() = powerK
             override fun backdrop(time: Float) { drawRoom(time); room.props.forEach { drawProp(it, time) } }
-        }, queen = her, handX = 0.877f, handY = 0.05f)
+        }, queen = her, handX = 0.70f, handY = 0.28f)
         sfx.play(HallSfx.S.DUEL); sfx.rumbleBig()
     }
 

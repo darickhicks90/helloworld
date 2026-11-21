@@ -71,6 +71,7 @@ internal class HallRoomArt {
     private fun bake(s: Spec) {
         if (s.kind == FOREST) { forest(s); return }
         if (s.kind == 7) { glasshouse(s); return }
+        if (s.kind == 8) { hallway(s); return }
         val crypt = s.kind == 5
         floor(s, crypt)
         when (s.kind) { 0 -> carpet(104, 86, 136, H, 0xFF9A2434.toInt(), 0xFF6E1626.toInt()); 4 -> carpet(104, 31, 136, H - 3, 0xFF2E4A8C.toInt(), 0xFF1E3366.toInt()); 3 -> rug(104, 128, 158, 166) }
@@ -103,6 +104,30 @@ internal class HallRoomArt {
         for (k in 0 until 3) box(72, k, 168, k + 1, intArrayOf(0x18000000, 0x10000000, 0x08000000)[k])
     }
 
+    /** The long hallway: a narrow way between panelled walls hung with portraits, a runner down its length. */
+    private fun hallway(s: Spec) {
+        val pan = 0xFF4A2E22.toInt(); val panD = 0xFF2E1C14.toInt(); val panL = 0xFF6A4632.toInt()
+        // the walls above and below the way, panelled
+        for ((t0, t1) in listOf(0 to 72, 128 to H)) {
+            box(0, t0, W, t1, pan)
+            var x = 2; while (x < W) { box(x, t0 + 4, x + 26, t1 - 4, panD); box(x + 1, t0 + 5, x + 25, t1 - 5, pan); box(x + 1, t0 + 5, x + 25, t0 + 6, panL); x += 30 }
+        }
+        box(0, 70, W, 72, 0xFF1A100C.toInt()); box(0, 128, W, 130, 0xFF8A6A50.toInt())
+        // the floor: dark boards and a long red runner
+        box(0, 72, W, 128, 0xFF5A3A28.toInt())
+        for (y in 74 until 128 step 6) box(0, y, W, y + 1, 0xFF46301E.toInt())
+        box(0, 88, W, 112, 0xFF6E1626.toInt()); box(0, 90, W, 110, 0xFF9A2434.toInt()); box(0, 88, W, 89, GOLD_D); box(0, 111, W, 112, GOLD_D)
+        for (x in 6 until W step 18) { box(x, 99, x + 4, 101, GOLD_D) }
+        // portraits and sconces along the upper wall
+        for (k in 0 until 4) {
+            val x = 18 + k * 60
+            box(x - 1, 20, x + 25, 54, GOLD_D); box(x, 21, x + 24, 53, GOLD); box(x + 2, 23, x + 22, 51, listOf(0xFF2A3A4A.toInt(), 0xFF3A2A3A.toInt(), 0xFF2A3A2A.toInt(), 0xFF4A3A2A.toInt())[k])
+            p.color = 0xFFD8C0A0.toInt(); c.drawCircle(x + 12f, 33f, 5f, p); box(x + 7, 38, x + 17, 51, listOf(0xFF6A2A2A.toInt(), 0xFF2A4A6A.toInt(), 0xFF3A5A2A.toInt(), 0xFF5A4A2A.toInt())[k])
+            box(x + 38, 40, x + 42, 46, 0xFF8A8478.toInt())
+        }
+        for (k in 0 until 5) box(0, 72 + k, W, 73 + k, intArrayOf(0x40000000, 0x30000000, 0x20000000, 0x12000000, 0x08000000)[k])
+    }
+
     /**
      * A Victorian glasshouse: a black-and-white tiled floor, a wall of iron-framed glass with the
      * sky behind it, arched panes, ferns hanging from the cross-bars, palms in tubs.
@@ -133,6 +158,7 @@ internal class HallRoomArt {
             box(x - 3, 18, x + 4, 21, 0xFF6A4A2A.toInt())
             for (y in 21 until 21 + len) { px(x - 2 + (y % 3), y, if (y % 2 == 0) LEAF_D else 0xFF4E8A34.toInt()); px(x + 2 - (y % 3), y, 0xFF6AA848.toInt()) } }
         sides(s, false); ambient(s)
+        if (s.hallOpen?.get(2) == true) archway(s, false)
         for (w in s.pools) pool(w, 2)
         for ((k, f) in s.props) shadow(k, f)
         // palms in tubs along the walls
@@ -491,6 +517,7 @@ internal class HallRoomArt {
             glow.color = 0xFFF8B030.toInt(); cv.drawRect(x - 0.5f - (if (f == 1) 0.5f else 0f), y - 8f - f * 0.5f, x + 0.5f, y - 5f, glow)
             glow.color = 0xFFFFF4C0.toInt(); cv.drawRect(x - 0.5f, y - 6f, x + 0.5f, y - 5f, glow)
         }
+        if (s.kind == 8) for (k in 0 until 4) flame(cv, 18 + k * 60 + 40f, 39f, time, k)
         if (s.kind == 7) for (k in 0 until 6) {
             val x0 = 20f + k * 40f; val a = (0x14 + (6 * sin(time * 0.6f + k)).toInt()).coerceIn(4, 40)
             glow.color = (a shl 24) or 0xFFF8E0; for (y in 31 until 150 step 2) cv.drawRect(x0 + (y - 31) / 3f, y.toFloat(), x0 + (y - 31) / 3f + 12f, y + 1f, glow)

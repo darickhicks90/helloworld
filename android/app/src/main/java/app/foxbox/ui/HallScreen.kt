@@ -68,15 +68,15 @@ class HallScreen(c: Context) : PixelView(c) {
         val SPIRIT_FIRST = listOf(
             "...AH. THE ONE WHO TOOK HIS EYES OFF ME.",
             "HE KEPT ME IN THIS BASIN FOR A HUNDRED WINTERS. DRINK, AND BE WHOLE.",
-            "THERE IS A TUNNEL IN THE EAST WALL. I HAVE OPENED IT. FOLLOW IT.",
-            "AT ITS END, AMONG THE GLASS AND THE FLOWERS, SHE IS WAITING.",
+            "THE DOOR IN THE EAST GALLERY: I HAVE UNLOCKED IT. FOLLOW THE HALLWAY BEYOND.",
+            "AT ITS END, IN THE GREAT GLASSHOUSE, AMONG THE FLOWERS, SHE IS WAITING.",
         )
         val SPIRIT_AGAIN = listOf(
             "THE WATER HEALS YOU. COME BACK WHENEVER YOU LIKE.",
             "LISTEN... THE IMPS ARE STILL OUT THERE. THEY MISS HIM. I DO NOT.",
             "TRACE YOUR RUNES SLOWLY. WATER IS PATIENT; SO SHOULD YOU BE.",
             "HIS AXE SUITS YOU. IT NEVER SUITED HIM.",
-            "THE TUNNEL, IN THE EAST WALL. SHE IS WAITING.",
+            "THE DOOR IN THE EAST GALLERY. THE HALLWAY. SHE IS WAITING.",
         )
         val MUTTER = listOf("#@%&!", "\$%@#!", "&*#@!!", "@#\$%...", "HMPH.")
         val MUTTER2 = listOf("HUSH.", "BLOOM...", "TSK.", "GROW.", "DEAR ME.")
@@ -190,31 +190,37 @@ class HallScreen(c: Context) : PixelView(c) {
     private val rooms = mapOf(
         0 to Room("ARMORY", 4, "S", listOf(pr(STATUE, 40, 64, 56, 74), pr(STATUE, 76, 64, 92, 74), pr(STATUE, 148, 64, 164, 74), pr(STATUE, 184, 64, 200, 74),
             pr(BRAZIER, 60, 140, 72, 148), pr(BRAZIER, 168, 140, 180, 148), pr(ROCK, 100, 150, 114, 158)), listOf(pool(104, 96, 136, 116))),
-        2 to Room("THE GLASSHOUSE", 7, "", listOf(pr(FOUNTAIN, 100, 112, 140, 130), pr(TABLE, 26, 70, 66, 76), pr(TABLE, 174, 70, 214, 76), pr(TABLE, 26, 140, 66, 146), pr(TABLE, 174, 140, 214, 146),
-            pr(SHRUB, 80, 150, 96, 158), pr(SHRUB, 144, 150, 160, 158)), listOf(pool(30, 104, 58, 120), pool(182, 104, 210, 120))),
+        2 to Room("CHAPEL", 2, "S", listOf(pr(FOUNTAIN, 100, 70, 140, 88), pr(TOMB, 52, 132, 84, 142), pr(TOMB, 156, 132, 188, 142)), listOf(pool(28, 100, 60, 120), pool(180, 100, 212, 120))),
         1 to Room("TREASURY", 6, "S", listOf(pr(PILLAR, 44, 72, 60, 80), pr(PILLAR, 180, 72, 196, 80)), listOf(pool(160, 116, 200, 132))),
-        3 to Room("WEST GALLERY", 1, "NES",
+        7 to Room("WEST GALLERY", 1, "NES",
             listOf(pr(STATUE, 36, 60, 52, 70), pr(STATUE, 84, 60, 100, 70), pr(STATUE, 140, 60, 156, 70), pr(STATUE, 188, 60, 204, 70),
                 pr(SHRUB, 40, 132, 56, 140), pr(SHRUB, 184, 132, 200, 140), pr(ROCK, 60, 152, 74, 160)),
             listOf(pool(92, 96, 148, 120))),
-        4 to Room("THRONE ROOM", 0, "WES",
-            listOf(pr(PILLAR, 44, 72, 60, 80), pr(PILLAR, 180, 72, 196, 80), pr(PILLAR, 44, 150, 60, 158), pr(PILLAR, 180, 150, 196, 158),
-                pr(ROCK, 74, 146, 88, 154), pr(ROCK, 152, 146, 166, 154)),
-            listOf(pool(70, 112, 98, 128), pool(142, 112, 170, 128))),
-        5 to Room("EAST GALLERY", 2, "WS",
+        8 to Room("THRONE ROOM", 0, "WES", listOf(pr(PILLAR, 44, 150, 60, 158), pr(PILLAR, 180, 150, 196, 158)), emptyList()),
+        9 to Room("EAST GALLERY", 2, "NWS",
             listOf(pr(FOUNTAIN, 100, 72, 140, 90), pr(SHRUB, 56, 56, 72, 64), pr(SHRUB, 168, 56, 184, 64), pr(ROCK, 150, 152, 164, 160), pr(ROCK, 70, 100, 84, 108)),
             listOf(pool(36, 124, 68, 144), pool(172, 124, 204, 144))),
-        6 to Room("LIBRARY", 3, "EN",
+        14 to Room("LIBRARY", 3, "EN",
             listOf(pr(TABLE, 36, 76, 76, 82), pr(TABLE, 164, 76, 204, 82), pr(TABLE, 36, 136, 76, 142), pr(TABLE, 164, 136, 204, 142),
                 pr(ROCK, 86, 150, 100, 158), pr(SHRUB, 190, 100, 204, 108)),
             listOf(pool(100, 104, 140, 120))),
-        7 to Room("ENTRY HALL", 4, "WEN",
+        15 to Room("ENTRY HALL", 4, "WEN",
             listOf(pr(BRAZIER, 60, 52, 72, 60), pr(BRAZIER, 168, 52, 180, 60), pr(BRAZIER, 60, 152, 72, 160), pr(BRAZIER, 168, 152, 180, 160),
                 pr(SHRUB, 82, 96, 98, 104), pr(SHRUB, 142, 96, 158, 104)),
             listOf(pool(36, 128, 60, 148), pool(180, 128, 204, 148))),
-        8 to Room("CRYPT", 5, "WN",
+        16 to Room("CRYPT", 5, "WN",
             listOf(pr(TOMB, 48, 62, 80, 72), pr(TOMB, 160, 62, 192, 72), pr(TOMB, 48, 142, 80, 152), pr(TOMB, 160, 142, 192, 152), pr(ROCK, 90, 150, 104, 158)),
             listOf(pool(104, 100, 136, 124))),
+        10 to Room("THE LONG HALLWAY", 8, "", emptyList(), emptyList()),
+        4 to Room("THE GLASSHOUSE", 7, "ES", listOf(pr(FOUNTAIN, 100, 90, 140, 108), pr(TABLE, 30, 140, 70, 146), pr(TABLE, 170, 140, 210, 146)), listOf(pool(40, 80, 70, 96))),
+        5 to Room("THE GLASSHOUSE", 7, "WES", listOf(pr(TABLE, 30, 70, 70, 76), pr(TABLE, 170, 70, 210, 76), pr(TABLE, 30, 140, 70, 146), pr(TABLE, 170, 140, 210, 146)), emptyList()),
+        6 to Room("THE GLASSHOUSE", 7, "WS", listOf(pr(FOUNTAIN, 100, 90, 140, 108), pr(TABLE, 30, 140, 70, 146)), listOf(pool(170, 80, 200, 96))),
+        11 to Room("THE GLASSHOUSE", 7, "NES", listOf(pr(TABLE, 30, 50, 70, 56), pr(TABLE, 170, 150, 210, 156)), listOf(pool(160, 60, 200, 76))),
+        12 to Room("THE GLASSHOUSE: HER BOWER", 7, "NWES", listOf(pr(TABLE, 40, 140, 80, 146), pr(TABLE, 160, 140, 200, 146)), emptyList()),
+        13 to Room("THE GLASSHOUSE", 7, "NWS", listOf(pr(FOUNTAIN, 100, 112, 140, 130), pr(TABLE, 30, 50, 70, 56)), listOf(pool(180, 60, 210, 76))),
+        18 to Room("THE GLASSHOUSE", 7, "NE", listOf(pr(TABLE, 30, 70, 70, 76), pr(FOUNTAIN, 100, 110, 140, 128)), listOf(pool(170, 120, 200, 136))),
+        19 to Room("THE GLASSHOUSE", 7, "WEN", listOf(pr(TABLE, 30, 140, 70, 146), pr(TABLE, 170, 140, 210, 146)), listOf(pool(100, 120, 140, 136))),
+        20 to Room("THE GLASSHOUSE", 7, "WN", listOf(pr(FOUNTAIN, 100, 90, 140, 108)), listOf(pool(40, 130, 70, 146))),
     )
     private var rx = 1; private var ry = 0
     /** The Wildwood, while you're in it: the level's layout, and its screens as rooms. */
@@ -229,23 +235,26 @@ class HallScreen(c: Context) : PixelView(c) {
      * arches between rooms that join, solid walls where they don't, and the treasury behind the
      * throne room's back wall (until it cracks). [zone] is the room you're standing in.
      */
-    private val zone get() = (ry + 1) * 3 + rx
+    /** The hall's map is seven rooms wide: the hall (3), the long hallway, the glasshouse (3). */
+    private val HC = 7
+    private val zone get() = (ry + 1) * HC + rx
     private val zoneRoom get() = rooms.getValue(zone)
-    private fun zoneOX(z: Int) = (z % 3) * 240f
-    private fun zoneOY(z: Int) = (z / 3) * 176f
+    private fun zoneOX(z: Int) = (z % HC) * 240f
+    private fun zoneOY(z: Int) = (z / HC) * 176f
     /** The boss's room's corner: the throne room (him), the glasshouse (her). */
-    private val TX get() = if (chapter == 2) 480f else 240f
-    private val TY get() = if (chapter == 2) 0f else 176f
-    private val bossZone get() = if (chapter == 2) 2 else 4
+    private val TX get() = if (chapter == 2) 1200f else 240f
+    private val TY get() = 176f
+    private val bossZone get() = if (chapter == 2) 12 else 8
     /** The tunnel from the treasury to the glasshouse: opened when the spirit tells you of it. */
     private var tunnelOpen = false
     private val tunnelPassable get() = tunnelOpen || chapter == 2
     private fun joined(a: Int, b: Int): Boolean {
         if (a == 1 || b == 1) return false
         val ra = rooms[a] ?: return false
-        return when (b - a) { 1 -> a % 3 != 2 && 'E' in ra.doors; -1 -> a % 3 != 0 && 'W' in ra.doors; 3 -> 'S' in ra.doors; -3 -> 'N' in ra.doors; else -> false }
+        if (a == 10 || b == 10) return false
+        return when (b - a) { 1 -> a % HC != HC - 1 && 'E' in ra.doors; -1 -> a % HC != 0 && 'W' in ra.doors; HC -> 'S' in ra.doors; -HC -> 'N' in ra.doors; else -> false }
     }
-    private fun hallOpenSides(z: Int) = booleanArrayOf(z % 3 != 0 && joined(z, z - 1), z % 3 != 2 && joined(z, z + 1), z >= 3 && joined(z, z - 3), z < 6 && joined(z, z + 3))
+    private fun hallOpenSides(z: Int) = booleanArrayOf(z % HC != 0 && joined(z, z - 1), z % HC != HC - 1 && joined(z, z + 1), z >= HC && joined(z, z - HC), z < 2 * HC && joined(z, z + HC))
     private val hallRoom: Room by lazy {
         val props = ArrayList<Prop>(); val pools = ArrayList<RectF>()
         for ((z, r) in rooms) {
@@ -261,19 +270,21 @@ class HallScreen(c: Context) : PixelView(c) {
         for (z in rooms.keys) {
             val ox = zoneOX(z); val oy = zoneOY(z); val o = hallOpenSides(z)
             when {
-                z == 4 -> { out += RectF(ox, oy, ox + 104, oy + 31); out += RectF(ox + 136, oy, ox + 240, oy + 31) }
+                z == 10 -> { out += RectF(ox, oy, ox + 240, oy + 72); out += RectF(ox, oy + 128, ox + 240, oy + 176); continue }
+                z == 8 -> { out += RectF(ox, oy, ox + 104, oy + 31); out += RectF(ox + 136, oy, ox + 240, oy + 31) }
                 o[2] -> { out += RectF(ox, oy, ox + 72, oy + 31); out += RectF(ox + 168, oy, ox + 240, oy + 31) }
                 else -> out += RectF(ox, oy, ox + 240, oy + 31)
             }
-            if (!o[0]) { if (z == 2) { out += RectF(ox, oy, ox + 8, oy + 66); out += RectF(ox, oy + 120, ox + 8, oy + 176) } else out += RectF(ox, oy, ox + 4, oy + 176) }
-            if (!o[1]) { if (z == 1) { out += RectF(ox + 232, oy, ox + 240, oy + 66); out += RectF(ox + 232, oy + 120, ox + 240, oy + 176) } else out += RectF(ox + 236, oy, ox + 240, oy + 176) }
+            // the east gallery's door and the glasshouse's way in: gaps where the long hallway meets them
+            if (!o[0]) { if (z == 11) { out += RectF(ox, oy, ox + 6, oy + 72); out += RectF(ox, oy + 128, ox + 6, oy + 176) } else out += RectF(ox, oy, ox + 4, oy + 176) }
+            if (!o[1]) { if (z == 9) { out += RectF(ox + 232, oy, ox + 240, oy + 72); out += RectF(ox + 232, oy + 128, ox + 240, oy + 176) } else out += RectF(ox + 236, oy, ox + 240, oy + 176) }
         }
         out
     }
     /** The throne room's back wall where it cracks through to the treasury. */
     private val crackWall = RectF(240f + 104, 176f, 240f + 136, 176f + 31)
     /** The tunnel's mouth in the wall between treasury and glasshouse. */
-    private val tunnelWall = RectF(472f, 66f, 488f, 120f)
+    private val tunnelWall = RectF(712f, 248f, 728f, 304f)
     private val crackPassable get() = crackOpen && (phase == Phase.WON || chapter == 2)
     private var openRoom = Room("", 10, "WENS", emptyList(), emptyList())
     /** The world's size (the hall: one screen), the camera, and where new foes may appear. */
@@ -377,7 +388,7 @@ class HallScreen(c: Context) : PixelView(c) {
     }
     private val npcs = ArrayList<Npc>()
     private var offered: Npc? = null; private var offerT = 0f
-    private val throne get() = wild == null && zone == 4
+    private val throne get() = wild == null && zone == 8
     private var bannerT = 0f
 
     private enum class Phase { INTRO, FIGHT, WON, LOST }
@@ -1107,7 +1118,7 @@ class HallScreen(c: Context) : PixelView(c) {
         if (!tunnelPassable && r > tunnelWall.left && l < tunnelWall.right && b > tunnelWall.top && t < tunnelWall.bottom) return true
         if (!crackPassable && r > crackWall.left && l < crackWall.right && b > crackWall.top && t < crackWall.bottom) return true
         // the empty corners of the grid (if any): solid
-        if (rooms[((((t + b) / 2) / 176f).toInt().coerceIn(0, 2)) * 3 + (((l + r) / 2) / 240f).toInt().coerceIn(0, 2)] == null) return true
+        if (rooms[((((t + b) / 2) / 176f).toInt().coerceIn(0, 2)) * HC + (((l + r) / 2) / 240f).toInt().coerceIn(0, HC - 1)] == null) return true
         for (pp in room.props) { if (pp.kind == SHRUB) continue; val f = pp.foot; if (r > f.left && l < f.right && t < f.bottom && b > f.top) return true }
         if (walk) for (w in room.pools) if (r > w.left + 2 && l < w.right - 2 && t < w.bottom - 2 && b > w.top + 2) return true
         return false
@@ -1874,10 +1885,10 @@ class HallScreen(c: Context) : PixelView(c) {
     private fun enterZone(nx: Int, ny: Int) {
         rx = nx; ry = ny; bannerT = 1.8f
         val z = zone
-        if (z == 2 && chapter == 1 && phase == Phase.WON && tunnelOpen) { beginChapter2(); return }
+        if (z == 12 && chapter == 1 && phase == Phase.WON && tunnelOpen) { beginChapter2(); return }
         spL = zoneOX(z); spT = zoneOY(z); spR = spL + 240f; spB = spT + 176f
         if (!visited.add(z)) return
-        if (z == 1 || z == 4 || phase != Phase.FIGHT) return
+        if (z == 1 || z == 8 || z == 12 || z == 10 || phase != Phase.FIGHT) return
         if (minions.count { !it.ally && hypot(it.x - (hx + 8), it.y - (hy + 13)) < 200f } < 2) repeat(1 + rnd.nextInt(2)) { val r = rnd.nextFloat(); spawnMinion(null, if (r < 0.25f) 1 else if (r < 0.47f) 3 else 0) }
         if (!bossHere || stage != Stage.CHASE) if (minions.none { it.kind == 2 && !it.ally } && rnd.nextFloat() < 0.07f) spawnBehemoth()
     }
@@ -2022,7 +2033,7 @@ class HallScreen(c: Context) : PixelView(c) {
     /** A fresh match: from the first foe, or (a retry after she beat you) straight back into her fight. */
     private fun restart(ch: Int = 1) {
         wild = null; depth = 0; beast = null; wash = null; rx = 1; ry = 1
-        WW = 720f; WH = 528f; topY = 32f; gates.clear(); chunkArt.clear()
+        WW = 1680f; WH = 528f; topY = 32f; gates.clear(); chunkArt.clear()
         spL = 240f; spT = 352f; spR = 480f; spB = 528f; visited.clear()
         hp = maxHp; invulnT = 0f; paraT = 0f; poisonT = 0f; invertT = 0f
         perishT = 0f; bossGone = false; spiritGift = false; spiritTalks = 0; tunnelOpen = false
@@ -2505,7 +2516,7 @@ class HallScreen(c: Context) : PixelView(c) {
             val cx = ((hx + 8) / 240f).toInt().coerceIn(0, wl.w - 1); val cy = ((hy + 12) / 176f).toInt().coerceIn(0, wl.h - 1)
             if (cx != rx || cy != ry) enterStretch(cx, cy)
         } else {
-            val cx = ((hx + 8) / 240f).toInt().coerceIn(0, 2); val cy = ((hy + 12) / 176f).toInt().coerceIn(0, 2)
+            val cx = ((hx + 8) / 240f).toInt().coerceIn(0, HC - 1); val cy = ((hy + 12) / 176f).toInt().coerceIn(0, 2)
             if (cx != rx || cy - 1 != ry) enterZone(cx, cy - 1)
             // walking up through the open garden door: out into the wood
             if (phase == Phase.WON && chapter == 2 && bossGone && nearGlassDoor() && dirY < 0 && hy + 12 < 46f) { forestOpen = true; sfx.play(HallSfx.S.DOOR_OPEN, 0.7f); startWild(1); return }
@@ -2536,7 +2547,7 @@ class HallScreen(c: Context) : PixelView(c) {
             camX += (tx - camX) * minOf(1f, dt * 10f); camY += (ty - camY) * minOf(1f, dt * 10f)
         }
         updateFriend(dt)
-        if (chapter == 2 && phase == Phase.INTRO && zone == 2 && !talking && talkLines !== RANT2) { talking = true; talkLines = RANT2; line = 0; shown = 0f; sfx.play(HallSfx.S.BOSS_RUNE) }
+        if (chapter == 2 && phase == Phase.INTRO && zone == 12 && !talking && talkLines !== RANT2) { talking = true; talkLines = RANT2; line = 0; shown = 0f; sfx.play(HallSfx.S.BOSS_RUNE) }
         if (phase != Phase.FIGHT || talking) return
         invulnT -= dt; paraT -= dt; invertT -= dt
         if (poisonT > 0f) { poisonT -= dt; poisonTick -= dt; if (poisonTick <= 0f) { poisonTick = 1.5f; invulnT = 0f; hurt(8) } }
@@ -3063,10 +3074,10 @@ class HallScreen(c: Context) : PixelView(c) {
         for ((z, r) in rooms) {
             val ox = zoneOX(z); val oy = zoneOY(z)
             if (ox > camX + W || ox + 240f < camX || oy > camY + H || oy + 176f < camY) continue
-            val crack = if (z != 4 || !crackOpen) 0 else if (phase == Phase.WON || chapter == 2) 2 else 1
+            val crack = if (z != 8 || !crackOpen) 0 else if (phase == Phase.WON || chapter == 2) 2 else 1
             val a = hallArt[z]
             val bg = a.background(z * 16 + crack * 4) {
-                HallRoomArt.Spec(z, r.kind, booleanArrayOf(false, false, false, false), z == 4, r.props.map { it.kind to it.foot }, r.pools, crack, daisLocal, hallOpen = hallOpenSides(z))
+                HallRoomArt.Spec(z, r.kind, booleanArrayOf(false, false, false, false), z == 8, r.props.map { it.kind to it.foot }, r.pools, crack, daisLocal, hallOpen = hallOpenSides(z))
             }
             sc.save(); sc.translate(ox, oy)
             sc.drawBitmap(bg, 0f, 0f, bmpP); a.overlay(sc, time)
@@ -3097,20 +3108,23 @@ class HallScreen(c: Context) : PixelView(c) {
         box(cx - 1, t - 3, cx + 1, t, GOLD)
         if (!open) box(cx - 1, t + 16, cx + 1, t + 19, GOLD_D)
     }
-    private val hallArt = Array(9) { HallRoomArt() }
-    /** The tunnel between treasury and glasshouse: shut (a cracked stone plug), or a dark arched passage. */
+    private val hallArt = Array(21) { HallRoomArt() }
+    /** The door at the end of the east gallery, into the long hallway: shut and barred, then standing open. */
     private fun drawTunnel(time: Float) {
         if (wild != null) return
-        val l = 470f; val t = 62f; val r = 490f; val b = 122f
+        val l = 712f; val t = 244f; val r = 728f; val b = 304f
+        val wood = 0xFF7A4A28.toInt(); val woodD = 0xFF4A2C16.toInt(); val iron = 0xFF3A3A48.toInt()
+        box(l - 2, t - 6, r + 2, b, 0xFF8E8878.toInt()); box(l - 2, t - 6, r + 2, t - 4, 0xFFDCD6C6.toInt())
+        // where the hallway opens into the glasshouse
+        box(958f, 248f, 966f, 304f, 0xFF5A3A28.toInt()); box(958f, 260f, 966f, 284f, 0xFF9A2434.toInt())
         if (!tunnelPassable) {
-            box(l + 2, t + 4, r - 2, b, 0xFF8E8878.toInt()); for (k in 0 until 6) box(l + 3, t + 8 + k * 9f, r - 3, t + 9 + k * 9f, 0xFF5A544A.toInt())
+            box(l, t, r, b, woodD); var y = t + 1; while (y < b) { box(l + 1, y, r - 1, y + 5, wood); y += 6 }
+            box(l, t + 12, r, t + 14, iron); box(l, b - 14, r, b - 12, iron); box(r - 5, t + 28, r - 3, t + 32, GOLD_D)
             return
         }
-        box(l, t, r, b, INK); box(l + 1, t + 1, r - 1, b, 0xFF1A1620.toInt())
-        for (k in 0 until 4) box(l + 3, t + 10 + k * 13f, r - 3, t + 11 + k * 13f, 0xFF2A2430.toInt())
-        // a lantern either end, flickering
-        for (lx in floatArrayOf(l - 4, r + 1)) { val f = 0.7f + 0.3f * sin(time * 9f + lx); p.color = ((0x40 * f).toInt() shl 24) or 0xFFC060; sc.drawCircle(lx + 1.5f, t + 4, 8f, p); box(lx, t + 1, lx + 3, t + 6, 0xFFFFD070.toInt()) }
-        box(l - 2, t - 3, r + 2, t, 0xFFB8B2A2.toInt()); box(l - 2, t - 3, r + 2, t - 2, 0xFFDCD6C6.toInt())
+        box(l, t, r, b, 0xFF5A3A28.toInt()); box(l, t + 16, r, t + 40, 0xFF9A2434.toInt())
+        box(l - 1, t, l + 1, b, woodD)      // the door swung back against the wall
+        for (lx in floatArrayOf(l - 6, r + 3)) { val f = 0.7f + 0.3f * sin(time * 9f + lx); p.color = ((0x40 * f).toInt() shl 24) or 0xFFC060; sc.drawCircle(lx + 1.5f, t + 2, 8f, p); box(lx, t - 1, lx + 3, t + 4, 0xFFFFD070.toInt()) }
     }
     /** The open wood: each stretch in view, baked once and kept (a few at a time); its gates and keys. */
     private fun drawOpenWood(time: Float) {
@@ -4954,7 +4968,7 @@ class HallScreen(c: Context) : PixelView(c) {
     }
     private fun nearChest() = false
     /** The glasshouse's garden door, in the middle of its glass wall: out into the wildwood. */
-    private val GDOOR_X = 480f + 120f
+    private val GDOOR_X = 5 * 240f + 120f
     private fun nearGlassDoor() = wild == null && abs(hx + 8 - GDOOR_X) < 22f && hy + 12 < 58f
 
     // =====================================================================================

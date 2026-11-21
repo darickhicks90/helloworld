@@ -3092,7 +3092,7 @@ class HallScreen(c: Context) : PixelView(c) {
                 box(f.left, b.top + 1, f.right, f.bottom, INK); box(f.left + 1, b.top + 2, f.right - 1, f.bottom - 1, hay)
                 for (k in 0 until 4) box(f.left + 1, b.top + 3 + k * 2f, f.right - 1, b.top + 4 + k * 2f, if (k % 2 == 0) hayD else hayL)
                 box(f.left + 3, b.top + 1, f.left + 4, f.bottom, 0xFF7A5232.toInt()); box(f.right - 4, b.top + 1, f.right - 3, f.bottom, 0xFF7A5232.toInt())
-                px(f.left.toInt() - 1, b.top.toInt() + 3, hayL); px(f.right.toInt(), b.top.toInt() + 6, hayL)
+                box(f.left - 1, b.top + 3, f.left, b.top + 4, hayL); box(f.right, b.top + 6, f.right + 1, b.top + 7, hayL)
             }
             LANTERN -> {
                 box(f.centerX() - 1, b.top + 2, f.centerX() + 1, f.bottom, 0xFF3A3038.toInt())
@@ -3163,7 +3163,7 @@ class HallScreen(c: Context) : PixelView(c) {
                 box(f.left, f.bottom - 8, f.right, f.bottom, INK); box(f.left + 1, f.bottom - 7, f.right - 1, f.bottom - 1, stoneD); box(f.left + 1, f.bottom - 7, f.right - 1, f.bottom - 6, stone)
                 box(cx - 5, top + 8, cx + 5, f.bottom - 8, INK); box(cx - 4, top + 9, cx + 4, f.bottom - 8, stone); box(cx - 4, top + 9, cx - 2, f.bottom - 8, stoneL)
                 for (k in 0 until 3) box(cx - 3 + k * 3f, top + 12, cx - 2 + k * 3f, f.bottom - 9, stoneD)
-                p.color = INK; sc.drawCircle(cx, top + 5, 4f, p); p.color = stone; sc.drawCircle(cx, top + 5, 3f, p); px(cx.toInt() - 1, top.toInt() + 4, stoneL)
+                p.color = INK; sc.drawCircle(cx, top + 5, 4f, p); p.color = stone; sc.drawCircle(cx, top + 5, 3f, p); box(cx - 1, top + 4, cx, top + 5, stoneL)
                 box(cx + 4, top - 2, cx + 6, top + 10, INK); box(cx + 4.5f, top - 1, cx + 5.5f, top + 9, stone)
                 box(cx - 5, top + 14, cx - 2, top + 16, 0xFF4E8A34.toInt())
             }

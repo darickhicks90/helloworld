@@ -37,6 +37,8 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
     /** The fort (no fighting), and the monsters in it: room, x, y, role, kind. */
     var fort = -1
     val npcs = ArrayList<IntArray>()
+    /** Fog banks: screens lying under fog (each bank two to four screens), where shades drift. */
+    val fog = HashSet<Int>()
 
     companion object {
         const val ROCK = 1; const val SHRUB = 2
@@ -118,6 +120,21 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
         for ((r, nm) in special) names[r] = nm
         names[start] = "THE WOOD'S EDGE"; names[exit] = if (bossLevel) "THE HEART OF THE WOOD" else "THE ROOT DOOR"
         if (fort >= 0) names[fort] = listOf("THE STOCKADE", "BRAMBLE FORT", "THE WARDEN'S CAMP", "MOSSWALL KEEP")[rnd.nextInt(4)]
+        // 7. fog banks, drawn last so the rest of the wood comes out the same
+        repeat(if (depth >= 2) 2 else 1) {
+            val no = HashSet<Int>().apply { add(start); add(exit); if (fort >= 0) add(fort); if (fort >= 0) for (d in 0 until 4) nb(fort, d).let { if (it >= 0) add(it) } }
+            val cands = (0 until n).filter { it !in no && it !in fog }
+            if (cands.isEmpty()) return@repeat
+            val bank = arrayListOf(cands[rnd.nextInt(cands.size)])
+            val size = 2 + rnd.nextInt(3)
+            var tries = 0
+            while (bank.size < size && tries++ < 30) {
+                val r = bank[rnd.nextInt(bank.size)]; val o = nb(r, rnd.nextInt(4))
+                if (o >= 0 && o !in no && o !in bank) bank += o
+            }
+            fog += bank
+            if (bank.size >= 2) for (r in bank) if (special[r] == null) names[r] = listOf("MISTY ", "FOGBOUND ", "MURKY ", "SHROUDED ")[rnd.nextInt(4)] + B[rnd.nextInt(B.size)]
+        }
     }
 
     /** The corridors from each open side to the middle, kept clear. */

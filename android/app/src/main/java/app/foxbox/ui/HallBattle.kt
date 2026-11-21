@@ -448,7 +448,7 @@ class HallBattle(
     }
 
     /** Crisp pixels, toned down a little to sit in the dimmed hall. */
-    private val hp = Paint().apply { isFilterBitmap = queen; isAntiAlias = false }
+    private val hp = Paint().apply { isFilterBitmap = false; isAntiAlias = false }
     private var feetCache: Pair<Int, Int>? = null
     /** Where his feet are in the picture (the left and right of the bottom rows). */
     private fun feet(b: Bitmap, r: Rect): Pair<Int, Int> = feetCache ?: run {

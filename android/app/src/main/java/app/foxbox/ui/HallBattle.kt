@@ -574,7 +574,7 @@ class HallBattle(
             val big = fx in FX_CLAW..FX_QUAKE && fxT < 0.5f
             val lunge = if (big) sin(Math.PI.toFloat() * (fxT / 0.5f)) else 0f
             val wind = if (st == St.ATTACK) 0.03f * sin(time * 18f) else 0f
-            val hTarget = (if (queen) 128f else 108f) * (1f + 0.12f * lunge + wind)
+            val hTarget = (if (queen) 132f else 124f) * (1f + 0.12f * lunge + wind)
             val sc = hTarget / s.height()
             val (fl, fr) = feet(bmp, s)
             // stood by his feet (not the picture's middle, which the axe pulls left), on the hall floor

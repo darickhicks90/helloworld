@@ -370,9 +370,9 @@ class HallScreen(c: Context) : PixelView(c) {
     private var phase = Phase.INTRO
 
     // the traveller
-    private var maxHp = BASE_HP
     /** Fragile: a few hits and you're done, so keep your distance and spark them from range. */
     private val BASE_HP = 60
+    private var maxHp = BASE_HP
     /** The traveller's finds, the duel when one is under way, and loot lying where an imp fell. */
     private val bag = Bag()
     private var battle: HallBattle? = null

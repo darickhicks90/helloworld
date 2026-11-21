@@ -113,6 +113,10 @@ class HallScreen(c: Context) : PixelView(c) {
     private val duelPose: Bitmap? = runCatching { c.assets.open("images/duel_stance.png").use { BitmapFactory.decodeStream(it) } }.getOrNull()
     private val duelRects: List<Rect> = duelPose?.let { listOf(Rect(0, 0, it.width, it.height)) } ?: emptyList()
     /** The second foe, the Blossom: her hall sheet (72 x 72 cells like his) and her duel pose. */
+    /** The wood's trees: sixteen painted variants, 40 x 56 each, roots on row 54 (oak, lime, twisted olive, spruce, fir, pine, autumn, birch, blossom). */
+    private val treeSheet: Bitmap? = runCatching { c.assets.open("images/wild_trees.png").use { BitmapFactory.decodeStream(it) } }.getOrNull()
+    /** Which variant a tree is, by where it stands: oaks, limes and conifers often; autumn, birch and blossom now and then. */
+    private val TREE_PICK = intArrayOf(0, 1, 2, 15, 0, 3, 4, 7, 8, 9, 10, 11, 5, 6, 1, 2, 9, 7, 12, 13, 14, 3, 10, 15)
     private val blossomSheet: Bitmap? = runCatching { c.assets.open("images/hall_blossom.png").use { BitmapFactory.decodeStream(it) } }.getOrNull()
     private val blossomPose: Bitmap? = runCatching { c.assets.open("images/duel_blossom.png").use { BitmapFactory.decodeStream(it) } }.getOrNull()
     private val blossomRects: List<Rect> = blossomPose?.let { listOf(Rect(0, 0, it.width, it.height)) } ?: emptyList()
@@ -2580,6 +2584,12 @@ class HallScreen(c: Context) : PixelView(c) {
      */
     private fun drawTree(f: RectF, v: Int, time: Float) {
         val cx = f.centerX(); val bot = f.bottom
+        treeSheet?.let { ts ->
+            val k = TREE_PICK[Math.floorMod(v + depth * 7, TREE_PICK.size)]
+            src.set(k * 40, 0, k * 40 + 40, 56); dst.set(cx - 20f, bot - 54f, cx + 20f, bot + 2f)
+            sc.drawBitmap(ts, src, dst, bmpP)
+            return
+        }
         val bark = 0xFF6A4628.toInt(); val barkD = 0xFF3E2814.toInt(); val barkL = 0xFF8A623A.toInt(); val barkH = 0xFFA8804E.toInt()
         // roots, flaring out and down into the grass
         for (side in intArrayOf(-1, 1)) {

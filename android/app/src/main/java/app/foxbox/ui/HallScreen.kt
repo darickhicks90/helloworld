@@ -97,8 +97,10 @@ class HallScreen(c: Context) : PixelView(c) {
         const val TABLE = 5; const val BRAZIER = 6; const val TOMB = 7; const val CHEST = 8
         // the Wildwood's: trees, stumps, fallen logs, mushrooms, and the root door out
         const val TREE = 9; const val STUMP = 10; const val LOG = 11; const val MUSHROOM = 12; const val EXIT = 13
+        /** Dense thicket (baked into the scenery): the walls of a narrow passage. */
+        const val THICKET = 14
         const val FOREST = 10
-        fun propH(k: Int) = when (k) { PILLAR -> 70f; ROCK -> 12f; SHRUB -> 14f; STATUE -> 28f; FOUNTAIN -> 18f; TABLE -> 8f; BRAZIER -> 14f; TOMB -> 14f; TREE -> 46f; STUMP -> 9f; LOG -> 9f; MUSHROOM -> 9f; EXIT -> 34f; else -> 12f }
+        fun propH(k: Int) = when (k) { PILLAR -> 70f; ROCK -> 12f; SHRUB -> 14f; STATUE -> 28f; FOUNTAIN -> 18f; TABLE -> 8f; BRAZIER -> 14f; TOMB -> 14f; TREE -> 46f; STUMP -> 9f; LOG -> 9f; MUSHROOM -> 9f; EXIT -> 34f; THICKET -> 8f; else -> 12f }
         const val BOSS_MAX = 400; const val LAST = 100
         /** How long a seal on a behemoth waits for the strike before it fades (or the brainwash begins). */
         const val SEAL_TIME = 1.1f
@@ -145,12 +147,12 @@ class HallScreen(c: Context) : PixelView(c) {
     private val legsSide = listOf(".....KPPPPK.....", ".....KPPPPK.....", ".....KKKKKK.....", "................")
     private val legsSideStep = listOf(".....KPPKPPK....", "....KPPK.KPPK...", "....KKK...KKK...", "................")
     /** [facing][frame]: 0 down, 1 up, 2 left, 3 right (mirrored left). */
-    /** The traveller, in more detail (16 x 24): red beanie, green flannel, brown trousers, boots. [facing][frame]: 0 down, 1 up, 2 left (right is mirrored). */
+    /** The traveller, in more detail (20 x 30): red beanie, green flannel, brown trousers, boots. [facing][frame]: 0 down, 1 up, 2 left (right is mirrored). */
     private val heroPal = mapOf('K' to 0xFF1A141E.toInt(), 'R' to 0xFFC82832.toInt(), 'r' to 0xFF841626.toInt(), 'h' to 0xFFF06860.toInt(), 'S' to 0xFFF4BE8E.toInt(), 's' to 0xFFCE8C66.toInt(), 'H' to 0xFF704020.toInt(), 'E' to 0xFF221A2C.toInt(), 'G' to 0xFF3E9248.toInt(), 'g' to 0xFF1E542E.toInt(), 'L' to 0xFF96CE78.toInt(), 'W' to 0xFFF4F4F0.toInt(), 'B' to 0xFF845632.toInt(), 'b' to 0xFF56361E.toInt(), 'O' to 0xFF3E281E.toInt(), 'o' to 0xFF6E5038.toInt(), 'Y' to 0xFFE8C048.toInt())
     private val hero = arrayOf(
-        arrayOf(Sprite(listOf("......KWhK......", "....KKhhhhKK....", "...KRhRRRRRrK...", "...KRhRRRRRRK...", "..KRhRRRRRRRRK..", "..KRRRRRRRRRrK..", "..KrrrrrrrrrrK..", "..KrRrRrRrRrRK..", "..KHSSSSSSSSHK..", "..KHSSESSESSHK..", "...KSSESSESSK...", "...KSsSssSsSK...", "..KKssSSSSssKK..", ".KGGgGgWWgLGgGK.", ".KGgKggWWgggKGK.", ".KgGgGGWWGGGggK.", ".KGGgGLGgGLGgGK.", ".KGgKgggKgggKSK.", ".KSGbbbYYbbbgK..", "..KKBBBbbBBBK...", "...KbbbbBBBBK...", "...KoOOOoOOOK...", "...KOOOOOOOOK...", "....KKKKKKKK...."), heroPal, outline = null), Sprite(listOf("......KWhK......", "....KKhhhhKK....", "...KRhRRRRRrK...", "...KRhRRRRRRK...", "..KRhRRRRRRRRK..", "..KRRRRRRRRRrK..", "..KrrrrrrrrrrK..", "..KrRrRrRrRrRK..", "..KHSSSSSSSSHK..", "..KHSSESSESSHK..", "...KSSESSESSK...", "...KSsSssSsSK...", "..KKssSSSSssKK..", ".KGGgGgWWgLGgGK.", ".KGgKggWWgggKGK.", ".KgGgGGWWGGGggK.", ".KGGgGLGgGLGgGK.", ".KSgKgggKgggKGK.", "..KGbbbYYbbbgSK.", "...KbbbbbBBBKK..", "...KoOOOBBBBK...", "...KOOOOBBBBK...", "....KKKKoOOOK...", ".......KOOOOK..."), heroPal, outline = null)),
-        arrayOf(Sprite(listOf("......KWhK......", "....KKhhhhKK....", "...KRhRRRRRrK...", "...KRhRRRRRRK...", "..KRhRRRRRRRRK..", "..KRRRRRRRRRrK..", "..KrrrrrrrrrrK..", "..KrRrRrRrRrRK..", "...KHHHHHHHHK...", "...KHHHHHHHHK...", "...KHHHHHHHHK...", "...KHHHHHHHHK...", "..KKKssssssKKK..", ".KGGLGgGLGgGLGK.", ".KGgggKgggKggGK.", ".KGGGGgGGGgGGGK.", ".KGGLGgGLGgGLGK.", ".KSgggKgggKggGK.", "..KGbbbbbbbbGSK.", "...KBBBbbBBBKK..", "...KbbbbBBBBK...", "...KoOOOoOOOK...", "...KOOOOOOOOK...", "....KKKKKKKK...."), heroPal, outline = null), Sprite(listOf("......KWhK......", "....KKhhhhKK....", "...KRhRRRRRrK...", "...KRhRRRRRRK...", "..KRhRRRRRRRRK..", "..KRRRRRRRRRrK..", "..KrrrrrrrrrrK..", "..KrRrRrRrRrRK..", "...KHHHHHHHHK...", "...KHHHHHHHHK...", "...KHHHHHHHHK...", "...KHHHHHHHHK...", "..KKKssssssKKK..", ".KGGLGgGLGgGLGK.", ".KGgggKgggKggGK.", ".KGGGGgGGGgGGGK.", ".KGGLGgGLGgGLGK.", ".KGgggKgggKggSK.", ".KSGbbbbbbbbGK..", "..KKbbbbbBBBK...", "...KoOOOBBBBK...", "...KOOOOBBBBK...", "....KKKKoOOOK...", ".......KOOOOK..."), heroPal, outline = null)),
-        arrayOf(Sprite(listOf("..........KK....", "....KKKKKKhWK...", "...KRhRRRRRrK...", "...KRhRRRRRRK...", "..KRhRRRRRRRRK..", "..KRRRRRRRRRrK..", "..KrrrrrrrrrrK..", "..KrRrRrRrRrRK..", "..KSSSSSSHHHK...", "..KSSESSSHHHK...", ".KSSSESSSHHHK...", "..KSsSSSSHHHK...", "..KSSSssSSHK....", "...KWWGGGLGK....", "...KgggGGggK....", "...KGGGGgGGK....", "...KGLGGGLGK....", "...KgggGGggK....", "...KbbbbbbbK....", "....KKBBBBK.....", ".....KBBBbK.....", "....KoOOOOK.....", "....KOOOOOK.....", ".....KKKKK......"), heroPal, outline = null), Sprite(listOf("..........KK....", "....KKKKKKhWK...", "...KRhRRRRRrK...", "...KRhRRRRRRK...", "..KRhRRRRRRRRK..", "..KRRRRRRRRRrK..", "..KrrrrrrrrrrK..", "..KrRrRrRrRrRK..", "..KSSSSSSHHHK...", "..KSSESSSHHHK...", ".KSSSESSSHHHK...", "..KSsSSSSHHHK...", "..KSSSssSSHK....", "...KWWGgGGGK....", "...KgggKGggK....", "...KGGGgGGGK....", "...KGLGgGGGK....", "...KgggKgSSK....", "...KbbbbbbbK....", "....KBBBbbbK....", "...KKBBBbbbKK...", "..KoOOOKKOOOOK..", "..KOOOOKKOOOOK..", "...KKKK..KKKK..."), heroPal, outline = null)),
+        arrayOf(Sprite(listOf("........KWhK........", ".....KKKhhhhKKK.....", "....KRhhRRRRRRrK....", "....KRhhRRRRRRrK....", "....KRhhRRRRRRRK....", "...KRhRRRRRRRRRRK...", "...KRRRRRRRRRRRrK...", "...KRRRRRRRRRRRrK...", "...KrrrrrrrrrrrrK...", "...KrRrrRrRrRRrRK...", "...KHSSSSSSSSSSHK...", "...KHSSSESSESSSHK...", "....KSSSESSESSSK....", "....KSSSESSESSSK....", "....KSssSssSssSK....", "..KKKsssSSSSsssKKK..", ".KGGgGLGgWWggGLGGGK.", ".KGGKggggWWgKgggGGK.", ".KGGgGGGgWWGgGGGGGK.", ".KgggGLGgWWGgGLGggK.", ".KGGKgggKgggKgggGGK.", ".KGGgGGGgGGGgGGGSSK.", ".KSSgbbbbYYbbbbGKK..", ".KSSKbbbbYYbbbbgK...", "..KKKBBBBbbBBBBK....", "....KbbbbbBBBBBK....", "....KoOOOOoOOOOK....", "....KoOOOOoOOOOK....", "....KOOOOOOOOOOK....", ".....KKKKKKKKKK....."), heroPal, outline = null), Sprite(listOf("........KWhK........", ".....KKKhhhhKKK.....", "....KRhhRRRRRRrK....", "....KRhhRRRRRRrK....", "....KRhhRRRRRRRK....", "...KRhRRRRRRRRRRK...", "...KRRRRRRRRRRRrK...", "...KRRRRRRRRRRRrK...", "...KrrrrrrrrrrrrK...", "...KrRrrRrRrRRrRK...", "...KHSSSSSSSSSSHK...", "...KHSSSESSESSSHK...", "....KSSSESSESSSK....", "....KSSSESSESSSK....", "....KSssSssSssSK....", "..KKKsssSSSSsssKKK..", ".KGGgGLGgWWggGLGGGK.", ".KGGKggggWWgKgggGGK.", ".KGGgGGGgWWGgGGGGGK.", ".KgggGLGgWWGgGLGggK.", ".KGGKgggKgggKgggGGK.", ".KSSgGGGgGGGgGGGGGK.", "..KKgbbbbYYbbbbGSSK.", "...KKbbbbYYbbbbgSSK.", "....KbbbbbbBBBBKKK..", "....KoOOOOBBBBBK....", "....KOOOOOBBBBBK....", "....KOOOOOBBBBBK....", ".....KKKKKoOOOOK....", ".........KOOOOOK...."), heroPal, outline = null)),
+        arrayOf(Sprite(listOf("........KWhK........", ".....KKKhhhhKKK.....", "....KRhhRRRRRRrK....", "....KRhhRRRRRRrK....", "....KRhhRRRRRRRK....", "...KRhRRRRRRRRRRK...", "...KRRRRRRRRRRRrK...", "...KRRRRRRRRRRRrK...", "...KrrrrrrrrrrrrK...", "...KrRrrRrRrRRrRK...", "....KHHHHHHHHHHK....", "....KHHHHHHHHHHK....", "....KHHHHHHHHHHK....", "....KHHHHHHHHHHK....", "....KHHHHHHHHHHK....", "..KKKKssssssssKKKK..", ".KGGLGgGLGgGLGgGGGK.", ".KGGggKgggKgggKgGGK.", ".KGGGGgGGGgGGGgGGGK.", ".KGGLGgGLGgGLGgGGGK.", ".KGGggKgggKgggKgGGK.", ".KSSGGgGGGgGGGgGGGK.", "..KKLbbbbbbbbbbGSSK.", "...KgbbbbbbbbbbgSSK.", "....KBBBBbbBBBBKKK..", "....KbbbbbBBBBBK....", "....KoOOOOoOOOOK....", "....KoOOOOoOOOOK....", "....KOOOOOOOOOOK....", ".....KKKKKKKKKK....."), heroPal, outline = null), Sprite(listOf("........KWhK........", ".....KKKhhhhKKK.....", "....KRhhRRRRRRrK....", "....KRhhRRRRRRrK....", "....KRhhRRRRRRRK....", "...KRhRRRRRRRRRRK...", "...KRRRRRRRRRRRrK...", "...KRRRRRRRRRRRrK...", "...KrrrrrrrrrrrrK...", "...KrRrrRrRrRRrRK...", "....KHHHHHHHHHHK....", "....KHHHHHHHHHHK....", "....KHHHHHHHHHHK....", "....KHHHHHHHHHHK....", "....KHHHHHHHHHHK....", "..KKKKssssssssKKKK..", ".KGGLGgGLGgGLGgGGGK.", ".KGGggKgggKgggKgGGK.", ".KGGGGgGGGgGGGgGGGK.", ".KGGLGgGLGgGLGgGGGK.", ".KGGggKgggKgggKgGGK.", ".KGGGGgGGGgGGGgGSSK.", ".KSSLbbbbbbbbbbGKK..", ".KSSgbbbbbbbbbbgK...", "..KKKbbbbbbBBBBK....", "....KoOOOOBBBBBK....", "....KOOOOOBBBBBK....", "....KOOOOOBBBBBK....", ".....KKKKKoOOOOK....", ".........KOOOOOK...."), heroPal, outline = null)),
+        arrayOf(Sprite(listOf("............KKK.....", ".....KKKKKKKhhWK....", "....KRhhRRRRRRrK....", "....KRhhRRRRRRrK....", "....KRhhRRRRRRRK....", "...KRhRRRRRRRRRRK...", "...KRRRRRRRRRRRrK...", "...KRRRRRRRRRRRrK...", "...KrrrrrrrrrrrrK...", "...KrRrrRrRrRRrRK...", "...KSSSSSSSHHHHK....", "..KKSSEESSSHHHHK....", ".KSSSSEESSSHHHHK....", ".KSSSSEESSSHHHHK....", "..KKSsSSSSSHHHHK....", "...KSSSSssSSHHK.....", "....KWWWGGGgGLK.....", "....KWWWgGGKggK.....", "....KGGgGGGgGGK.....", "....KLGgGGggGLK.....", "....KggKgGGKggK.....", "....KGGgGGGgGGK.....", "....KbbbbbbbbbK.....", "....KbbbbbbbbbK.....", ".....KKKBBBBKK......", "......KKBBBbK.......", ".....KooOOOOK.......", ".....KooOOOOK.......", ".....KOOOOOOK.......", "......KKKKKK........"), heroPal, outline = null), Sprite(listOf("............KKK.....", ".....KKKKKKKhhWK....", "....KRhhRRRRRRrK....", "....KRhhRRRRRRrK....", "....KRhhRRRRRRRK....", "...KRhRRRRRRRRRRK...", "...KRRRRRRRRRRRrK...", "...KRRRRRRRRRRRrK...", "...KrrrrrrrrrrrrK...", "...KrRrrRrRrRRrRK...", "...KSSSSSSSHHHHK....", "..KKSSEESSSHHHHK....", ".KSSSSEESSSHHHHK....", ".KSSSSEESSSHHHHK....", "..KKSsSSSSSHHHHK....", "...KSSSSssSSHHK.....", "....KWWWGLGGGLK.....", "....KWWWggGGggK.....", "....KGGgGGGgGGK.....", "....KLGgGLGGGLK.....", "....KggKggGGggK.....", "....KGGgGGGSSSK.....", "....KbbbbbbbbbK.....", "....KbbbbbbbbbK.....", ".....KBBBBbbbbK.....", "....KKBBBBbbbbKK....", "...KoOOOOKKOOOOOK...", "...KoOOOOKKOOOOOK...", "...KOOOOOKKOOOOOK...", "....KKKKK..KKKKK...."), heroPal, outline = null)),
     )
 
     // ---- state
@@ -1357,10 +1359,12 @@ class HallScreen(c: Context) : PixelView(c) {
     private fun spawnMinion(at: Pair<Float, Float>?, kind: Int = 0) {
         var x = at?.first ?: 0f; var y = at?.second ?: 0f
         if (at == null) {
-            for (k in 0 until 40) {
+            var ok = false
+            for (k in 0 until 60) {
                 x = 20f + rnd.nextFloat() * (W - 40f); y = 44f + rnd.nextFloat() * (H - 60f)
-                if (hypot(x - (hx + 8), y - (hy + 9)) > 60f && !impSolid(x, y)) break
+                if (hypot(x - (hx + 8), y - (hy + 9)) > 50f && !foeSolid(x, y, if (kind == 2) 8f else 3f)) { ok = true; break }
             }
+            if (!ok) return
         }
         minions += Minion(x, y, roomId, kind).also { it.orbit = if (rnd.nextBoolean()) 1f else -1f; it.stT = 1.5f + rnd.nextFloat() * 2f }
     }
@@ -1371,6 +1375,7 @@ class HallScreen(c: Context) : PixelView(c) {
             x = 24f + rnd.nextFloat() * (W - 48f); y = 56f + rnd.nextFloat() * (H - 76f)
             if (hypot(x - (hx + 8), y - (hy + 12)) > 80f && !foeSolid(x, y, 8f)) break
         }
+        if (foeSolid(x, y, 8f)) return
         minions += Minion(x, y, roomId, 2).also { it.popT = BEH_POP; it.slamCd = 2.5f }
         say("SOMETHING STIRS BENEATH THE FLOOR...", 1.6f)
         sfx.play(HallSfx.S.SLAM, 0.5f); sfx.rumbleSoft()
@@ -2533,6 +2538,7 @@ class HallScreen(c: Context) : PixelView(c) {
                     if (!glowy) { box(cx + 1 * s0, top + 1, cx + 2 * s0, top + 2, WHITE); box(cx - 2.5f * s0, top + 2, cx - 1.5f * s0, top + 3, WHITE) }
                 }
             }
+            THICKET -> {}
             EXIT -> {
                 // the root door: an arch of twisted roots round a dark doorway, a keyhole glowing in it
                 val cx = f.centerX(); val bot = f.bottom; val top = bot - 34f
@@ -2715,8 +2721,8 @@ class HallScreen(c: Context) : PixelView(c) {
         p.color = 0x40000000; sc.drawOval(x + 3, y + 13, x + 13, y + 17, p)
         // 24 tall, standing on the same feet as ever
         src.set(0, 0, s.w, s.h)
-        if (facing == 3) { sc.save(); sc.scale(-1f, 1f, x + 8, y + 8); dst.set(x, y - 8, x + 16, y + 16); sc.drawBitmap(s.bmp, src, dst, bmpP); sc.restore() }
-        else { dst.set(x, y - 8, x + 16, y + 16); sc.drawBitmap(s.bmp, src, dst, bmpP) }
+        if (facing == 3) { sc.save(); sc.scale(-1f, 1f, x + 8, y + 8); dst.set(x - 2, y - 14, x + 18, y + 16); sc.drawBitmap(s.bmp, src, dst, bmpP); sc.restore() }
+        else { dst.set(x - 2, y - 14, x + 18, y + 16); sc.drawBitmap(s.bmp, src, dst, bmpP) }
         if (paraT > 0f) {
             box(x + 1, y + 6, x + 15, y + 7, RUNE); box(x + 1, y + 11, x + 15, y + 12, RUNE)
             if ((time * 6).toInt() % 2 == 0) box(x + 7, y - 4, x + 9, y - 2, RUNE)
@@ -3745,6 +3751,8 @@ class HallScreen(c: Context) : PixelView(c) {
         drawArcs()
         drawFly(time)
         art.vignette(sc)
+        // a dingy gloom over everything (not the HUD): enough to feel grimy, not dark
+        p.color = if (inWild) 0x3A0A1410 else 0x34100C14; sc.drawRect(0f, 0f, W.toFloat(), H.toFloat(), p)
         if (flashT > 0f) { p.color = (((flashT / 0.25f) * 0x80).toInt().coerceIn(0, 255) shl 24) or 0xFFFFFF; sc.drawRect(0f, 0f, W.toFloat(), H.toFloat(), p) }
         if (hurtFlashT > 0f) {
             // a red edge round the screen when you're hurt

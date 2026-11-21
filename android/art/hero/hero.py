@@ -1,14 +1,18 @@
 from PIL import Image
 PAL={'K':(26,20,30),'R':(200,40,50),'r':(132,22,38),'h':(240,104,96),'S':(244,190,142),'s':(206,140,102),'H':(112,64,32),'E':(34,26,44),
 'G':(62,146,72),'g':(30,84,46),'L':(150,206,120),'W':(244,244,240),'B':(132,86,50),'b':(86,54,30),'O':(62,40,30),'o':(110,80,56),'Y':(232,192,72)}
-W,H=16,24
+W,H=20,30
+KS=1.25
 def blank(): return [['.']*W for _ in range(H)]
-def p(g,x,y,c):
+def _p(g,x,y,c):
     if 0<=x<W and 0<=y<H: g[y][x]=c
 def rect(g,l,t,r,b,c):
-    for y in range(t,b+1):
-        for x in range(l,r+1): p(g,x,y,c)
+    # drawn in the 16 x 24 design's units, rasterised fresh at 1.25x (no doubled pixels)
+    for y in range(round(t*KS),max(round(t*KS)+1,round((b+1)*KS))):
+        for x in range(round(l*KS),max(round(l*KS)+1,round((r+1)*KS))): _p(g,x,y,c)
+def p(g,x,y,c): rect(g,x,y,x,y,c)
 def plaid(g,l,t,r,b,ox=0):
+    l=round(l*KS); t=round(t*KS); r=round((r+1)*KS)-1; b=round((b+1)*KS)-1
     for y in range(t,b+1):
         for x in range(l,r+1):
             c='G'
@@ -16,7 +20,7 @@ def plaid(g,l,t,r,b,ox=0):
             if v and hz: c='K'
             elif v or hz: c='g'
             elif (x+ox)%4==2 and (y-t)%3==0: c='L'
-            p(g,x,y,c)
+            _p(g,x,y,c)
 def outline(g):
     q=[r[:] for r in g]
     for y in range(H):

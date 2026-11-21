@@ -1,7 +1,7 @@
 import math, sys
 sys.path.insert(0,'.')
 from rig import *
-FUR=[(64,34,28),(112,62,42),(160,100,62),(198,142,90),(228,186,128)]
+FUR=[(52,28,24),(98,54,38),(146,90,58),(186,130,84),(222,176,120)]
 BELLY=[(104,62,44),(160,110,74),(198,150,102),(222,184,130),(240,212,160)]
 SKIN=[(54,34,36),(96,62,58),(136,96,82),(170,128,106),(200,164,136)]
 BONE=[(84,72,56),(160,140,104),(212,196,154),(236,226,194),(252,248,228)]
@@ -22,10 +22,12 @@ def yeti(pose):
         r.ell(fx+side*2,97.5,7.5,3.2,SKIN,2,edge=True)
         for k in(-1,0,1): r.poly([(fx+side*2+k*4-1.4,98.5),(fx+side*2+k*4+side*2.2,101),(fx+side*2+k*4+1.4,98.5)],BONE,3,flat=3)
     # the hulking body
-    r.ell(50,60+hy,18,22,FUR,3,fur=0.07,furn=20)
-    r.ell(50,66+hy,10.5,12,BELLY,4,fur=0.04,furn=16,flat=None)
+    r.ell(50,60+hy,18,22,FUR,3,fur=0.1,furn=24)
+    # long shaggy fur hanging off the chest and flanks
+    for k in range(7):
+        a=0.35+k*0.4; r.ell(50+math.cos(a)*15*(1 if k%2 else -1),66+hy+math.sin(a)*8,4,6,FUR,4,fur=0.3,furn=6)
     # no neck: the head runs down in two shaggy slopes straight into the arms
-    r.poly([(50,18+hy),(60,22+hy),(70,46+hy),(62,54+hy),(38,54+hy),(30,46+hy),(40,22+hy)],FUR,5,edge=False)
+    r.poly([(50,18+hy),(60,22+hy),(70,46+hy),(62,54+hy),(38,54+hy),(30,46+hy),(40,22+hy)],FUR,5,edge=False,tex='fur')
     r.cap(47,22+hy,7,32,46+hy,7.5,FUR,5,fur=0.14,edge=False)
     r.cap(53,22+hy,7,68,46+hy,7.5,FUR,5,fur=0.14,edge=False)
     # the head, set into the slope, a shaggy mane

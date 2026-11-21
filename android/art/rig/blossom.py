@@ -1,7 +1,7 @@
 import math, sys
 sys.path.insert(0,'.')
 from rig import *
-FUR=[(92,78,124),(150,138,182),(202,196,224),(234,232,248),(255,255,255)]
+FUR=[(64,48,100),(122,108,164),(186,178,216),(228,226,244),(252,252,255)]
 SKIN=[(96,82,128),(160,148,196),(208,202,232),(234,232,250),(255,255,255)]
 PETAL=[(176,120,150),(226,176,200),(246,220,232),(255,240,246),(255,252,254)]
 LEAF=[(22,66,38),(40,106,52),(76,156,68),(126,198,96),(186,234,146)]
@@ -21,12 +21,12 @@ def blossom(pose):
         r.cap(kx,84+oy*0.5,7,fx,96,5.5,FUR,1,fur=0.05)
         r.ell(fx+side*1.5,98,7,3,SKIN,2,edge=True)
     # hips, waist, chest; long fur falling from the head behind the shoulders
-    r.ell(50+sw,64+oy,16.5,11,FUR,3,fur=0.06,furn=18)
-    r.ell(50+sw*0.8,50+oy,15.5,17,FUR,4,fur=0.05,furn=16)
-    r.ell(50+sw*0.6,30+oy,17,20,FUR,2,fur=0.16,furn=18)   # the mane behind
+    r.ell(50+sw,64+oy,16.5,11,FUR,3,fur=0.12,furn=22)
+    r.ell(50+sw*0.8,50+oy,15.5,17,FUR,4,fur=0.12,furn=20)
+    r.ell(50+sw*0.6,30+oy,18,21,FUR,2,fur=0.28,furn=16)   # the mane behind, bristling
     # head
     hx0=50+sw*0.5; hy0=21+oy
-    r.ell(hx0,hy0,12.5,13.5,FUR,6,fur=0.12,furn=14)
+    r.ell(hx0,hy0,12.5,13.5,FUR,6,fur=0.2,furn=14)
     r.ell(hx0,hy0+3,9,9.5,SKIN,7)
     # the flower crown: two blooms and leaves
     def bloom(cx,cy,R,layer):
@@ -44,6 +44,10 @@ def blossom(pose):
         for t in (0.25,0.6):
             vx=ex+(wx-ex)*t; vy=ey+(wy-ey)*t
             r.ell(vx,vy,4.6,1.6,LEAF,layer+1,rot=math.atan2(wy-ey,wx-ex)+1.2)
+            for sgn in (-1,1):
+                a=math.atan2(wy-ey,wx-ex)+1.2
+                bx_=vx+math.cos(a)*4*sgn; by_=vy+math.sin(a)*4*sgn
+                r.poly([(bx_-0.8,by_),(bx_+math.cos(a)*2.6*sgn,by_+math.sin(a)*2.6*sgn-0.8),(bx_+0.8,by_)],[(60,30,30),(120,70,50),(200,170,120),(230,210,170),(250,240,210)],layer+2,flat=2)
     ph=pose.get('arm',0)
     if not last:
         # the blessing arm, raised high, palm out, fingers spread
@@ -52,7 +56,7 @@ def blossom(pose):
         r.ell(wx,wy-1,4.6,5,SKIN,12,edge=True)
         for k,(fx,fy) in enumerate(((-5,-5),(-2.4,-8),(0.6,-8.6),(3.4,-7.6),(5.6,-3.6))):
             r.cap(wx+fx*0.4,wy-1+fy*0.3,1.5,wx+fx,wy-1+fy,1.1,SKIN,12)
-            r.poly([(wx+fx-0.9,wy-1+fy),(wx+fx*1.15,wy-1+fy*1.18),(wx+fx+0.9,wy-1+fy)],STEEL,13,flat=4)
+            r.poly([(wx+fx-0.9,wy-1+fy),(wx+fx*1.32,wy-1+fy*1.36),(wx+fx+0.9,wy-1+fy)],STEEL,13,flat=4)
         # the dagger arm, at her hip
         sx2,sy2=37+sw*0.7,37+oy; ex2,ey2=30,52+oy; wx2,wy2=35,64+oy
         limb(sx2,sy2,ex2,ey2,wx2,wy2,10)
@@ -91,15 +95,20 @@ def blossom(pose):
         for (ex,ey) in ((-4,1.4),(4,1.4),(-3,4.6),(3,4.6)):
             X=x0+ex; Y=y0+ey
             if blink: line(g,sc,ox,oy_,X-1.4,Y,X+1.4,Y,SKIN[0]); continue
-            fill_ell(g,sc,ox,oy_,X,Y,1.9,1.2,PUP,0.6)
-            fill_ell(g,sc,ox,oy_,X,Y+0.2,1.4,0.75,ICE,0.5)
+            fill_ell(g,sc,ox,oy_,X,Y,2.2,1.4,PUP,0.6)
+            fill_ell(g,sc,ox,oy_,X,Y+0.2,1.7,0.9,ICE,0.5)
+            if not small: dot(g,*P(g,sc,ox,oy_,X,Y+0.2),(230,250,255))
             sgn=1 if ex<0 else -1
-            line(g,sc,ox,oy_,X-2*sgn,Y-1.6,X+2*sgn,Y-0.7,SKIN[0])
+            line(g,sc,ox,oy_,X-2.4*sgn,Y-2.2,X+2.4*sgn,Y-0.8,FUR[0],w=1 if small else 2)
         # a thin, cruel smile with small fangs
-        mo=pose.get('mouth',0.2)
-        line(g,sc,ox,oy_,x0-3.6,y0+7.4,x0,y0+8+mo,LIP); line(g,sc,ox,oy_,x0,y0+8+mo,x0+3.6,y0+7.2,LIP)
-        if mo>0.4: fill_ell(g,sc,ox,oy_,x0,y0+8.2,2.6,0.4+mo,MAW,0.5)
-        dot(g,*P(g,sc,ox,oy_,x0-1.6,y0+8.6+mo*0.6),TOOTH); dot(g,*P(g,sc,ox,oy_,x0+1.6,y0+8.6+mo*0.6),TOOTH)
+        mo=max(0.5,pose.get('mouth',0.6))
+        # a snarl: lips drawn back over two rows of needle teeth and long fangs
+        fill_ell(g,sc,ox,oy_,x0,y0+8.4,4.2,0.7+mo*1.2,LIP,0.6)
+        fill_ell(g,sc,ox,oy_,x0,y0+8.6,3.5,0.5+mo*1.0,MAW,0.5)
+        for i in range(6):
+            tx=x0-2.8+i*1.12
+            dot(g,*P(g,sc,ox,oy_,tx,y0+8.6-mo*0.8),TOOTH); dot(g,*P(g,sc,ox,oy_,tx+0.5,y0+8.6+mo*0.8),TOOTH)
+        for sd in (-1,1): line(g,sc,ox,oy_,x0+sd*2.4,y0+7.6,x0+sd*2.2,y0+9.4+mo*0.6,TOOTH)
         if glow:
             # the blessing hand alight
             hx_,hy_=(75,6+b+crouch)

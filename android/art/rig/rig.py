@@ -5,18 +5,26 @@ darkened inner edges where a part lies over another."""
 import math
 from PIL import Image
 L=(-0.5,-0.7,0.5); _n=math.sqrt(sum(c*c for c in L)); L=tuple(c/_n for c in L)
+def _h(a,b):
+    v=(a*73856093)^(b*19349663); v^=v>>13; v=(v*0x5bd1e995)&0xFFFFFFFF; v^=v>>15
+    return (v&0xFFFF)/65535.0
+def _furnoise(x,y,sc):
+    # strands about 1 px wide and 2-4 long, rows offset like hair falling in layers
+    L=max(2,int(round(sc*2.2)))
+    row=y//L; off=int(_h(row,7)*3)
+    return _h((x+off)//1,row)*0.75+_h(x//2,y//max(1,L//2))*0.25
 def spike(a,n,ph=0.0):
     # a tuft pattern: sharp points, n per turn
     u=(a*n/(2*math.pi)+ph)%1.0
     return 1-abs(u-0.5)*2   # 0..1 triangle
 class Rig:
     def __init__(s): s.parts=[]; s.feats=[]
-    def ell(s,cx,cy,rx,ry,ramp,layer,fur=0.0,furn=14,edge=False,flat=None,rot=0.0):
-        s.parts.append(dict(t='e',cx=cx,cy=cy,rx=rx,ry=ry,ramp=ramp,layer=layer,fur=fur,furn=furn,edge=edge,flat=flat,rot=rot))
-    def cap(s,x0,y0,r0,x1,y1,r1,ramp,layer,fur=0.0,edge=True,flat=None):
-        s.parts.append(dict(t='c',x0=x0,y0=y0,r0=r0,x1=x1,y1=y1,r1=r1,ramp=ramp,layer=layer,fur=fur,edge=edge,flat=flat))
-    def poly(s,pts,ramp,layer,edge=True,flat=None,grad=(0,1)):
-        s.parts.append(dict(t='p',pts=pts,ramp=ramp,layer=layer,edge=edge,flat=flat,grad=grad))
+    def ell(s,cx,cy,rx,ry,ramp,layer,fur=0.0,furn=14,edge=False,flat=None,rot=0.0,tex=None):
+        s.parts.append(dict(t='e',cx=cx,cy=cy,rx=rx,ry=ry,ramp=ramp,layer=layer,fur=fur,furn=furn,edge=edge,flat=flat,rot=rot,tex=tex if tex is not None else ('fur' if fur>0 else None)))
+    def cap(s,x0,y0,r0,x1,y1,r1,ramp,layer,fur=0.0,edge=True,flat=None,tex=None):
+        s.parts.append(dict(t='c',x0=x0,y0=y0,r0=r0,x1=x1,y1=y1,r1=r1,ramp=ramp,layer=layer,fur=fur,edge=edge,flat=flat,tex=tex if tex is not None else ('fur' if fur>0 else None)))
+    def poly(s,pts,ramp,layer,edge=True,flat=None,grad=(0,1),tex=None):
+        s.parts.append(dict(t='p',pts=pts,ramp=ramp,layer=layer,edge=edge,flat=flat,grad=grad,tex=tex))
     def feat(s,fn): s.feats.append(fn)
     def hit(s,p,X,Y):
         if p['t']=='e':
@@ -72,6 +80,11 @@ class Rig:
                     l=n[0]*L[0]+n[1]*L[1]+n[2]*L[2]
                     idx=sum(1 for b in bands if l>b)
                     idx=min(idx,len(ramp)-1)
+                    if p.get('tex')=='fur':
+                        # fur: tufts and strands, darker in the clefts and catching light on the tips
+                        fv=_furnoise(x,y,sc)
+                        if fv<0.22: idx=max(0,idx-1)
+                        elif fv>0.86 and idx<len(ramp)-1 and l>0.1: idx+=1
                 grid[y][x]=(ramp[idx],p['layer'],i,ramp)
         out=[[None]*W for _ in range(H)]
         for y in range(H):

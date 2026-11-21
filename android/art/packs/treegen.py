@@ -13,7 +13,7 @@ SPRUCE=R('0E2E32','164444','205C58','2E786C','4C9880','80BCA0')
 FIR=R('0E2A1A','163E24','22562E','30703A','4C904A','7CB066')
 PINE=R('14301E','1E4628','2C6034','3E7A3E','5E9A4E','8EBA6C')
 AUTUMN=R('5A2410','8A3A14','B85A1C','DC8226','F0AC40','F8D47C')
-BLOSSOM=R('8A3E62','B45A84','D67EA4','EAA4C0','F6C8DA','FFE8F0')
+BLOSSOM=R('0C2418','143620','1E4C2A','2C6434','467E44','6A9C5E')   # a dark yew (no longer pink)
 BIRCHL=R('3E5018','5A7020','7A9228','A0B238','C4CE5C','E4E896')
 BARK=R('2A1810','46281A','623A24','7E5032','9C6A44')
 GREYBARK=R('3A3630','5E5850','86806E','AAA48E','CEC8B0')
@@ -158,11 +158,13 @@ def pinetall(seed,rp=PINE,bark=REDBARK):
 
 def birch(seed,rp=BIRCHL):
     t=Tree(seed); r=t.r
-    for (x0,lean) in ((18,-0.6),(22,0.5)):
-        for y in range(18,GROUND+1):
-            x=x0+lean*(GROUND-y)*0.12
-            for d in range(3): t.px(x+d,y,BIRCH[3 if d==0 else 2 if d==1 else 1])
-            if (y*5+x0)%7==0: t.px(x,y,BIRCH[0]); t.px(x+1,y,BIRCH[1])
+    # one slender white trunk, a slight lean, black marks across it
+    for y in range(18,GROUND+1):
+        x=19+0.4*(GROUND-y)*0.08
+        for d in range(4): t.px(x+d,y,BIRCH[4 if d==0 else 3 if d==1 else 2 if d==2 else 1])
+        if (y*5)%7==0: t.px(x+1,y,BIRCH[0]); t.px(x+2,y,BIRCH[0])
+        if (y*3)%11==0: t.px(x,y,BIRCH[1])
+    for x in range(17,25): t.px(x,GROUND,BIRCH[1])
     m=lumps(20,21,13,14,r,5)
     t.crown(m,20,21,13,14,rp,cl=2.5)
     return t.img()

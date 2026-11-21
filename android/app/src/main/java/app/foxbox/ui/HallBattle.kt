@@ -483,7 +483,7 @@ class HallBattle(
     /** The little screen: the hall (dimmed) and the traveller. The creature, the effects and the windows go on top (drawHiRes). */
     fun draw(c: Canvas, time: Float) {
         host.backdrop(time)
-        box(c, 0f, 0f, 240f, 176f, 0x30101020)               // the hall dims around the duel
+        box(c, 0f, 0f, 240f, 176f, 0x50101020)               // the hall dims (and grows grimy) around the duel
         box(c, 0f, 120f, 240f, 176f, 0x33000000)
         if (!(heroHurtT > 0f && (time * 20).toInt() % 2 == 0)) {
             box(c, 26f, 122f, 74f, 126f, 0x55000000)

@@ -33,7 +33,7 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
 
     companion object {
         const val ROCK = 1; const val SHRUB = 2
-        const val TREE = 9; const val STUMP = 10; const val LOG = 11; const val MUSHROOM = 12; const val EXIT = 13
+        const val TREE = 9; const val STUMP = 10; const val LOG = 11; const val MUSHROOM = 12; const val EXIT = 13; const val THICKET = 14
         val DX = intArrayOf(-1, 1, 0, 0); val DY = intArrayOf(0, 0, -1, 1); val OPP = intArrayOf(1, 0, 3, 2)
         private val A = listOf("MOSSY", "FERN", "BRAMBLE", "WHISPER", "HOLLOW", "TANGLE", "DEW", "AMBER", "THORN", "MIST", "ROOT", "LANTERN", "OWL", "BRACKEN", "SILVER", "GLOAM")
         private val B = listOf("GLADE", "HOLLOW", "THICKET", "DELL", "COPSE", "GROVE", "BOWER", "WEALD", "SPINNEY", "CLEARING", "DINGLE", "BOG")
@@ -137,20 +137,60 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
             else { repeat(4) { place(r, MUSHROOM, 8, 5, area = intArrayOf(10, 130, 230, 166)) } }
             return
         }
-        when (if (r == start) 1 else rnd.nextInt(7)) {
+        when (if (r == start) 1 else rnd.nextInt(10)) {
             0 -> { repeat(5 + rnd.nextInt(4)) { place(r, TREE, 12, 6) }; repeat(2) { place(r, SHRUB, 16, 8) } }       // a grove
             1 -> { repeat(2) { place(r, TREE, 12, 6) }; repeat(3) { place(r, SHRUB, 16, 8) }; repeat(2) { place(r, MUSHROOM, 8, 5) } }  // a glade
-            2 -> {   // a pond
-                val pl = 20 + rnd.nextInt(30); val pt = 44 + rnd.nextInt(20); val pw = 40 + rnd.nextInt(24); val ph = 18 + rnd.nextInt(10)
-                val side = if (rnd.nextBoolean()) 0 else 1
-                val x0 = if (side == 0) pl else 240 - pl - pw
-                if (!inCorridor(r, x0, pt, x0 + pw, pt + ph)) pools[r] += intArrayOf(x0, pt, x0 + pw, pt + ph)
-                repeat(3) { place(r, TREE, 12, 6) }; repeat(2) { place(r, SHRUB, 16, 8) }
+            2, 7 -> {   // a lake (or two), as big as the ways through allow
+                repeat(2) { lake(r) }
+                repeat(2) { place(r, TREE, 12, 6) }; place(r, SHRUB, 16, 8)
             }
+            8, 9 -> passage(r)
             3 -> { repeat(6) { place(r, MUSHROOM, 8, 5, pad = 3) }; repeat(3) { place(r, TREE, 12, 6) }; place(r, STUMP, 12, 6) }   // fungus
             4 -> { repeat(3) { place(r, ROCK, 14, 8) }; repeat(2) { place(r, STUMP, 12, 6) }; place(r, LOG, 28, 7); repeat(2) { place(r, TREE, 12, 6) } }  // old fall
             5 -> { repeat(6) { place(r, SHRUB, 16, 8, pad = 3) }; repeat(3) { place(r, TREE, 12, 6) } }   // thicket
             else -> { repeat(8 + rnd.nextInt(4)) { place(r, TREE, 12, 6, pad = 5) } }    // deep wood
+        }
+    }
+
+    /** The biggest lake that fits beside the ways through (it tries a few sizes and spots). */
+    private fun lake(r: Int) {
+        var best: IntArray? = null; var bestA = 0
+        for (tries in 0 until 160) {
+            val w0 = 50 + rnd.nextInt(170); val h0 = 24 + rnd.nextInt(70)
+            if (w0 * h0 <= bestA) continue
+            val l = 8 + rnd.nextInt(maxOf(1, 224 - w0)); val t = 36 + rnd.nextInt(maxOf(1, 132 - h0))
+            if (l + w0 > 232 || t + h0 > 168) continue
+            if (inCorridor(r, l - 3, t - 3, l + w0 + 3, t + h0 + 3)) continue
+            if (pools[r].any { l + w0 + 8 > it[0] && l - 8 < it[2] && t + h0 + 8 > it[1] && t - 8 < it[3] }) continue
+            if (props[r].any { l + w0 > it[1] && l < it[3] && t + h0 > it[2] && t < it[4] }) continue
+            best = intArrayOf(l, t, l + w0, t + h0); bestA = w0 * h0
+        }
+        best?.let { pools[r] += it }
+    }
+    /** A narrow passage: thicket everywhere but a winding way, about 28 wide, between the open sides. */
+    private fun passage(r: Int) {
+        val s = sides[r]
+        val bend = rnd.nextInt(-16, 17)
+        fun open(l: Int, t: Int, rr: Int, b: Int): Boolean {
+            val m = 2
+            fun hit(cl: Int, ct: Int, cr: Int, cb: Int) = rr + m > cl && l - m < cr && b + m > ct && t - m < cb
+            if (hit(106 + bend, 88, 134 + bend, 118)) return true
+            if (s[0] && (hit(0, 90, 60, 118) || hit(56, 90 + bend / 2, 120 + bend, 118 + bend / 2))) return true
+            if (s[1] && (hit(180, 90, 240, 118) || hit(120 + bend, 90 - bend / 2, 184, 118 - bend / 2))) return true
+            if (s[2] && (hit(106, 28, 134, 64) || hit(106 + bend / 2, 60, 134 + bend, 100))) return true
+            if (s[3] && (hit(106, 140, 134, 176) || hit(106 + bend / 2, 104, 134 + bend, 144))) return true
+            return false
+        }
+        val cell = 12
+        for (y in 34 until 170 step cell) {
+            var runStart = -1
+            for (x in 4..236 step cell) {
+                val solidHere = x < 232 && !open(x, y, x + cell, y + cell)
+                if (solidHere && runStart < 0) runStart = x
+                if ((!solidHere || x >= 232) && runStart >= 0) {
+                    props[r] += intArrayOf(THICKET, runStart, y, minOf(x, 236), minOf(y + cell, 172)); runStart = -1
+                }
+            }
         }
     }
 

@@ -32,7 +32,7 @@ internal class HallRoomArt {
         // prop kinds (as in HallScreen)
         const val PILLAR = 0; const val ROCK = 1; const val SHRUB = 2; const val STATUE = 3; const val FOUNTAIN = 4
         const val TABLE = 5; const val BRAZIER = 6; const val TOMB = 7; const val CHEST = 8
-        const val TREE = 9
+        const val TREE = 9; const val THICKET = 14
         /** A screen of the Wildwood. */
         const val FOREST = 10
     }
@@ -455,25 +455,10 @@ internal class HallRoomArt {
             when (v % 9) { 0, 1 -> box(tx * 8, ty * 8, tx * 8 + 8, ty * 8 + 8, G2); 2 -> box(tx * 8 + 2, ty * 8 + 2, tx * 8 + 7, ty * 8 + 6, G3) }
             if (v % 9 == 0) for (k in 0 until 4) px(tx * 8 + (v shr (k + 3)) % 8, ty * 8 + (v shr (k + 7)) % 8, G1)
         }
-        // the paths
         val cx = 120; val cy = 104
-        fun path(l: Int, t: Int, r: Int, b: Int) { box(l - 1, t - 1, r + 1, b + 1, DIRT_D); box(l, t, r, b, DIRT) }
-        path(cx - 16, cy - 12, cx + 16, cy + 14)
-        if (s.doors[0]) path(0, 90, cx, 116)
-        if (s.doors[1]) path(cx, 90, W, 116)
-        if (s.doors[2]) path(106, 24, 134, cy)
-        if (s.doors[3]) path(106, cy, 134, H)
-        // pebbles and wheel-ruts in the dirt
-        for (i in 0 until 60) {
-            val v = h(i, 7, s.id); val x = v % W; val y = 30 + (v shr 8) % (H - 30)
-            val onPath = (s.doors[0] && x < cx && y in 91..115) || (s.doors[1] && x > cx && y in 91..115) || (s.doors[2] && y < cy && x in 107..133) || (s.doors[3] && y > cy && x in 107..133) || (x in cx - 15..cx + 15 && y in cy - 11..cy + 13)
-            if (onPath) { px(x, y, if (v % 3 == 0) DIRT_L else DIRT_D); if (v % 5 == 0) px(x + 1, y, DIRT_L) }
-        }
         // tufts and flowers on the grass
         for (i in 0 until 150) {
             val v = h(i, 3, s.id); val x = 6 + v % (W - 12); val y = 34 + (v shr 9) % (H - 40)
-            val onPath = (x in cx - 18..cx + 18 && y in cy - 14..cy + 16) || (s.doors[0] && x < cx && y in 88..118) || (s.doors[1] && x > cx && y in 88..118) || (s.doors[2] && y < cy && x in 104..136) || (s.doors[3] && y > cy && x in 104..136)
-            if (onPath) continue
             when (v % 11) {
                 0 -> { px(x, y, 0xFFF8F0F0.toInt()); px(x + 1, y, 0xFFF8F0F0.toInt()); px(x, y - 1, 0xFFF8F0F0.toInt()); px(x + 1, y - 1, 0xFFF8E060.toInt()) }
                 1 -> { px(x, y, 0xFFE878A0.toInt()); px(x + 1, y - 1, 0xFFE878A0.toInt()); px(x, y - 1, 0xFFF8D0E0.toInt()) }
@@ -482,7 +467,7 @@ internal class HallRoomArt {
             }
         }
         for (w in s.pools) pond(w, s.id)
-        for ((k, f) in s.props) shadow(k, f)
+        for ((k, f) in s.props) if (k == THICKET) thicket(f, s.id) else shadow(k, f)
         // the canopy along the top: a wall of round crowns over trunks
         box(0, 0, W, 31, CAN_D)
         for (k in 0 until 16) {
@@ -503,7 +488,7 @@ internal class HallRoomArt {
         }
         if (s.doors[2]) {
             // a dark way through the trees
-            box(100, 0, 140, 31, 0xFF142A16.toInt()); box(106, 0, 134, 31, DIRT_D); box(110, 0, 130, 31, 0xFF8A6A40.toInt())
+            box(100, 0, 140, 31, 0xFF142A16.toInt()); box(106, 0, 134, 31, 0xFF1E3A20.toInt()); box(110, 0, 130, 31, 0xFF2A4C2A.toInt())
             for (k in 0 until 4) box(106, k * 7, 134, k * 7 + 2, 0x30000000)
         }
         // the canopy's shadow on the grass
@@ -522,12 +507,45 @@ internal class HallRoomArt {
         }
     }
 
+    /** Dense thicket: a wall of leaf clusters, darker toward the ground, shadow along its foot. */
+    private fun thicket(f: RectF, id: Int) {
+        val l = f.left.toInt(); val t = f.top.toInt(); val r = f.right.toInt(); val b = f.bottom.toInt()
+        box(l, t, r, b, CAN_D)
+        var y = t + 2
+        while (y < b + 2) {
+            var x = l + ((y * 7) % 5)
+            while (x < r + 2) {
+                val v = h(x, y, id)
+                val rr = 3 + v % 3; val deep = (y - t) / maxOf(1f, (b - t).toFloat())
+                p.color = 0xFF10261A.toInt(); c.drawCircle(x.toFloat(), y.toFloat(), rr + 0.8f, p)
+                p.color = if (deep > 0.7f) CAN_D else CAN; c.drawCircle(x.toFloat(), y.toFloat(), rr.toFloat(), p)
+                p.color = CAN_L; c.drawCircle(x - rr * 0.3f, y - rr * 0.35f, rr * 0.55f, p)
+                if (v % 3 == 0) px(x - rr / 2, y - rr / 2, CAN_H)
+                if (v % 11 == 0) { px(x + 1, y, 0xFFE04848.toInt()) }
+                x += 5 + v % 3
+            }
+            y += 5
+        }
+        for (k in 0 until 3) box(l, b + k, r, b + k + 1, intArrayOf(0x40000000, 0x26000000, 0x10000000)[k])
+    }
     private fun pond(w: RectF, id: Int) {
         val l = w.left; val t = w.top; val r = w.right; val b = w.bottom
+        // a soft, muddy shore, wobbling round the water
+        for (k in 0 until 14) {
+            val a = k * 0.449f; val ex = (l + r) / 2 + Math.cos(a.toDouble()).toFloat() * (r - l) * 0.46f; val ey = (t + b) / 2 + Math.sin(a.toDouble()).toFloat() * (b - t) * 0.44f
+            p.color = 0xFF4A6A30.toInt(); c.drawCircle(ex, ey, 6f + h(k, 3, id) % 5, p)
+        }
         p.color = 0xFF5A7A3A.toInt(); c.drawOval(l - 3, t - 2, r + 3, b + 3, p)
-        p.color = 0xFF3A6A8A.toInt(); c.drawOval(l, t, r, b, p)
-        p.color = 0xFF5A94B8.toInt(); c.drawOval(l + 3, t + 4, r - 2, b - 1, p)
-        p.color = 0xFF8CC0DC.toInt(); c.drawOval(l + (r - l) * 0.35f, b - 6, r - 6, b - 3, p)
+        p.color = 0xFF24485E.toInt(); c.drawOval(l, t, r, b, p)
+        p.color = 0xFF3A6A8A.toInt(); c.drawOval(l + 3, t + 3, r - 3, b - 2, p)
+        p.color = 0xFF4E84A6.toInt(); c.drawOval(l + 8, t + 7, r - 6, b - 4, p)
+        p.color = 0xFF6CA2C2.toInt(); c.drawOval(l + (r - l) * 0.3f, b - (b - t) * 0.3f, r - 10, b - 4, p)
+        // reeds and rushes round the edge
+        for (k in 0 until ((r - l) / 10).toInt()) {
+            val v = h(k, 9, id); val a = (v % 628) / 100f
+            val ex = (l + r) / 2 + Math.cos(a.toDouble()).toFloat() * (r - l) * 0.5f; val ey = (t + b) / 2 + Math.sin(a.toDouble()).toFloat() * (b - t) * 0.5f
+            for (q in 0 until 3) { box(ex + q * 2f, ey - 6f - (q % 2) * 2, ex + q * 2f + 1, ey + 1, 0xFF3E6A28.toInt()); if (q == 1) box(ex + q * 2f, ey - 8f, ex + q * 2f + 1, ey - 5f, 0xFF7A4A24.toInt()) }
+        }
         val v = h(l.toInt(), t.toInt(), id)
         // lilies and reeds
         for (i in 0 until 3) {
@@ -546,12 +564,27 @@ internal class HallRoomArt {
             val flip = (time * 3f + i).toInt() % 2
             cv.drawRect(x, y, x + 2f - flip, y + 1f + flip, glow)
         }
-        for (i in 0 until 5) {
-            val x = 20f + (i * 53 + s.id * 7) % 200 + sin(time * 0.8f + i * 1.7f) * 14f; val y = 50f + (i * 29 + s.id * 3) % 100 + cos(time * 0.6f + i) * 8f
-            val on = ((time * 1.5f + i * 0.7f) % 2f) < 1.2f
-            if (!on) continue
-            glow.color = 0x30F8F070; cv.drawCircle(x, y, 3f, glow)
-            glow.color = 0xFFF8F8A0.toInt(); cv.drawRect(x, y, x + 1f, y + 1f, glow)
+        // mist lying on the water, drifting and breathing
+        for ((wi, w) in s.pools.withIndex()) for (i in 0 until 9) {
+            val ph = (time * 0.04f + i * 0.111f + wi * 0.37f) % 1f
+            val fx = w.left - 14f + ph * (w.width() + 28f); val fy = w.top + (i * 37 % 100) / 100f * w.height() + sin(time * 0.5f + i) * 3f
+            val a = (0x16 + 0x10 * sin(time * 0.7f + i * 1.3f)).toInt().coerceIn(6, 40)
+            glow.color = (a shl 24) or 0xE8F0F4; cv.drawOval(fx - 14f, fy - 4f, fx + 14f, fy + 4f, glow)
+            glow.color = ((a / 2) shl 24) or 0xE8F0F4; cv.drawOval(fx - 22f, fy - 6f, fx + 22f, fy + 6f, glow)
+        }
+        // fireflies wandering about, gathering over the water
+        val flies = 14 + s.pools.size * 8
+        for (i in 0 until flies) {
+            val w = if (i >= 14 && s.pools.isNotEmpty()) s.pools[(i - 14) % s.pools.size] else null
+            val bx = w?.centerX() ?: (16f + (i * 53 + s.id * 7) % 208); val by = w?.centerY() ?: (44f + (i * 29 + s.id * 3) % 118)
+            val rx = w?.width()?.times(0.6f) ?: 26f; val ry = w?.height()?.times(0.7f) ?: 16f
+            val x = bx + sin(time * (0.3f + (i % 5) * 0.07f) + i * 1.7f) * rx + sin(time * 1.3f + i) * 3f
+            val y = by + cos(time * (0.25f + (i % 4) * 0.06f) + i * 2.3f) * ry - 4f
+            val pulse = ((time * (0.9f + (i % 3) * 0.3f) + i * 0.37f) % 2f)
+            if (pulse > 1.4f) continue
+            val k = 1f - abs(pulse - 0.7f) / 0.7f
+            glow.color = ((0x38 * k).toInt() shl 24) or 0xF8F070; cv.drawCircle(x, y, 3.5f, glow)
+            glow.color = ((0xFF * k).toInt().coerceIn(80, 255) shl 24) or 0xF8F8A0; cv.drawRect(x, y, x + 1f, y + 1f, glow)
         }
         // shafts of light through the canopy
         for (k in 0 until 2) {

@@ -36,7 +36,7 @@ class Library(private val ctx: Context, val ws: Workspace) {
 
     companion object {
         val SPRITES = listOf("tiles", "walls", "props", "decor", "characters", "kiosks", "items")
-        val FOLDERS = SPRITES.map { "sprites/$it" } + listOf("sounds", "music", "worlds")
+        val FOLDERS = SPRITES.map { "sprites/$it" } + listOf("sounds", "music", "worlds", "packs")
         const val MAX_PX = 2048; const val MAX_IMG = 8L shl 20; const val MAX_SND = 1L shl 20; const val MAX_MUSIC = 20L shl 20
         private val FRAMES = Regex("_f(\\d{1,2})$")
         private val DENSITY = Regex("@([1-8])x$")
@@ -92,6 +92,29 @@ class Library(private val ctx: Context, val ws: Workspace) {
                 // the same sprite at two densities: the more detailed one wins
                 if ((found[key]?.density ?: 0) >= density) continue
                 found[key] = Asset(cat, base, e.id, e.size, e.modified, e.name, density)
+            }
+        }
+        // packs: packs/<pack>/<category>/name.png, listed as "<pack>/name" in that category
+        runCatching { ws.dir("packs") }.getOrNull()?.let { packsId ->
+            for (pk in runCatching { ws.list(packsId) }.getOrNull().orEmpty()) {
+                if (!pk.isDir || pk.name.startsWith(".")) continue
+                val pname = pk.name.lowercase().replace(Regex("[^a-z0-9_]+"), "_")
+                val sub = runCatching { ws.list(pk.id) }.getOrNull().orEmpty()
+                for (cd in sub) {
+                    val cat = cd.name.lowercase()
+                    if (!cd.isDir || cat !in SPRITES) continue
+                    for (e in runCatching { ws.list(cd.id) }.getOrNull().orEmpty()) {
+                        if (e.isDir || e.name.startsWith(".")) continue
+                        val ext = e.name.substringAfterLast('.', "").lowercase()
+                        if (ext != "png") continue
+                        val stem = e.name.substringBeforeLast('.')
+                        val density = DENSITY.find(stem)?.groupValues?.get(1)?.toIntOrNull() ?: 1
+                        val base = "$pname/" + stem.replace(DENSITY, "")
+                        val key = "$cat/$base"
+                        if ((found[key]?.density ?: 0) >= density) continue
+                        found[key] = Asset(cat, base, e.id, e.size, e.modified, "packs/${pk.name}/${cd.name}/${e.name}", density)
+                    }
+                }
             }
         }
         // load only what's new or changed since the last look

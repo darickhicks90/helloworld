@@ -62,7 +62,7 @@ class Workspace(private val ctx: Context, val tree: Uri) {
     fun delete(id: String) { runCatching { DocumentsContract.deleteDocument(res, uri(id)) } }
 
     /** Copies in what the folder doesn't have yet from the bundled starter kit (never overwrites). */
-    fun installStarter(onlyReadmes: Boolean = false): Int {
+    fun installStarter(onlyReadmes: Boolean = false, only: String? = null): Int {
         var n = 0
         fun walk(asset: String, path: String) {
             val kids = ctx.assets.list(asset) ?: return
@@ -77,7 +77,7 @@ class Workspace(private val ctx: Context, val tree: Uri) {
                 write(dirId, k, mimeOf(k), bytes); n++
             }
         }
-        walk("starter", "")
+        if (only != null) walk("starter/$only", only) else walk("starter", "")
         for (d in Library.FOLDERS) dir(d)
         return n
     }

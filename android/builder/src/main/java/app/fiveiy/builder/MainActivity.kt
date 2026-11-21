@@ -121,6 +121,9 @@ class MainActivity : Activity() {
                 val key = "starter2:$tree"
                 if (!prefs.getBoolean(key, false)) { w.installStarter(); prefs.edit().putBoolean(key, true).apply() }
                 else w.installStarter(onlyReadmes = true)
+                // new art packs arrive once in folders set up before they existed
+                val pk = "pack_wildwood1:$tree"
+                if (!prefs.getBoolean(pk, false)) { w.installStarter(only = "packs/wildwood"); prefs.edit().putBoolean(pk, true).apply() }
             }.exceptionOrNull()
             main.post {
                 if (err != null) { toast("Couldn't use that folder: ${err.message}"); welcome(); return@post }

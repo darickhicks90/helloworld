@@ -16,6 +16,8 @@ The Builder never changes or deletes your own files.
   sounds/              Short sound effects.
   music/               Music that loops in a room.
   worlds/              Your saved worlds (.json). Made by the Builder; back them up.
+  packs/               Ready-made sets of sprites, each in its own folder (packs/wildwood/...).
+                       Same categories inside; they show in the palette as "pack/name".
 
 Each folder has its own README with sizes and formats. The short version:
 

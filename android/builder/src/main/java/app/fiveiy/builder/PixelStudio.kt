@@ -184,7 +184,7 @@ class PixelCanvas(ctx: Context, private val studio: PixelStudio) : View(ctx) {
  * picks them up.
  */
 class PixelStudio(private val act: MainActivity, private val lib: Library, private val ws: Workspace, private val onClose: () -> Unit) {
-    enum class Tool { PEN, ERASE, SMOOTH, FILL, LINE, BOX, OVAL, PICK, MOVE }
+    enum class Tool { PEN, ERASE, SMOOTH, FILL, LINE, BOX, OVAL, PICK, MOVE, BLOB, SHADE, LIGHT }
     var doc = PixDoc(24, 24, 4, 3)
     var dir = 0; var frame = 0
     var tool = Tool.PEN
@@ -219,7 +219,30 @@ class PixelStudio(private val act: MainActivity, private val lib: Library, priva
             0xFF4A4A58, 0xFF6E6E80, 0xFF9A9AA8, 0xFFA88420, 0xFFF0CC50, 0x00000000,
         ).map { it.toInt() }.toIntArray()
         val TRANSPARENT = 0
+        /** The dark ink every monster is outlined in. */
+        val OUTLINE_INK = 0xFF16101A.toInt()
         val SIZES = intArrayOf(1, 2, 3, 4, 6, 8, 12, 16, 24, 32)
+        /** Ready-made five-tone ramps for monsters and the wood (darkest to highlight). */
+        val RAMPS = listOf(
+            "DEMON RED" to longArrayOf(0xFF5A0C1C, 0xFF9A1A2A, 0xFFD03A3A, 0xFFF07858, 0xFFFFC090),
+            "IMP PLUM" to longArrayOf(0xFF46183A, 0xFF802860, 0xFFB44678, 0xFFE68CAA, 0xFFFFD0D8),
+            "SHADOW" to longArrayOf(0xFF1E1E40, 0xFF2A2C5C, 0xFF383A6E, 0xFF6E76BE, 0xFFB4BCF0),
+            "FUR BROWN" to longArrayOf(0xFF40221C, 0xFF703E2A, 0xFFA0643E, 0xFFC68E5A, 0xFFE4BA80),
+            "SNOW FUR" to longArrayOf(0xFF5C4E7C, 0xFF968AB6, 0xFFCAC4E0, 0xFFEAE8F8, 0xFFFFFFFF),
+            "BONE" to longArrayOf(0xFF544838, 0xFFA08C68, 0xFFD4C49A, 0xFFECE2C2, 0xFFFCF8E4),
+            "STEEL" to longArrayOf(0xFF242838, 0xFF545A72, 0xFF8C94AC, 0xFFC2CADC, 0xFFF0F4FF),
+            "SLIME TEAL" to longArrayOf(0xFF0E4A4A, 0xFF1E7A74, 0xFF34AAA0, 0xFF7CDCC8, 0xFFD0FFF0),
+            "ALLY TEAL" to longArrayOf(0xFF14605A, 0xFF22A08A, 0xFF5CD8B0, 0xFFA8F0D0, 0xFFC8FFE0),
+            "PETAL" to longArrayOf(0xFF8C2254, 0xFFD64A86, 0xFFF686B4, 0xFFFFC0DA, 0xFFFFECF4),
+            "GRASS" to longArrayOf(0xFF2E5A24, 0xFF4E8A34, 0xFF6CA642, 0xFF7CB84C, 0xFF94CC5E),
+            "LEAF" to longArrayOf(0xFF1E4224, 0xFF2E6232, 0xFF4A8A3E, 0xFF78B456, 0xFFAEDC80),
+            "MOSS" to longArrayOf(0xFF0E1E10, 0xFF2A5A2A, 0xFF4C8C3C, 0xFF8CC060, 0xFFD8F8B0),
+            "BARK" to longArrayOf(0xFF2E1C10, 0xFF4A301A, 0xFF6A4628, 0xFF8A623A, 0xFFB08858),
+            "DIRT PATH" to longArrayOf(0xFF7A5A30, 0xFFA8844E, 0xFFCCAA72, 0xFFE0C490, 0xFFF0DCB0),
+            "POND" to longArrayOf(0xFF1E3E5A, 0xFF3A6A8A, 0xFF5A94B8, 0xFF8CC0DC, 0xFFD0ECF8),
+            "MUSHROOM" to longArrayOf(0xFF6A1018, 0xFFB02028, 0xFFE04040, 0xFFF87878, 0xFFFFD0C8),
+            "GLOW EYES" to longArrayOf(0xFF7A1010, 0xFFE03C3C, 0xFFFF9628, 0xFFFFEC6E, 0xFFFFFFFF),
+        )
     }
 
     private fun dp(v: Float) = v * act.resources.displayMetrics.density
@@ -262,7 +285,9 @@ class PixelStudio(private val act: MainActivity, private val lib: Library, priva
         val d = a?.let { PixDoc.fromAsset(it) }
         if (d != null && key != null) {
             doc = d; openedKey = key; cat = key.substringBefore('/')
-            name = key.substringAfter('/').replace(Regex("_f\\d+$"), "").replace("_4dir", "")
+            name = key.substringAfter('/').replace(Regex("_f\\d+$"), "").replace("_4dir", "").replace('/', '_')
+            // a pack's sprite is a template: saving makes your own copy in your sprites folder
+            if (key.substringAfter('/').contains('/')) openedKey = null
         }
         dir = 0; frame = 0; undo.clear(); redo.clear(); dirty = false
         if (::canvas.isInitialized) { canvas.fit(); refreshAll() }
@@ -275,7 +300,7 @@ class PixelStudio(private val act: MainActivity, private val lib: Library, priva
 
     private fun refreshTools() {
         toolRow.removeAllViews()
-        for ((t, s) in listOf(Tool.PEN to "PEN", Tool.ERASE to "ERASE", Tool.SMOOTH to "SMOOTH", Tool.FILL to "FILL", Tool.LINE to "LINE", Tool.BOX to "BOX", Tool.OVAL to "OVAL", Tool.PICK to "PICK", Tool.MOVE to "MOVE"))
+        for ((t, s) in listOf(Tool.PEN to "PEN", Tool.ERASE to "ERASE", Tool.BLOB to "BLOB", Tool.SHADE to "SHADE", Tool.LIGHT to "LIGHT", Tool.SMOOTH to "SMOOTH", Tool.FILL to "FILL", Tool.LINE to "LINE", Tool.BOX to "BOX", Tool.OVAL to "OVAL", Tool.PICK to "PICK", Tool.MOVE to "MOVE"))
             toolRow.put(btn(s, if (tool == t) MainActivity.GOLD else MainActivity.GREY) { tool = t; refreshTools() })
         toolRow.put(btn("SIZE $brush", MainActivity.GREY) { brush = SIZES[(SIZES.indexOf(brush) + 1) % SIZES.size]; refreshTools() })
         toolRow.put(btn(if (soft) "SOFT" else "HARD", if (soft) MainActivity.BLUE else MainActivity.GREY) { soft = !soft; refreshTools() })
@@ -287,6 +312,8 @@ class PixelStudio(private val act: MainActivity, private val lib: Library, priva
         toolRow.put(btn("GRID", if (grid) MainActivity.BLUE else MainActivity.GREY) { grid = !grid; refreshTools() })
         toolRow.put(btn("ONION", if (onion) MainActivity.BLUE else MainActivity.GREY) { onion = !onion; refreshTools() })
         toolRow.put(btn("OUTLINE", MainActivity.PURPLE) { outlineDialog() })
+        toolRow.put(btn("TINT", MainActivity.PURPLE) { tintDialog() })
+        toolRow.put(btn("MONSTER HELP", MainActivity.GREY) { monsterHelp() })
         toolRow.put(btn("FLIP", MainActivity.GREY) { edit { val c = doc.cell(dir, frame); val w = doc.w; for (y in 0 until doc.h) for (x in 0 until w / 2) { val a = c[y * w + x]; c[y * w + x] = c[y * w + w - 1 - x]; c[y * w + w - 1 - x] = a } } })
         toolRow.put(btn("CLEAR", MainActivity.RED) { edit { doc.cell(dir, frame).fill(0) } })
     }
@@ -334,6 +361,9 @@ class PixelStudio(private val act: MainActivity, private val lib: Library, priva
             colorRow.addView(v, LinearLayout.LayoutParams(dpi(if (big) 52f else 34f), dpi(if (big) 52f else 40f)).apply { rightMargin = dpi(3f) }) }
         swatch(color, true, { colorDialog() })
         colorRow.put(btn("MIX", MainActivity.GREY) { colorDialog() })
+        colorRow.put(btn("RAMPS", MainActivity.PURPLE) { rampDialog() })
+        // the current colour's own ramp, to shade by hand
+        for (rc in PixelOps.ramp(color)) if (rc != color) swatch(rc, false, { color = rc; remember(rc); refreshColors() })
         val recent = prefs.getString("recent", "")!!.split(',').mapNotNull { it.toLongOrNull()?.toInt() }
         for (c in recent) swatch(c, false, { color = c; refreshColors() })
         for (c in PALETTE) swatch(c, false, { color = c; if (tool == Tool.ERASE || tool == Tool.PICK) tool = Tool.PEN; refreshColors(); refreshTools() })
@@ -473,7 +503,21 @@ class PixelStudio(private val act: MainActivity, private val lib: Library, priva
             Tool.FILL -> if (opacity < 1f) { val f0 = c.copyOf(); if (soft) softFill(c, x, y, color) else fill(c, x, y, color); for (i in c.indices) if (c[i] != f0[i]) c[i] = PixelOps.mix(f0[i], c[i], opacity) } else if (soft) softFill(c, x, y, color) else fill(c, x, y, color)
             Tool.PICK -> if (x in 0 until doc.w && y in 0 until doc.h) { val v = c[y * doc.w + x]; if (Color.alpha(v) > 0) { color = v; remember(v); tool = Tool.PEN; refreshColors(); refreshTools() } }
             Tool.MOVE -> moveBase = c.copyOf()
+            Tool.SHADE, Tool.LIGHT -> shadeLine(c, px, py, px, py)
             else -> {}
+        }
+    }
+    /** SHADE / LIGHT: each pixel under the brush moves one step along its own colour's ramp (once a stroke). */
+    private fun shadeLine(c: IntArray, x0: Float, y0: Float, x1: Float, y1: Float) {
+        val bs = base ?: return; val cv = cov ?: return
+        val k = if (tool == Tool.SHADE) -1 else 1
+        val dist = hypot(x1 - x0, y1 - y0); val n = max(1, (dist / 0.5f).toInt())
+        for (j in 0..n) {
+            val t = j / n.toFloat()
+            dab(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t) { i, a ->
+                if (cv[i] > 0f || PixelOps.a(bs[i]) == 0 || bs[i] == OUTLINE_INK) return@dab
+                cv[i] = a; c[i] = if (a >= 0.5f || !soft) PixelOps.step(bs[i], k) else PixelOps.mix(bs[i], PixelOps.step(bs[i], k), a)
+            }
         }
     }
     fun strokeMove(x: Int, y: Int, px: Float = x + 0.5f, py: Float = y + 0.5f) {
@@ -482,10 +526,19 @@ class PixelStudio(private val act: MainActivity, private val lib: Library, priva
             Tool.PEN -> { paintLine(c, fx, fy, px, py, false); fx = px; fy = py; lx = x; ly = y; return }
             Tool.ERASE -> { paintLine(c, fx, fy, px, py, true); fx = px; fy = py; lx = x; ly = y; return }
             Tool.SMOOTH -> { if (hypot(px - fx, py - fy) >= max(0.5f, brush / 4f)) { smoothAt(c, px, py); fx = px; fy = py }; return }
+            Tool.SHADE, Tool.LIGHT -> { shadeLine(c, fx, fy, px, py); fx = px; fy = py; lx = x; ly = y; return }
             else -> {}
         }
         if (x == lx && y == ly) return
         when (tool) {
+            Tool.BLOB -> {
+                // a shaded ball in the current colour's ramp (mirrored too, with MIRROR on)
+                val pv = c.copyOf(); val rp = PixelOps.ramp(color)
+                val l = min(sx, x); val r = max(sx, x); val t = min(sy, y); val b = max(sy, y)
+                PixelOps.blob(pv, doc.w, doc.h, l, t, r, b, rp, null)
+                if (mirror) PixelOps.blob(pv, doc.w, doc.h, doc.w - 1 - r, t, doc.w - 1 - l, b, rp, null)
+                preview = pv
+            }
             Tool.LINE, Tool.BOX, Tool.OVAL -> {
                 val pv = c.copyOf()
                 when (tool) { Tool.LINE -> lineOn(pv, sx, sy, x, y, color); Tool.BOX -> boxOn(pv, sx, sy, x, y, color); else -> ovalOn(pv, sx, sy, x, y, color) }
@@ -606,10 +659,90 @@ class PixelStudio(private val act: MainActivity, private val lib: Library, priva
     }
 
     private fun outlineDialog() {
-        AlertDialog.Builder(act).setTitle("Outline in the current colour")
-            .setItems(arrayOf("This frame", "Every frame and direction")) { _, i ->
-                edit { val cells = if (i == 0) listOf(doc.cell(dir, frame)) else doc.cells.flatMap { it }; cells.forEach { c -> repeat(doc.density) { outline(c, color) } } }
+        AlertDialog.Builder(act).setTitle("Outline")
+            .setItems(arrayOf("Current colour: this frame", "Current colour: every frame and direction", "Dark ink (the monster look): every frame", "Coloured (darkest of what it borders): every frame", "Inner lines where parts meet: this frame", "Inner lines: every frame")) { _, i ->
+                edit {
+                    val all = doc.cells.flatMap { it }; val one = listOf(doc.cell(dir, frame))
+                    when (i) {
+                        0 -> one.forEach { c -> repeat(doc.density) { outline(c, color) } }
+                        1 -> all.forEach { c -> repeat(doc.density) { outline(c, color) } }
+                        2 -> all.forEach { c -> repeat(doc.density) { outline(c, OUTLINE_INK) } }
+                        3 -> all.forEach { c -> repeat(doc.density) { selOutline(c) } }
+                        4 -> one.forEach { innerLines(it) }
+                        else -> all.forEach { innerLines(it) }
+                    }
+                }
             }.show()
+    }
+    /** An outline that takes the darkest tone of what it borders (softer than black; very 90s). */
+    private fun selOutline(c: IntArray) {
+        val w = doc.w; val h = doc.h; val src = c.copyOf()
+        for (y in 0 until h) for (x in 0 until w) {
+            if (Color.alpha(src[y * w + x]) != 0) continue
+            var best = 0
+            for ((dx, dy) in listOf(1 to 0, -1 to 0, 0 to 1, 0 to -1)) { val xx = x + dx; val yy = y + dy; if (xx in 0 until w && yy in 0 until h && Color.alpha(src[yy * w + xx]) > 0) { best = src[yy * w + xx]; break } }
+            if (best != 0) c[y * w + x] = PixelOps.step(PixelOps.step(PixelOps.step(best, -1), -1), -1)
+        }
+    }
+    /** Where two clearly different parts meet (an arm over a body), the lower or right one gets a dark line. */
+    private fun innerLines(c: IntArray) {
+        val w = doc.w; val h = doc.h; val src = c.copyOf()
+        for (y in 0 until h) for (x in 0 until w) {
+            val p = src[y * w + x]; if (Color.alpha(p) == 0 || p == OUTLINE_INK) continue
+            for ((dx, dy) in listOf(-1 to 0, 0 to -1)) {
+                val xx = x + dx; val yy = y + dy
+                if (xx < 0 || yy < 0) continue
+                val q = src[yy * w + xx]
+                if (Color.alpha(q) > 0 && q != OUTLINE_INK && PixelOps.diff(p, q) > 70 && !sameRamp(p, q)) { c[y * w + x] = PixelOps.step(p, -2); break }
+            }
+        }
+    }
+    /** Two tones of one ramp (so shading bands don't get lines drawn between them). */
+    private fun sameRamp(p: Int, q: Int): Boolean { for (k in -3..3) if (PixelOps.diff(PixelOps.step(p, k), q) < 26) return true; return false }
+    /** TINT: recolour a sprite by sliding every ramp (for allies, variants, elements). */
+    private fun tintDialog() {
+        val opts = arrayOf("Hue: shift a little", "Hue: shift a third (variant)", "Hue: opposite (ally colours)", "Darker overall", "Lighter overall", "Toward the current colour")
+        AlertDialog.Builder(act).setTitle("Tint every frame").setItems(opts) { _, i ->
+            val target = FloatArray(3); Color.colorToHSV(color, target)
+            edit {
+                for (c in doc.cells.flatMap { it }) for (k in c.indices) {
+                    val v = c[k]; if (Color.alpha(v) == 0 || v == OUTLINE_INK) continue
+                    val hsv = FloatArray(3); Color.colorToHSV(v, hsv)
+                    if (hsv[1] < 0.08f && i < 3) continue      // leave greys, whites and blacks
+                    when (i) {
+                        0 -> hsv[0] = (hsv[0] + 30f) % 360f
+                        1 -> hsv[0] = (hsv[0] + 120f) % 360f
+                        2 -> hsv[0] = (hsv[0] + 180f) % 360f
+                        3 -> { c[k] = PixelOps.step(v, -1); continue }
+                        4 -> { c[k] = PixelOps.step(v, 1); continue }
+                        else -> { if (hsv[1] < 0.08f) continue; hsv[0] = target[0]; hsv[1] = (hsv[1] + target[1]) / 2f }
+                    }
+                    c[k] = (Color.HSVToColor(hsv) and 0xFFFFFF) or (Color.alpha(v) shl 24)
+                }
+            }
+        }.show()
+    }
+    private fun rampDialog() {
+        AlertDialog.Builder(act).setTitle("Colour ramps (tap one to use it)").setItems(RAMPS.map { it.first }.toTypedArray()) { _, i ->
+            val r = RAMPS[i].second.map { it.toInt() }
+            val recent = (r + prefs.getString("recent", "")!!.split(',').mapNotNull { it.toLongOrNull()?.toInt() }.filter { it !in r }).take(12)
+            prefs.edit().putString("recent", recent.joinToString(",") { (it.toLong() and 0xFFFFFFFFL).toString() }).apply()
+            color = r[2]; if (tool == Tool.ERASE || tool == Tool.PICK) tool = Tool.PEN
+            refreshColors(); refreshTools()
+        }.show()
+    }
+    private fun monsterHelp() {
+        AlertDialog.Builder(act).setTitle("Making a monster (or a tree)").setMessage(
+            "1. RAMPS: pick a body ramp (DEMON RED, FUR BROWN, MOSS...).\n" +
+            "2. MIRROR on. BLOB: drag out the body, then the head, then legs and arms: each blob is shaded for you, lit from the upper left. Later blobs sit on top.\n" +
+            "3. Pick another ramp (BONE, STEEL) for horns, claws, teeth; draw them with PEN, then SHADE or LIGHT to round them.\n" +
+            "4. Eyes make the monster: 2 x 2 of GLOW EYES with a dark pupil; a dark line slanting down to the middle above each makes it angry.\n" +
+            "5. OUTLINE > Inner lines, then OUTLINE > Dark ink (or Coloured for a softer look).\n" +
+            "6. TINT makes a variant (another element, or ally colours) in one tap.\n\n" +
+            "Trees and bushes: BLOB the crown in LEAF, three or four blobs overlapping; a trunk in BARK with PEN; SHADE under the crown. " +
+            "Tiles: FILL with GRASS or DIRT PATH, then dab LIGHT and SHADE about for texture.\n\n" +
+            "The packs/wildwood folder in your world folder has examples of all of these: open them here, and SAVE AS to make your own."
+        ).setPositiveButton("OK", null).show()
     }
     private fun outline(c: IntArray, col: Int) {
         val w = doc.w; val h = doc.h; val src = c.copyOf()

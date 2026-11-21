@@ -15,6 +15,47 @@ object PixelOps {
     fun a(c: Int) = c ushr 24; fun r(c: Int) = (c shr 16) and 255; fun g(c: Int) = (c shr 8) and 255; fun b(c: Int) = c and 255
     fun argb(a: Int, r: Int, g: Int, b: Int) = (a.coerceIn(0, 255) shl 24) or (r.coerceIn(0, 255) shl 16) or (g.coerceIn(0, 255) shl 8) or b.coerceIn(0, 255)
 
+    // ---- colour ramps, the way monster-raising RPGs shade: shadows go darker AND cooler (toward
+    // blue-violet) and a little more saturated; highlights go lighter AND warmer (toward yellow).
+    /** One step along the ramp: k < 0 darker, k > 0 lighter (k in steps, e.g. -2..2). */
+    fun step(c: Int, k: Int): Int {
+        if (a(c) == 0 || k == 0) return c
+        val hsv = FloatArray(3); Color.RGBToHSV(r(c), g(c), b(c), hsv)
+        var h = hsv[0]; var s = hsv[1]; var v = hsv[2]
+        repeat(kotlin.math.abs(k)) {
+            if (k < 0) { h = towards(h, 250f, 9f); s = min(1f, s + 0.07f); v = max(0.04f, v * 0.74f) }
+            else { h = towards(h, 55f, 7f); s = max(0f, s - 0.09f); v = min(1f, v * 1.18f + 0.05f) }
+        }
+        return (Color.HSVToColor(floatArrayOf(h, s, v)) and 0xFFFFFF) or (a(c) shl 24)
+    }
+    private fun towards(h: Float, target: Float, by: Float): Float {
+        var d = target - h; if (d > 180f) d -= 360f; if (d < -180f) d += 360f
+        return ((h + d.coerceIn(-by, by)) + 360f) % 360f
+    }
+    /** Five tones round a colour: darkest, dark, the colour, light, highlight. */
+    fun ramp(c: Int): IntArray = intArrayOf(step(c, -2), step(c, -1), c, step(c, 1), step(c, 2))
+    /** A shaded ball in a ramp, lit from the upper left, in clean bands (no dithering). */
+    fun blob(dst: IntArray, w: Int, h: Int, l: Int, t: Int, r: Int, b: Int, ramp: IntArray, outline: Int?) {
+        val cx = (l + r + 1) / 2f; val cy = (t + b + 1) / 2f; val rx = max(0.6f, (r - l + 1) / 2f); val ry = max(0.6f, (b - t + 1) / 2f)
+        val lx = -0.5f; val ly = -0.7f; val lz = 0.5f; val ln = sqrt(lx * lx + ly * ly + lz * lz)
+        val mask = BooleanArray(w * h)
+        for (y in max(0, t - 1)..min(h - 1, b + 1)) for (x in max(0, l - 1)..min(w - 1, r + 1)) {
+            val nx = (x + 0.5f - cx) / rx; val ny = (y + 0.5f - cy) / ry; val d = nx * nx + ny * ny
+            if (d > 1f) continue
+            val nz = sqrt(max(0f, 1f - d))
+            val lit = (nx * 0.85f * lx + ny * 0.85f * ly + nz * lz) / ln
+            val i = when { lit < -0.15f -> 0; lit < 0.28f -> 1; lit < 0.68f -> 2; lit < 0.9f -> 3; else -> 4 }
+            dst[y * w + x] = ramp[i]; mask[y * w + x] = true
+        }
+        if (outline != null) for (y in 0 until h) for (x in 0 until w) {
+            if (mask[y * w + x]) continue
+            if ((x > 0 && mask[y * w + x - 1]) || (x < w - 1 && mask[y * w + x + 1]) || (y > 0 && mask[(y - 1) * w + x]) || (y < h - 1 && mask[(y + 1) * w + x]))
+                if (a(dst[y * w + x]) == 0) dst[y * w + x] = outline
+        }
+    }
+    /** How different two colours look (0..~440). */
+    fun diff(c0: Int, c1: Int): Int { val dr = r(c0) - r(c1); val dg = g(c0) - g(c1); val db = b(c0) - b(c1); return sqrt((dr * dr * 2 + dg * dg * 4 + db * db * 3).toFloat()).toInt() / 2 }
+
     /** src painted over dst at strength k (0..1, times src's own alpha). */
     fun over(dst: Int, src: Int, k: Float): Int {
         val sa = a(src) / 255f * k; if (sa <= 0f) return dst

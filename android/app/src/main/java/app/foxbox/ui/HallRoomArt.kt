@@ -21,6 +21,8 @@ internal class HallRoomArt {
         val id: Int, val kind: Int, val doors: BooleanArray, val throne: Boolean,
         val props: List<Pair<Int, RectF>>, val pools: List<RectF>, val crack: Int, val dais: RectF,
         val rivers: List<RectF> = emptyList(), val bridges: List<RectF> = emptyList(),
+        /** A stretch of the open wood: no walls of its own (its hedgerows are props). */
+        val open: Boolean = false,
     )
 
     private companion object {
@@ -472,6 +474,7 @@ internal class HallRoomArt {
         for (w in s.pools) pond(w, s.id)
         for (b in s.bridges) bridge(b)
         for ((k, f) in s.props) when (k) { THICKET -> thicket(f, s.id); PALISADE -> palisade(f); else -> shadow(k, f) }
+        if (s.open) return
         // the canopy along the top: a wall of round crowns over trunks
         box(0, 0, W, 31, CAN_D)
         for (k in 0 until 16) {

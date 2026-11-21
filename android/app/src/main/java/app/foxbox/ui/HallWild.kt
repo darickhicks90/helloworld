@@ -10,14 +10,14 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * The Wildwood: a forest of 9 x 8 screens (about ten times the great hall), made fresh for each
+ * The Wildwood: a forest of 6 x 5 screens (about four times the great hall), made fresh for each
  * level from a seed. A maze of paths (a random spanning tree with a few extra loops) runs between
  * the screens. Gates on the way to the exit are locked; keys lie elsewhere, always where you can
  * reach them before the gate they open (key i sits behind i gates at most). The exit itself is an
  * old root door that takes a key too.
  */
 internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
-    val w = 9; val h = 8; val n = w * h
+    val w = 6; val h = 5; val n = w * h
     private val rnd = kotlin.random.Random(seed)
     /** Each screen's open sides, as "WENS" letters (0 W, 1 E, 2 N, 3 S). */
     val doors = Array(n) { "" }
@@ -61,7 +61,7 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
         while (q.isNotEmpty()) { val r = q.removeFirst(); for (d in 0 until 4) if (sides[r][d]) { val o = nb(r, d); if (dist[o] < 0) { dist[o] = dist[r] + 1; q += o } } }
         exit = (0 until n).maxByOrNull { dist[it] }!!
         // 3. gates along the way: keys = gates + 1 (the root door takes one too)
-        val keyCount = minOf(4, 2 + depth / 3)
+        val keyCount = minOf(3, 2 + depth / 5)
         val gates = keyCount - 1
         val path = ArrayList<Int>(); run { var r = exit; while (r >= 0) { path.add(0, r); r = parent[r] } }
         val gateRooms = ArrayList<Int>()   // the room on the far side of each gate
@@ -87,7 +87,9 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
             val reg = minOf(i, gateRooms.size)
             val cands = (0 until n).filter { region[it] == reg && it !in used }.ifEmpty { (0 until n).filter { region[it] <= reg && it !in used } }
             // prefer dead ends and far corners
-            val score = cands.associateWith { dist[it] + (if (doors[it].length == 1) 6 else 0) + rnd.nextInt(6) }
+            // not tucked away at the far ends: a middling walk, easy to come across
+            val mid = (cands.maxOfOrNull { dist[it] } ?: 0) / 2
+            val score = cands.associateWith { -kotlin.math.abs(dist[it] - mid) * 2 + (if (doors[it].length == 1) 2 else 0) + rnd.nextInt(4) }
             val best = cands.maxByOrNull { score.getValue(it) } ?: start
             used += best
             keys += intArrayOf(best, 0, 0)

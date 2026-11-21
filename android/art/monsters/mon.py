@@ -180,13 +180,35 @@ def behemoth(frame):
     s.px(12,hy+2,'D'); s.px(12,hy+1,'D'); s.px(20,hy+2,'D'); s.px(20,hy+1,'D'); s.px(14,hy+3,'W'); s.px(18,hy+3,'W')
     return s.render()
 
+EYEB='wxyz'
+def gazer(frame):
+    s=S(16,16)
+    up=frame==0
+    # leathery wings, up or down
+    if up:
+        s.tri([(5,6),(0.5,0),(1.5,3),(0,5),(1.2,7),(0,9.5),(4,10)],WING,0); s.tri([(11,6),(15.5,0),(14.5,3),(16,5),(14.8,7),(16,9.5),(12,10)],WING,0)
+    else:
+        s.tri([(5,9),(0.5,15),(1.5,12),(0,10),(1.2,8),(0,5.5),(4,5)],WING,0); s.tri([(11,9),(15.5,15),(14.5,12),(16,10),(14.8,8),(16,5.5),(12,5)],WING,0)
+    # the great eyeball
+    s.blob(8,7.5,5,5,EYEB,2)
+    # iris and a slit pupil, glaring
+    for (x,y) in [(7,6),(8,6),(9,6),(7,7),(9,7),(7,8),(8,8),(9,8),(6,7),(10,7)]: s.px(x,y,'i')
+    s.px(8,7,'K'); s.px(8,6,'K'); s.px(8,8,'K'); s.px(7,6,'I')
+    # a heavy lid scowling down
+    for x in range(5,12): s.px(x,3 if x in (5,11) else 4 if 7<=x<=9 else 3,'K')
+    # veins
+    s.px(4,9,'r'); s.px(5,10,'r'); s.px(12,9,'r')
+    # a fanged slit of a mouth underneath
+    for x in range(6,11): s.px(x,12,'M')
+    s.px(6,12,'W'); s.px(8,12,'W'); s.px(10,12,'W'); s.px(7,13,'W'); s.px(9,13,'W')
+    return s.render()
 PAL={'K':(28,20,40),'W':(255,255,255),'r':(220,60,80),'M':(60,10,24),'X':(255,70,70),'Y':(255,236,110),
  'v':(70,24,70),'p':(128,40,96),'q':(180,70,120),'P':(230,140,170),
  'm':(48,20,40),'n':(84,36,64),'o':(120,56,88),'O':(170,96,120),
  'b':(150,120,80),'c':(210,184,136),'d':(240,226,190),'D':(255,250,232),
  'f':(140,60,70),'g':(196,100,104),'h':(236,150,140),'G':(255,206,190),
  'a':(30,30,64),'j':(42,44,92),'e':(56,58,110),'E':(110,118,190),'s':(20,60,80),'t':(30,110,130),'u':(60,170,180),'U':(160,240,240),
- 'R':(90,12,28),'H':(240,120,96)}
+ 'R':(90,12,28),'H':(240,120,96),'w':(150,132,150),'x':(206,192,204),'y':(238,230,236),'z':(255,252,250),'i':(200,36,40),'I':(255,140,70)}
 PAL['r']=(176,34,46)
 # note: 'h'/'H' in behemoth ramp: R dark, r mid, h light, H highlight; reuse belly 'h' fine
 def preview(frames,scale,name):
@@ -199,7 +221,8 @@ def preview(frames,scale,name):
                     for a in range(scale):
                         for b in range(scale): im.putpixel((i*(w*scale+8)+x*scale+a,y*scale+b),PAL[ch])
     im.save(name)
+Z=[gazer(i) for i in range(2)]; preview(Z,10,'gazer.png')
 I=[imp(i) for i in range(2)]; T=[stalker(i) for i in range(3)]; B=[behemoth(i) for i in range(4)]
 preview(I,10,'imp.png'); preview(T,8,'stalker.png'); preview(B,6,'behemoth.png')
-import json; json.dump({'imp':I,'stalker':T,'behemoth':B},open('rows.json','w'))
+import json; json.dump({'imp':I,'stalker':T,'behemoth':B,'gazer':Z},open('rows.json','w'))
 print('ok')

@@ -370,7 +370,9 @@ class HallScreen(c: Context) : PixelView(c) {
     private var phase = Phase.INTRO
 
     // the traveller
-    private var maxHp = 100
+    private var maxHp = BASE_HP
+    /** Fragile: a few hits and you're done, so keep your distance and spark them from range. */
+    private val BASE_HP = 60
     /** The traveller's finds, the duel when one is under way, and loot lying where an imp fell. */
     private val bag = Bag()
     private var battle: HallBattle? = null
@@ -528,7 +530,7 @@ class HallScreen(c: Context) : PixelView(c) {
         if (lvl >= 20 || n <= 0) return
         xp += n
         while (lvl < 20 && xp >= xpNeed(lvl)) {
-            xp -= xpNeed(lvl); lvl++; maxHp += 2; hp = minOf(maxHp, hp + 15); saveSoon = true
+            xp -= xpNeed(lvl); lvl++; maxHp += 1; hp = minOf(maxHp, hp + 10); saveSoon = true
             levelFxT = 1.4f; msg = "LEVEL $lvl! YOUR FIREFLY GROWS"; msgT = 2.2f
             sfx.play(HallSfx.S.LEVEL_UP); sfx.rumbleFanfare()
         }
@@ -862,7 +864,7 @@ class HallScreen(c: Context) : PixelView(c) {
                 if (td > 12f) frMove(t.x, t.y + 3, sp * 1.2f, dt)
                 else {
                     frAtk = k.atkCd; frLunge = 0.25f; frLx = t.x; frLy = t.y
-                    hitImp(t, k.dmg); bursts += Burst(t.x, t.y); fxs += Fx(FX_STRIKE, t.x, t.y - 2, 0.35f, frFace.toFloat())
+                    hitImp(t, maxOf(2, k.dmg * 3 / 5)); bursts += Burst(t.x, t.y); fxs += Fx(FX_STRIKE, t.x, t.y - 2, 0.35f, frFace.toFloat())
                     t.kx = (t.x - frX) * 6f; t.ky = (t.y - frY) * 6f; t.stun = 0.5f
                     sfx.play(HallSfx.S.STOMP, 0.5f); shakeT = maxOf(shakeT, 0.08f)
                     killDead()
@@ -891,8 +893,8 @@ class HallScreen(c: Context) : PixelView(c) {
     private fun support(k: Friend, px: Float, py: Float) {
         // a small heal for you (or itself) when either is hurt
         if (frHealCd <= 0f && (hp < maxHp - 8 || frHp < k.maxHp * 0.7f || minions.any { it.ally && it.room == roomId && it.hp in 1 until it.maxHp })) {
-            frHealCd = 5f
-            if (hp < maxHp - 8) { hp = minOf(maxHp, hp + 14); beams += Beam(frX, frY - 8, false); say("${healName(k)} +14", 1f) }
+            frHealCd = 14f
+            if (hp < maxHp - 8) { hp = minOf(maxHp, hp + 8); beams += Beam(frX, frY - 8, false); say("${healName(k)} +8", 1f) }
             if (frHp < k.maxHp) { frHp = minOf(k.maxHp, frHp + 10); fxs += Fx(FX_MEND, frX, frY - 8, 0.7f) }
             sfx.play(HallSfx.S.ORB, 0.6f)
         }
@@ -907,7 +909,7 @@ class HallScreen(c: Context) : PixelView(c) {
             if (bossHere && stage == Stage.CHASE) { val d = hypot(bx - px, by - 6 - py); if (d < 80f && d < td + 20f) { td = d; tx = bx; ty = by - 6 } }
             for (sh in shots) { val d = hypot(sh.x - px, sh.y - py); if (d < 56f && d < td) { td = d; tx = sh.x; ty = sh.y } }
             if (td < 64f) {
-                frWallCd = 9f
+                frWallCd = 4f
                 val d = td.coerceAtLeast(1f); val ux = (tx - px) / d; val uy = (ty - py) / d
                 val cx = px + ux * minOf(18f, d * 0.6f); val cy = py + uy * minOf(18f, d * 0.6f)
                 val nx = -uy; val ny = ux; val half = 16f
@@ -1033,7 +1035,14 @@ class HallScreen(c: Context) : PixelView(c) {
             val r0 = (t / 176f).toInt().coerceIn(0, wl.h - 1); val r1 = (b / 176f).toInt().coerceIn(0, wl.h - 1)
             for (cy in r0..r1) for (cx in c0..c1) {
                 val k = cy * wl.w + cx
-                for (pp in chunkProps[k]) { if (pp.kind == PLAZA) continue; val f = pp.foot; if (r > f.left && l < f.right && t < f.bottom && b > f.top) return true }
+                // the deep wood, rock and water of the ground grid (shots fly over water)
+                run {
+                    val ms = wl.mass[k]; val ox = cx * 240f; val oy = cy * 176f
+                    val g0 = ((l - ox) / 6f).toInt().coerceIn(0, 39); val g1 = ((r - 0.01f - ox) / 6f).toInt().coerceIn(0, 39)
+                    val h0 = ((t - oy) / 5f).toInt().coerceIn(0, 34); val h1 = ((b - 0.01f - oy) / 5f).toInt().coerceIn(0, 34)
+                    if (r > ox && l < ox + 240f && b > oy && t < oy + 176f) for (gy in h0..h1) for (gx in g0..g1) { val m = ms[gy * 40 + gx].toInt(); if (m == 1 || m == 2 || (m == 3 && walk)) return true }
+                }
+                for (pp in chunkProps[k]) { if (pp.kind == PLAZA || pp.kind == SHRUB || pp.kind == MUSHROOM || pp.kind == FLOWERBED) continue; val f = pp.foot; if (r > f.left && l < f.right && t < f.bottom && b > f.top) return true }
                 if (walk) {
                     for (w in chunkPonds[k]) if (ovalHit(w, l, t, r, b)) return true
                     for (w in chunkPools[k]) if (r > w.left + 2 && l < w.right - 2 && t < w.bottom - 2 && b > w.top + 2) return true
@@ -1046,7 +1055,7 @@ class HallScreen(c: Context) : PixelView(c) {
         if (!crackPassable && r > crackWall.left && l < crackWall.right && b > crackWall.top && t < crackWall.bottom) return true
         // the empty corners of the grid (if any): solid
         if (rooms[((((t + b) / 2) / 176f).toInt().coerceIn(0, 2)) * 3 + (((l + r) / 2) / 240f).toInt().coerceIn(0, 2)] == null) return true
-        for (pp in room.props) { val f = pp.foot; if (r > f.left && l < f.right && t < f.bottom && b > f.top) return true }
+        for (pp in room.props) { if (pp.kind == SHRUB) continue; val f = pp.foot; if (r > f.left && l < f.right && t < f.bottom && b > f.top) return true }
         if (walk) for (w in room.pools) if (r > w.left + 2 && l < w.right - 2 && t < w.bottom - 2 && b > w.top + 2) return true
         return false
     }
@@ -1069,7 +1078,9 @@ class HallScreen(c: Context) : PixelView(c) {
     private fun shotStopped(x: Float, y: Float): Boolean {
         val wl = wild ?: return room.props.any { it.body.contains(x, y) }
         val cx = (x / 240f).toInt().coerceIn(0, wl.w - 1); val cy = ((y + 40f) / 176f).toInt().coerceIn(0, wl.h - 1)
-        return chunkProps[cy * wl.w + cx].any { it.body.contains(x, y) } || gates.any { it.r.contains(x, y) }
+        val my = ((y + 6f) / 176f).toInt().coerceIn(0, wl.h - 1)
+        val m = wl.massAt(my * wl.w + cx, x - cx * 240f, y + 6f - my * 176f)
+        return m == 1 || m == 2 || chunkProps[cy * wl.w + cx].any { it.body.contains(x, y) } || gates.any { it.r.contains(x, y) }
     }
 
     // ---- consecrate: segments and shapes
@@ -1409,9 +1420,9 @@ class HallScreen(c: Context) : PixelView(c) {
             spL = rx * 240f; spT = ry * 176f; spR = spL + 240f; spB = spT + 176f
             val heart = (wl.bossLevel && r == wl.exit) || r in wl.fortRooms
             if (!heart && r != wl.start) {
-                repeat(2 + rnd.nextInt(2) + minOf(3, depth / 3)) { val q = rnd.nextFloat(); spawnMinion(null, if (q < 0.25f) 1 else if (q < 0.47f) 3 else 0) }
+                repeat(1 + rnd.nextInt(2) + minOf(2, depth / 5)) { val q = rnd.nextFloat(); spawnMinion(null, if (q < 0.25f) 1 else if (q < 0.47f) 3 else 0) }
                 if (rnd.nextFloat() < minOf(0.12f, 0.05f + depth * 0.006f)) spawnBehemoth()
-                if (r in wl.fog) repeat(3 + rnd.nextInt(3)) { spawnMinion(null, 4) }
+                if (r in wl.fog) repeat(2 + rnd.nextInt(2)) { spawnMinion(null, 4) }
             }
             if (r in wl.fog) say("FOG... SOMETHING MOVES IN IT", 1.6f)
         }
@@ -1738,9 +1749,9 @@ class HallScreen(c: Context) : PixelView(c) {
                 // ember mend: a warm stream to you, and one to the most hurt thrall
                 val hurtAlly = minions.filter { it.ally && it.room == roomId && it.hp in 1 until it.maxHp }.minByOrNull { it.hp.toFloat() / it.maxHp }
                 if (hp >= maxHp - 6 && hurtAlly == null) { m.supCd = 1.5f; return }
-                m.supCd = 8f
-                if (hp < maxHp) { hp = minOf(maxHp, hp + 12); beams += Beam(m.x, m.y - 6, false); fxs += Fx(FX_MEND, px, py - 4, 0.6f) }
-                hurtAlly?.let { it.hp = minOf(it.maxHp, it.hp + 12); arcs += Arc(m.x, m.y - 6, it.x, it.y - 6); fxs += Fx(FX_MEND, it.x, it.y - 6, 0.5f) }
+                m.supCd = 15f
+                if (hp < maxHp) { hp = minOf(maxHp, hp + 6); beams += Beam(m.x, m.y - 6, false); fxs += Fx(FX_MEND, px, py - 4, 0.6f) }
+                hurtAlly?.let { it.hp = minOf(it.maxHp, it.hp + 8); arcs += Arc(m.x, m.y - 6, it.x, it.y - 6); fxs += Fx(FX_MEND, it.x, it.y - 6, 0.5f) }
                 say(if (m.perm) "IMP: EMBER MEND" else "THRALL: EMBER MEND", 1f); sfx.play(HallSfx.S.ORB, 0.5f)
             }
             1 -> {
@@ -1806,7 +1817,7 @@ class HallScreen(c: Context) : PixelView(c) {
         spL = zoneOX(z); spT = zoneOY(z); spR = spL + 240f; spB = spT + 176f
         if (!visited.add(z)) return
         if (z == 1 || z == 4 || phase != Phase.FIGHT) return
-        if (minions.count { !it.ally && hypot(it.x - (hx + 8), it.y - (hy + 13)) < 200f } < 2) repeat(2 + rnd.nextInt(2)) { val r = rnd.nextFloat(); spawnMinion(null, if (r < 0.25f) 1 else if (r < 0.47f) 3 else 0) }
+        if (minions.count { !it.ally && hypot(it.x - (hx + 8), it.y - (hy + 13)) < 200f } < 2) repeat(1 + rnd.nextInt(2)) { val r = rnd.nextFloat(); spawnMinion(null, if (r < 0.25f) 1 else if (r < 0.47f) 3 else 0) }
         if (!bossHere || stage != Stage.CHASE) if (minions.none { it.kind == 2 && !it.ally } && rnd.nextFloat() < 0.07f) spawnBehemoth()
     }
     private fun enterRoom(nx: Int, ny: Int, px: Float, py: Float) {
@@ -1831,7 +1842,7 @@ class HallScreen(c: Context) : PixelView(c) {
         val heart = (wild?.let { it.bossLevel && ry * it.w + rx == it.exit } == true) || fortHere
         if (fortHere) say("A FORT: NO FIGHTING HERE. SPEAK TO ITS FOLK WITH A (YOU HAVE $coins COINS)", 3f)
         val more = if (inWild) minOf(3, depth / 3) else 0
-        if (room.kind != 6 && !throne && !heart && phase == Phase.FIGHT && minions.count { it.room == id && !it.ally } < 2) repeat(2 + rnd.nextInt(2) + more) { val r = rnd.nextFloat(); spawnMinion(null, if (r < 0.25f) 1 else if (r < 0.47f) 3 else 0) }
+        if (room.kind != 6 && !throne && !heart && phase == Phase.FIGHT && minions.count { it.room == id && !it.ally } < 2) repeat(1 + rnd.nextInt(2) + more / 2) { val r = rnd.nextFloat(); spawnMinion(null, if (r < 0.25f) 1 else if (r < 0.47f) 3 else 0) }
         // now and then, something far worse claws its way up through the floor
         val bigChance = if (inWild) minOf(0.12f, 0.05f + depth * 0.006f) else 0.07f
         if (room.kind != 6 && !throne && !heart && !bossHere && phase == Phase.FIGHT && minions.none { it.room == id && it.kind == 2 && !it.ally } && rnd.nextFloat() < bigChance) spawnBehemoth()
@@ -2245,7 +2256,7 @@ class HallScreen(c: Context) : PixelView(c) {
                     val nx = m.x + (dx / d + -dy / d * wob * 0.6f) * sp; val ny = m.y + (dy / d + dx / d * wob * 0.6f) * sp
                     if (!foeSolid(nx, m.y, 3f)) m.x = nx; if (!foeSolid(m.x, ny, 3f)) m.y = ny
                     m.face = if (dx > 0f) 1f else -1f
-                    if (d < 10f && m.cd <= 0f && m.weak <= 0f) { m.cd = 1.2f; hurt(5) }
+                    if (d < 10f && m.cd <= 0f && m.weak <= 0f) { m.cd = 1.2f; hurt(7) }
                     eachComp { if (friendHere && m.cd <= 0f && hypot(frX - m.x, frY - 6 - m.y) < 10f) { m.cd = 1.2f; hurtFriend(4) } }
                 }
                 if (m.stT <= 0f) { m.st = 1; m.stT = 0.5f }
@@ -2280,7 +2291,7 @@ class HallScreen(c: Context) : PixelView(c) {
                     m.st = 1; m.stT = 0.4f + rnd.nextFloat() * 0.35f; m.dvx = dx / d; m.dvy = dy / d; m.face = if (dx > 0f) 1f else -1f
                     sfx.play(HallSfx.S.BOSS_RUNE, 0.35f)
                 }
-                if (d < 8f && m.weak <= 0f) hurt(8)
+                if (d < 8f && m.weak <= 0f) hurt(13)
             }
             1 -> if (m.stT <= 0f) {
                 if (rnd.nextFloat() < 0.22f) { m.st = 0; m.stT = 0.5f + rnd.nextFloat() * 0.6f; m.orbit = -m.orbit }   // a feint
@@ -2433,7 +2444,7 @@ class HallScreen(c: Context) : PixelView(c) {
 
         // balls of light, now and then, one at a time
         orbT -= dt
-        if (orbT <= 0f) { orbT = (22f + rnd.nextFloat() * 14f) * (if (bag.wearing(Loot.LANTERN)) 0.5f else 1f); if ((wild != null || zone != 1) && orbs.none { it.room == roomId }) spawnOrb() }
+        if (orbT <= 0f) { orbT = (36f + rnd.nextFloat() * 20f) * (if (bag.wearing(Loot.LANTERN)) 0.5f else 1f); if ((wild != null || zone != 1) && orbs.none { it.room == roomId }) spawnOrb() }
         orbs.removeAll { it.life -= dt; it.life <= 0f }
         orbs.firstOrNull { it.room == roomId && hypot(it.x - px, it.y - (hy + 10)) < 10f }?.let {
             orbs.remove(it); bursts += Burst(it.x, it.y); sfx.play(HallSfx.S.ORB)
@@ -2530,7 +2541,7 @@ class HallScreen(c: Context) : PixelView(c) {
                 }
                 m.step += dt
             }
-            if (d <= (if (toFriend) 10f else 8f) && m.weak <= 0f && m.stun <= 0f) { if (toAlly) hurtAlly(foe!!, 10) else if (toFriend) hurtFriend(if (friend == Friend.GRUMBLE) 6 else 8) else hurt(12) }
+            if (d <= (if (toFriend) 10f else 8f) && m.weak <= 0f && m.stun <= 0f) { if (toAlly) hurtAlly(foe!!, 10) else if (toFriend) hurtFriend(if (friend == Friend.GRUMBLE) 6 else 8) else hurt(16) }
             m.cd -= dt
             if (m.cd <= 0f && d < 140f) {
                 m.cd = (1.5f + rnd.nextFloat() * 2f) * (if (m.style == 1) 0.65f else 1f)
@@ -2857,7 +2868,7 @@ class HallScreen(c: Context) : PixelView(c) {
     private fun loadGame() {
         val sp = context.getSharedPreferences("hall_save", 0)
         if (!sp.contains("lvl")) return
-        lvl = sp.getInt("lvl", 1).coerceIn(1, 20); xp = sp.getInt("xp", 0).coerceAtLeast(0); maxHp = sp.getInt("maxHp", 100).coerceIn(100, 200); hp = maxHp
+        lvl = sp.getInt("lvl", 1).coerceIn(1, 20); xp = sp.getInt("xp", 0).coerceAtLeast(0); maxHp = BASE_HP + (lvl - 1); hp = maxHp
         bag.clear()
         sp.getString("owned", "")!!.split(',').mapNotNull { n -> Loot.values().firstOrNull { it.name == n } }.forEach { if (it !in bag.owned) bag.owned += it }
         sp.getString("worn", "")!!.split(',').mapNotNull { n -> Loot.values().firstOrNull { it.name == n } }.forEach { if (it in bag.owned && bag.wornCount(it.mode) < bag.SLOTS) bag.worn += it }
@@ -2978,7 +2989,7 @@ class HallScreen(c: Context) : PixelView(c) {
             val bg = a.background(r + depth * 1000) {
                 HallRoomArt.Spec(100 + r + depth * 1000, FOREST, booleanArrayOf(true, true, true, true), false,
                     (wl.props[r] + chunkExtra[r]).map { it[0] to RectF(it[1].toFloat(), it[2].toFloat(), it[3].toFloat(), it[4].toFloat()) },
-                    wl.pools[r].map { rf(it) }, 0, dais, wl.rivers[r].map { rf(it) }, wl.bridges[r].map { rf(it) }, open = true)
+                    wl.pools[r].map { rf(it) }, 0, dais, wl.rivers[r].map { rf(it) }, wl.bridges[r].map { rf(it) }, open = true, mass = wl.mass[r])
             }
             sc.save(); sc.translate(cx * 240f, cy * 176f)
             sc.drawBitmap(bg, 0f, 0f, bmpP); a.overlay(sc, time)

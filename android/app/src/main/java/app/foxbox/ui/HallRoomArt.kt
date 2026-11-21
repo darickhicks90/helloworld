@@ -25,6 +25,8 @@ internal class HallRoomArt {
         val open: Boolean = false,
         /** A room of the open great hall: which of its sides (W, E, N, S) open onto the next room. */
         val hallOpen: BooleanArray? = null,
+        /** The wood's ground, 40 x 35 cells of 6 x 5: 0 open, 1 deep forest, 2 rock, 3 water. */
+        val mass: ByteArray? = null,
     )
 
     private companion object {
@@ -494,6 +496,7 @@ internal class HallRoomArt {
         }
         for ((k, f) in s.props) if (k == PLAZA) plaza(f, s.id)
         water(s)
+        s.mass?.let { massArt(it, s.id) }
         for (b in s.bridges) bridge(b)
         val cliffs = s.props.filter { it.first == CLIFF }.map { it.second }
         for ((k, f) in s.props) when (k) { THICKET -> thicket(f, s.id); PALISADE -> palisade(f); CLIFF -> cliffTop(f, s.id); PLAZA, FLOWERBED -> {}; else -> shadow(k, f) }
@@ -546,11 +549,21 @@ internal class HallRoomArt {
     private fun water(s: Spec) {
         val bm = baked ?: return
         val ponds = s.pools; val rivs = s.rivers
+        // water cells of the ground: a distance from their shore, pixel by pixel
+        val ms = s.mass
+        var wd: FloatArray? = null
+        if (ms != null && ms.any { it.toInt() == 3 }) {
+            val d = FloatArray(W * H) { i -> val x = i % W; val y = i / W; val gx = x / 6; val gy = y / 5; if (gx < 40 && gy < 35 && ms[gy * 40 + gx].toInt() == 3) 999f else 0f }
+            for (y in 0 until H) for (x in 0 until W) { val i = y * W + x; if (d[i] == 0f) continue; var v = d[i]; if (x > 0) v = minOf(v, d[i - 1] + 1f); if (y > 0) v = minOf(v, d[i - W] + 1f); if (x > 0 && y > 0) v = minOf(v, d[i - W - 1] + 1.4f); if (x < W - 1 && y > 0) v = minOf(v, d[i - W + 1] + 1.4f); d[i] = v }
+            for (y in H - 1 downTo 0) for (x in W - 1 downTo 0) { val i = y * W + x; if (d[i] == 0f) continue; var v = d[i]; if (x < W - 1) v = minOf(v, d[i + 1] + 1f); if (y < H - 1) v = minOf(v, d[i + W] + 1f); if (x < W - 1 && y < H - 1) v = minOf(v, d[i + W + 1] + 1.4f); if (x > 0 && y < H - 1) v = minOf(v, d[i + W - 1] + 1.4f); d[i] = v }
+            wd = d
+        }
         val runs = ArrayList<RectF>(rivs)
         for (b in s.bridges) { if (b.width() >= b.height()) runs += RectF(b.left, b.top + 2, b.right, b.bottom - 2) else runs += RectF(b.left + 2, b.top, b.right - 2, b.bottom) }
-        if (ponds.isEmpty() && runs.isEmpty()) return
+        if (ponds.isEmpty() && runs.isEmpty() && wd == null) return
         var x0 = W; var y0 = H; var x1 = 0; var y1 = 0
         for (w in ponds + runs) { x0 = minOf(x0, w.left.toInt() - 8); y0 = minOf(y0, w.top.toInt() - 8); x1 = maxOf(x1, w.right.toInt() + 8); y1 = maxOf(y1, w.bottom.toInt() + 8) }
+        if (wd != null) { x0 = 0; y0 = 0; x1 = W; y1 = H }
         x0 = x0.coerceIn(0, W); x1 = x1.coerceIn(0, W); y0 = y0.coerceIn(0, H); y1 = y1.coerceIn(0, H)
         val MUD = 0xFF4A6A30.toInt(); val MUD_L = 0xFF5A7A3A.toInt(); val LIP = 0xFF6CA2C2.toInt(); val SH = 0xFF4E84A6.toInt(); val MIDW = 0xFF3A6A8A.toInt(); val DEEP = 0xFF24485E.toInt()
         for (y in y0 until y1) for (x in x0 until x1) {
@@ -567,6 +580,7 @@ internal class HallRoomArt {
                          else { if (Y < w.top - 6 || Y > w.bottom + 6) -99f else minOf(X - w.left, w.right - X) - maxOf(0f, w.top - Y, Y - w.bottom) }
                 d = maxOf(d, dd)
             }
+            if (wd != null) { val v = wd[y * W + x]; if (v > 0f) d = maxOf(d, v - 1.5f) else if (d < -5f) { var near = 99f; for (oy in -4..4) for (ox in -4..4) { val xx = x + ox; val yy = y + oy; if (xx in 0 until W && yy in 0 until H && wd[yy * W + xx] > 0f) near = minOf(near, kotlin.math.hypot(ox.toFloat(), oy.toFloat())) }; if (near < 99f) d = maxOf(d, -near - 1f) } }
             if (d < -5f) continue
             // a wandering shore
             d += ((h(x / 3, y / 3, s.id) % 100) / 100f - 0.5f) * 1.6f + kotlin.math.sin(x * 0.21f + y * 0.13f) * 0.8f
@@ -671,6 +685,51 @@ internal class HallRoomArt {
             var y = t; while (y < b) { box(l, y, r, y + 4, woodD); box(l + 1, y + 1, r - 1, y + 3, wood); box(l + 1, y + 1, r - 1, y + 2, woodL); y += 4 }
         }
         for (k in 0 until 2) box(l, b + k, r, b + k + 1, intArrayOf(0x40000000, 0x20000000)[k])
+    }
+    /**
+     * The deep wood and the rock, from the ground grid: forest as heaped crowns of leaves, darker
+     * the deeper in, trunks showing where it meets open ground; rock as mossy stone with a face.
+     */
+    private fun massArt(ms: ByteArray, id: Int) {
+        fun at(gx: Int, gy: Int): Int = if (gx < 0 || gy < 0 || gx >= 40 || gy >= 35) 1 else ms[gy * 40 + gx].toInt()
+        // depth into the forest (0 at its edge), for shading
+        val depth = IntArray(40 * 35) { 0 }
+        for (i in 0 until 40 * 35) if (ms[i].toInt() == 1) { val gx = i % 40; val gy = i / 40; var k = 0; while (k < 4 && (-k..k).all { o -> at(gx + o, gy - k) == 1 && at(gx + o, gy + k) == 1 && at(gx - k, gy + o) == 1 && at(gx + k, gy + o) == 1 }) k++; depth[i] = k }
+        // a dark floor under the forest first
+        for (gy in 0 until 35) for (gx in 0 until 40) if (at(gx, gy) == 1) box(gx * 6, gy * 5, gx * 6 + 6, gy * 5 + 5, 0xFF10261C.toInt())
+        // the rock
+        for (gy in 0 until 35) for (gx in 0 until 40) if (at(gx, gy) == 2) {
+            val x = gx * 6; val y = gy * 5; val v = h(gx, gy, id + 9)
+            box(x, y, x + 6, y + 5, if (v % 5 == 0) 0xFF7A8268.toInt() else 0xFF6A725C.toInt())
+            if (v % 3 == 0) px(x + v % 6, y + (v shr 4) % 5, 0xFF5E8A3C.toInt())
+            if (at(gx, gy - 1) != 2) { box(x, y, x + 6, y + 1, 0xFF9AA27E.toInt()); if (v % 2 == 0) px(x + 2, y, 0xFF7AB02E.toInt()) }
+            if (at(gx, gy + 1) != 2) { box(x, y + 1, x + 6, y + 5, 0xFF5C5248.toInt()); box(x + (v % 4), y + 1, x + (v % 4) + 1, y + 5, 0xFF3E362E.toInt()); box(x, y + 5, x + 6, y + 7, 0x40000000) }
+            if (at(gx - 1, gy) != 2) box(x, y, x + 1, y + 5, 0xFF3E4434.toInt())
+            if (at(gx + 1, gy) != 2) box(x + 5, y, x + 6, y + 5, 0xFF3E4434.toInt())
+        }
+        // trunks where the forest meets open ground below
+        for (gy in 0 until 35) for (gx in 0 until 40) if (at(gx, gy) == 1 && at(gx, gy + 1) == 0 && h(gx, gy, id + 3) % 3 == 0) {
+            val x = gx * 6 + 2; val y = gy * 5 + 2
+            box(x - 1, y, x + 3, y + 6, BARK_D); box(x, y, x + 2, y + 6, BARK); px(x, y + 2, BARK_D)
+            box(x - 1, y + 6, x + 4, y + 7, 0x40000000)
+        }
+        // the crowns: heaped from the back row forward, so the nearer overlap the further
+        for (gy in 0 until 35) for (gx in 0 until 40) {
+            if (at(gx, gy) != 1) continue
+            val v = h(gx, gy, id)
+            if ((gx + gy) % 2 == 1 && depth[gy * 40 + gx] >= 2 && v % 3 != 0) continue
+            val cx = gx * 6 + 3f + (v % 5 - 2); val cy = gy * 5 + 1.5f + ((v shr 3) % 3 - 1)
+            val r = 5f + (v shr 5) % 3 + (if (depth[gy * 40 + gx] >= 2) 1.5f else 0f)
+            val dk = depth[gy * 40 + gx]
+            val body = if (dk >= 3) 0xFF1E4A34.toInt() else if (dk == 2) 0xFF245A36.toInt() else CAN
+            p.color = 0xFF0C1814.toInt(); c.drawCircle(cx, cy, r + 1f, p)
+            p.color = body; c.drawCircle(cx, cy, r, p)
+            p.color = if (dk >= 2) 0xFF3E7A3A.toInt() else CAN_L; c.drawCircle(cx - r * 0.28f, cy - r * 0.32f, r * 0.55f, p)
+            if (v % 4 == 0) { p.color = CAN_H; c.drawCircle(cx - r * 0.42f, cy - r * 0.48f, r * 0.2f, p) }
+            if (v % 23 == 0) px(cx.toInt() + 1, cy.toInt() + 1, 0xFFE04848.toInt())       // a berry
+        }
+        // a soft shadow cast onto the open ground below the forest's edge
+        for (gy in 0 until 35) for (gx in 0 until 40) if (at(gx, gy) == 1 && at(gx, gy + 1) == 0) { box(gx * 6, gy * 5 + 5, gx * 6 + 6, gy * 5 + 7, 0x38000000); box(gx * 6, gy * 5 + 7, gx * 6 + 6, gy * 5 + 9, 0x18000000) }
     }
     /** Rock: the top of the cliff, grey-green and grassed over, cut into blocks. */
     private fun cliffTop(f: RectF, id: Int) {

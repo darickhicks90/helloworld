@@ -83,6 +83,8 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
     val dead = BooleanArray(n)
     /** The block kept for the fort: no solid screens in it, no gate cutting through it. */
     private val fortKeep = HashSet<Int>()
+    /** The great glade: a block of screens opened into one huge room, crawling with foes. */
+    val glade = HashSet<Int>()
     private fun nbAll(r: Int, d: Int): Int { val x = r % w + DX[d]; val y = r / w + DY[d]; return if (x < 0 || y < 0 || x >= w || y >= h) -1 else y * w + x }
     private fun nb(r: Int, d: Int): Int { val o = nbAll(r, d); return if (o >= 0 && dead[o]) -1 else o }
     private fun open(r: Int, d: Int) { val o = nb(r, d); if (o < 0) return; sides[r][d] = true; sides[o][OPP[d]] = true }
@@ -94,7 +96,7 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
             val want = 6 + rnd.nextInt(4)
             // a fort-sized block near the start is kept alive
             val sx = start % w; val ox = (sx + rnd.nextInt(-1, 1)).coerceIn(0, w - 2)
-            val keepAlive = fortKeep; if (!bossLevel) for (y in h - 3 until h - 1) for (x in ox until ox + 2) keepAlive += y * w + x
+            val keepAlive = fortKeep; if (!bossLevel) for (x in ox until ox + 2) keepAlive += (h - 2) * w + x
             var made = 0; var tries = 0
             while (made < want && tries++ < 200) {
                 val c = rnd.nextInt(n); if (c == start || dead[c] || c in keepAlive) continue
@@ -158,15 +160,35 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
             used += best
             keys += intArrayOf(best, 0, 0)
         }
+        // 6a. the great glade: up to 2 x 2 screens in one region, thrown open into a single huge room
+        if (!bossLevel) run {
+            var best: List<Int>? = null; var bestScore = -1e9f
+            for ((bw, bh) in listOf(2 to 2, 2 to 1, 1 to 2)) {
+                for (oy in 0..h - bh) for (ox in 0..w - bw) {
+                    val block = ArrayList<Int>(); for (y in oy until oy + bh) for (x in ox until ox + bw) block += y * w + x
+                    if (block.any { it == start || it == exit || dead[it] || it in fortKeep }) continue
+                    val reg = region[block[0]]; if (block.any { region[it] != reg }) continue
+                    val score = dist[block[0]] * 0.5f + rnd.nextFloat() * 4f
+                    if (score > bestScore) { bestScore = score; best = block }
+                }
+                if (best != null) break
+            }
+            best?.let { b ->
+                glade += b
+                for (r in b) for (d in 0 until 4) { val o = nb(r, d); if (o in glade) open(r, d) }
+                for (r in 0 until n) doors[r] = (0 until 4).filter { sides[r][it] }.joinToString("") { "WENS"[it].toString() }
+                for (r in b) special[r] = "THE GREAT GLADE"
+            }
+        }
         // 6. scenery for each screen, a fort near the start, rivers from pond to pond
         for (r in 0 until n) furnish(r)
         // the fort: the biggest block of screens (3 x 2 at best) all in one region, never the start or exit
         if (!bossLevel) run {
             var best: List<Int>? = null; var bestScore = -1e9f
-            for ((bw, bh) in listOf(2 to 2, 2 to 1, 1 to 2, 1 to 1)) {
+            for ((bw, bh) in listOf(2 to 1, 1 to 2, 1 to 1)) {
                 for (oy in 0..h - bh) for (ox in 0..w - bw) {
                     val block = ArrayList<Int>(); for (y in oy until oy + bh) for (x in ox until ox + bw) block += y * w + x
-                    if (block.any { it == start || it == exit || dead[it] }) continue
+                    if (block.any { it == start || it == exit || dead[it] || it in glade }) continue
                     val reg = region[block[0]]; if (block.any { region[it] != reg }) continue
                     val score = -reg * 10f - block.minOf { dist[it] } * 0.5f + rnd.nextFloat()
                     if (score > bestScore) { bestScore = score; best = block }
@@ -406,8 +428,9 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
             else { repeat(4) { place(r, MUSHROOM, 8, 5, area = intArrayOf(10, 130, 230, 166)) } }
             return
         }
+        if (r in glade) { shape(r, 2, null); repeat(3) { place(r, MUSHROOM, 8, 5, pad = 3) }; return }
         val type = if (r == start) 1 else rnd.nextInt(12)
-        shape(r, when (type) { 10, 11, 1 -> 1; 8, 9 -> 3; else -> 0 }, null)
+        shape(r, when (type) { 10, 11, 1 -> 1; 8, 9 -> 3; else -> if (rnd.nextFloat() < 0.3f) 1 else 0 }, null)
         when (type) {
             10 -> { graveyard(r); special[r] = "THE " + listOf("BARROWS", "GRAVEYARD", "BONE GARDEN", "OLD CHURCHYARD")[rnd.nextInt(4)]; return }
             11 -> { ruins(r); special[r] = listOf("FALLEN SHRINE", "BROKEN HALL", "OLD RUINS", "TUMBLED TOWER")[rnd.nextInt(4)]; return }

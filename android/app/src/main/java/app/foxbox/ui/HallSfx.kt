@@ -12,8 +12,9 @@ import kotlin.math.exp
 import kotlin.math.sin
 
 /**
- * The great hall's sound effects and rumbles: plucked strings and struck glass in a dark minor
- * key, soft pads, crisp air for every swing and dash, real weight under the blows, all in a big
+ * The great hall's sound effects and rumbles: crackling electricity for the spark, cracks for
+ * hits, knocks when you're hit, glitter for spells, a choir for consecration, breath and twinkle
+ * for healing, plucked strings and soft pads in a dark minor key, crisp air for every swing and dash, real weight under the blows, all in a big
  * stone room's echo. Every sound is synthesised once, written as a small WAV in the cache and loaded into a SoundPool
  * (a few voices at most, so the music engine keeps its own); the vibrations are short waveforms
  * for hits, slams and fanfares.
@@ -23,7 +24,7 @@ class HallSfx(private val ctx: Context) {
         HURT, HURT_BIG, ZAP, THUNDER, STOMP, SPRINT, FIREDASH, IMP_HIT, IMP_DIE, PICKUP, LEGENDARY, EXOTIC,
         LEVEL_UP, FRIEND_JOIN, FRIEND_SKILL, FRIEND_HURT, FRIEND_DOWN, REVIVE, SPELL, HEX, STARFALL, MEND,
         BLINK, BOSS_RUNE, COUNTER, SLAM, PERISH, BURN, ORB, DUEL, SHATTER, FETCH,
-        DOOR_UNLOCK, DOOR_GRIND, DOOR_OPEN,
+        DOOR_UNLOCK, DOOR_GRIND, DOOR_OPEN, WORSHIP,
     }
     private val rate = 44100
     @Volatile private var pool: SoundPool? = null
@@ -43,7 +44,7 @@ class HallSfx(private val ctx: Context) {
             val dir = java.io.File(ctx.cacheDir, "hall_sfx").apply { mkdirs() }
             for (s in S.values()) runCatching {
                 if (pool !== sp) return@Thread
-                val f = java.io.File(dir, "v4_" + s.name.lowercase() + ".wav")
+                val f = java.io.File(dir, "v5_" + s.name.lowercase() + ".wav")
                 if (!f.exists() || f.length() < 64) writeWav(f, render(s))
                 val id = sp.load(f.path, 1)
                 synchronized(ids) { if (pool === sp) ids[s] = id }
@@ -120,16 +121,6 @@ class HallSfx(private val ctx: Context) {
             b.a[k] += cur * vol * env
         }
     }
-    /** Struck glass or metal (two-operator FM): crystalline at ratio 3.5, a gong near 1.4. */
-    private fun fmBell(b: Buf, at: Float, f: Float, vol: Float, dur: Float = 1.4f, ratio: Float = 3.5f, index: Float = 2.2f) {
-        val s0 = len(at); val n = len(dur)
-        for (i in 0 until n) {
-            val k = s0 + i; if (k >= b.a.size) break
-            val t = i / rate.toFloat(); val e = exp(-t * 4.5f / dur)
-            val mod = sin(2.0 * PI * f * ratio * t) * index * e
-            b.a[k] += (sin(2.0 * PI * f * t + mod).toFloat()) * vol * e * minOf(1f, i / (rate * 0.003f))
-        }
-    }
     /** A soft pad: three voices a hair apart, slow to come and go. */
     private fun pad(b: Buf, at: Float, dur: Float, f: Float, vol: Float, f1: Float = f) {
         val s0 = len(at); val n = len(dur)
@@ -191,6 +182,69 @@ class HallSfx(private val ctx: Context) {
         for (i in a.indices) a[i] = a[i] * (1f - mix * 0.3f) + out[i] * mix
     }
 
+    /** Electricity: a dense crackle of tiny sparks, with a thin buzz under it. */
+    private fun crackle(b: Buf, at: Float, dur: Float, vol: Float, density: Float = 0.25f) {
+        val s0 = len(at); val n = len(dur); var spark = 0f; var ph = 0.0; var hp = 0f; var prev = 0f
+        for (i in 0 until n) {
+            val k = s0 + i; if (k >= b.a.size) break
+            val t = i / n.toFloat()
+            if (noiseRnd.nextFloat() < density * (1f - t * 0.6f) * 0.02f) spark = 0.6f + noiseRnd.nextFloat() * 0.6f
+            spark *= 0.93f
+            val x = (noiseRnd.nextFloat() * 2f - 1f) * spark
+            hp = x - prev + hp * 0.3f; prev = x     // keep it bright: only the hiss of each spark
+            ph += 180.0 / rate
+            val buzz = (if ((ph % 1.0) < 0.5) 1f else -1f) * 0.08f * (1f - t)
+            b.a[k] += (hp + buzz * (0.5f + 0.5f * spark)) * vol * minOf(1f, (1f - t) * 4f)
+        }
+    }
+    /** A crack: a split-second snap of high noise over a short knock of weight. */
+    private fun crack(b: Buf, at: Float, vol: Float, big: Boolean = false) {
+        swish(b, at, if (big) 0.09f else 0.05f, 7000f, 2500f, vol, 0.02f, 1.6f)
+        thud(b, at, if (big) 260f else 360f, 120f, if (big) 0.18f else 0.08f, vol * 0.55f)
+    }
+    /** A knock: wood struck hard (two of its modes) and a dull thump. */
+    private fun knock(b: Buf, at: Float, f: Float, vol: Float) {
+        val s0 = len(at); val n = len(0.22f)
+        for (i in 0 until n) { val k = s0 + i; if (k >= b.a.size) break; val t = i / rate.toFloat()
+            b.a[k] += ((sin(2 * PI * f * t) * exp(-t * 28f) + sin(2 * PI * f * 2.62 * t) * 0.45 * exp(-t * 45f)).toFloat()) * vol * minOf(1f, i / (rate * 0.0008f)) }
+        swish(b, at, 0.03f, 2200f, 900f, vol * 0.4f, 0.05f, 1.2f)
+    }
+    /** Glitter: a shower of tiny bright pinpricks (not bells: each a blip, gone at once). */
+    private fun glitter(b: Buf, at: Float, dur: Float, count: Int, vol: Float, lo: Float = 2500f, hi: Float = 7000f, fall: Boolean = false) {
+        for (j in 0 until count) {
+            val t0 = at + noiseRnd.nextFloat() * dur
+            val u = (t0 - at) / dur
+            val f = if (fall) hi - (hi - lo) * u + noiseRnd.nextFloat() * 400f else lo + noiseRnd.nextFloat() * (hi - lo)
+            val s0 = len(t0); val n = len(0.035f + noiseRnd.nextFloat() * 0.03f)
+            for (i in 0 until n) { val k = s0 + i; if (k >= b.a.size) break; val t = i / n.toFloat()
+                b.a[k] += (sin(2 * PI * f * i / rate).toFloat()) * vol * (1f - t) * (1f - t) * minOf(1f, i / (rate * 0.001f)) }
+        }
+    }
+    /** A breath: soft air, in and out. */
+    private fun breath(b: Buf, at: Float, dur: Float, vol: Float) = swish(b, at, dur, 700f, 1800f, vol, 0.45f, 0.25f)
+    /** A choir: voices on "aah" (bright buzz through the vowel's formants), swelling and fading. */
+    private fun choir(b: Buf, at: Float, dur: Float, notes: FloatArray, vol: Float) {
+        val s0 = len(at); val n = len(dur)
+        val forms = floatArrayOf(730f, 1090f, 2440f); val gains = floatArrayOf(1f, 0.5f, 0.25f)
+        val low = FloatArray(3); val band = FloatArray(3)
+        val ph = DoubleArray(notes.size * 2)
+        for (i in 0 until n) {
+            val k = s0 + i; if (k >= b.a.size) break
+            val t = i / n.toFloat()
+            var src = 0f
+            for ((j, f) in notes.withIndex()) for (v in 0..1) {
+                val vib = 1.0 + 0.006 * sin(2 * PI * (5.2 + v * 0.7) * i / rate)
+                val idx = j * 2 + v; ph[idx] += f * (if (v == 0) 1.0 else 1.005) * vib / rate
+                src += ((ph[idx] % 1.0) * 2.0 - 1.0).toFloat()
+            }
+            src /= notes.size
+            var out = 0f
+            for (q in 0..2) { val fq = (2 * sin(PI * forms[q] / rate)).toFloat(); low[q] += fq * band[q]; val high = src - low[q] - 0.25f * band[q]; band[q] += fq * high; out += band[q] * gains[q] }
+            val env = sin(PI * t).toFloat()
+            b.a[k] += out * vol * env * 0.35f
+        }
+    }
+
     // D minor, mostly
     private val D3 = 146.8f; private val F3 = 174.6f; private val A3 = 220f; private val D4 = 293.7f; private val E4 = 329.6f; private val F4 = 349.2f
     private val G4 = 392f; private val A4 = 440f; private val Bb4 = 466.2f; private val C5 = 523.3f; private val D5 = 587.3f; private val E5 = 659.3f
@@ -199,55 +253,63 @@ class HallSfx(private val ctx: Context) {
     private fun render(s: S): ShortArray {
         val d = when (s) {
             S.DOOR_GRIND -> 2.8f
-            S.DOOR_OPEN, S.LEGENDARY, S.EXOTIC, S.PERISH, S.SLAM, S.BOSS_RUNE, S.REVIVE -> 2.6f
+            S.DOOR_OPEN, S.LEGENDARY, S.EXOTIC, S.PERISH, S.SLAM, S.BOSS_RUNE, S.REVIVE, S.WORSHIP -> 2.6f
             S.LEVEL_UP, S.STARFALL, S.FRIEND_DOWN, S.FRIEND_JOIN, S.HEX, S.SPELL, S.DUEL, S.THUNDER, S.MEND -> 1.9f
             S.DOOR_UNLOCK, S.COUNTER, S.SHATTER, S.ORB, S.PICKUP, S.FRIEND_SKILL, S.BLINK, S.IMP_DIE, S.HURT_BIG, S.FETCH -> 1.3f
             else -> 0.8f
         }
         val b = Buf(len(d))
         when (s) {
-            S.HURT -> { thud(b, 0f, 190f, 60f, 0.28f, 0.8f); swish(b, 0f, 0.14f, 3200f, 700f, 0.5f, 0.05f, 0.9f); fmBell(b, 0.01f, E4, 0.08f, 0.5f, 1.41f, 3f); fmBell(b, 0.01f, F4, 0.08f, 0.5f, 1.41f, 3f) }
-            S.HURT_BIG -> { thud(b, 0f, 140f, 38f, 0.6f, 1f); swish(b, 0f, 0.3f, 2600f, 300f, 0.6f, 0.04f, 0.9f); pad(b, 0f, 0.9f, D3, 0.25f, D3 * 0.94f); fmBell(b, 0f, A3, 0.12f, 0.9f, 1.41f, 3.5f) }
-            S.ZAP -> { swish(b, 0f, 0.11f, 1400f, 5200f, 0.35f, 0.2f, 0.5f); fmBell(b, 0.01f, A5, 0.1f, 0.35f, 3.5f, 1.4f); pluck(b, 0.01f, D6, 0.12f, 0.35f, 0.9f) }
-            S.THUNDER -> { swish(b, 0f, 0.1f, 6000f, 1500f, 0.7f, 0.02f, 1.2f); swish(b, 0.03f, 1.4f, 500f, 70f, 0.9f, 0.08f, 0.4f); thud(b, 0.02f, 80f, 28f, 1.2f, 0.7f) }
+            // getting hit: a hard knock (and the view shakes)
+            S.HURT -> { knock(b, 0f, 170f, 0.9f); thud(b, 0f, 120f, 55f, 0.2f, 0.6f) }
+            S.HURT_BIG -> { knock(b, 0f, 130f, 1f); knock(b, 0.07f, 110f, 0.7f); thud(b, 0f, 90f, 35f, 0.45f, 0.9f) }
+            // the spark: electricity crackling
+            S.ZAP -> crackle(b, 0f, 0.2f, 0.9f, 0.45f)
+            S.THUNDER -> { crack(b, 0f, 1f, true); crackle(b, 0f, 0.6f, 0.7f, 0.5f); swish(b, 0.03f, 1.4f, 500f, 70f, 0.8f, 0.08f, 0.4f); thud(b, 0.02f, 80f, 28f, 1.2f, 0.7f) }
             S.STOMP -> { thud(b, 0f, 110f, 34f, 0.5f, 1f); swish(b, 0f, 0.35f, 900f, 180f, 0.4f, 0.05f, 0.7f) }
             S.SPRINT -> swish(b, 0f, 0.32f, 500f, 3200f, 0.45f, 0.35f, 0.5f)
-            S.FIREDASH -> { swish(b, 0f, 0.5f, 300f, 2600f, 0.5f, 0.3f, 0.5f); repeat(8) { swish(b, 0.04f + it * 0.05f, 0.04f, 5000f, 2500f, 0.18f, 0.1f, 1.5f) } }
-            S.IMP_HIT -> { thud(b, 0f, 320f, 120f, 0.09f, 0.5f); swish(b, 0f, 0.07f, 4500f, 1500f, 0.35f, 0.05f, 1f) }
-            S.IMP_DIE -> { swish(b, 0f, 0.3f, 2400f, 280f, 0.45f, 0.05f, 0.8f); thud(b, 0f, 200f, 70f, 0.25f, 0.5f); pluck(b, 0.05f, A4, 0.16f, 0.8f, 0.4f); pluck(b, 0.16f, E4, 0.14f, 0.8f, 0.4f) }
-            S.PICKUP -> { pluck(b, 0f, D5, 0.28f, 1f, 0.7f); pluck(b, 0.08f, A5, 0.24f, 1f, 0.7f) }
-            S.LEGENDARY -> { pad(b, 0f, 2.4f, D3, 0.22f); pad(b, 0f, 2.4f, F3, 0.16f); pad(b, 0f, 2.4f, A3, 0.16f); floatArrayOf(D5, F5, A5, D6).forEachIndexed { i, f -> pluck(b, 0.15f + i * 0.12f, f, 0.22f, 1.6f, 0.75f) }; fmBell(b, 0.7f, A6, 0.07f, 1.6f) }
-            S.EXOTIC -> { pad(b, 0f, 2.4f, D3 / 2, 0.3f); pad(b, 0f, 2.4f, A3 / 2, 0.18f); floatArrayOf(E5, 740f, 831f, 932f, 1047f).forEachIndexed { i, f -> fmBell(b, 0.1f + i * 0.15f, f, 0.09f, 1.6f, 2.7f, 1.8f) }; swish(b, 0f, 1.2f, 200f, 4000f, 0.15f, 0.9f, 0.3f) }
-            S.LEVEL_UP -> { floatArrayOf(D5, E5, F5, A5, D6).forEachIndexed { i, f -> pluck(b, i * 0.09f, f, 0.22f, 1.4f, 0.75f) }; pad(b, 0.2f, 1.6f, D4, 0.15f) }
-            S.FRIEND_JOIN -> { floatArrayOf(G4, D5, G5).forEachIndexed { i, f -> pluck(b, i * 0.12f, f, 0.24f, 1.4f, 0.6f) }; pad(b, 0f, 1.6f, G4 / 2, 0.18f) }
-            S.FRIEND_SKILL -> { swish(b, 0f, 0.5f, 400f, 4500f, 0.35f, 0.6f, 0.4f); fmBell(b, 0.3f, D6, 0.1f, 0.8f); pad(b, 0f, 1f, A3, 0.15f) }
-            S.FRIEND_HURT -> { thud(b, 0f, 420f, 200f, 0.15f, 0.5f); pluck(b, 0f, E5, 0.12f, 0.4f, 0.5f); pluck(b, 0f, F5, 0.12f, 0.4f, 0.5f) }
-            S.FRIEND_DOWN -> { floatArrayOf(D5, C5, A4, F4).forEachIndexed { i, f -> pluck(b, i * 0.22f, f, 0.22f, 1.2f, 0.4f) }; pad(b, 0.1f, 1.7f, D3, 0.2f, D3 * 0.97f) }
-            S.REVIVE -> { pad(b, 0f, 2.4f, D3, 0.25f, A3); floatArrayOf(D5, F5, A5, D6).forEachIndexed { i, f -> fmBell(b, 0.5f + i * 0.14f, f, 0.08f, 1.4f) } }
-            S.SPELL -> { swish(b, 0f, 0.9f, 200f, 1600f, 0.25f, 0.7f, 0.3f); fmBell(b, 0.25f, A5, 0.1f, 1.2f); pad(b, 0f, 1.5f, D4, 0.12f) }
-            S.HEX -> { pad(b, 0f, 1.8f, D3, 0.3f); pad(b, 0f, 1.8f, 207.7f, 0.25f); fmBell(b, 0.1f, 622.3f, 0.08f, 1.5f, 1.41f, 2.5f) }
-            S.STARFALL -> { for (i in 0 until 6) fmBell(b, i * 0.09f, A6 - i * 160f, 0.06f, 0.8f); thud(b, 0.6f, 120f, 35f, 0.8f, 0.9f); swish(b, 0.6f, 0.6f, 1500f, 200f, 0.45f, 0.05f, 0.6f) }
-            S.MEND -> { floatArrayOf(F5, A5, C6).forEachIndexed { i, f -> pluck(b, i * 0.1f, f, 0.18f, 1.3f, 0.55f) } }
-            S.BLINK -> { swish(b, 0f, 0.4f, 4000f, 500f, 0.35f, 0.7f, 0.4f); fmBell(b, 0.3f, D6, 0.07f, 0.6f) }
-            S.BOSS_RUNE -> { pad(b, 0f, 2.4f, D3 / 2, 0.45f); pad(b, 0f, 2.4f, 77.8f, 0.35f); fmBell(b, 0f, D4 / 2, 0.25f, 2.2f, 1.41f, 3f); swish(b, 0.2f, 1.8f, 120f, 400f, 0.2f, 0.5f, 0.3f) }
-            S.COUNTER -> { fmBell(b, 0f, 392f, 0.3f, 1.1f, 1.41f, 4f); thud(b, 0f, 220f, 90f, 0.2f, 0.5f); swish(b, 0f, 0.1f, 6000f, 2000f, 0.25f, 0.05f, 1f) }
-            S.SLAM -> { thud(b, 0f, 90f, 22f, 1.8f, 1f); swish(b, 0f, 1f, 1200f, 90f, 0.6f, 0.03f, 0.6f); fmBell(b, 0f, 55f, 0.3f, 2f, 1.41f, 2f) }
-            S.PERISH -> { pad(b, 0f, 2.4f, A3, 0.3f, D3); pad(b, 0f, 2.4f, 233f, 0.2f, 155.6f); fmBell(b, 0f, D3, 0.25f, 2.4f, 1.41f, 2.5f); swish(b, 0f, 2f, 3000f, 100f, 0.3f, 0.1f, 0.4f) }
-            S.BURN -> { repeat(9) { swish(b, it * 0.05f, 0.05f, 5000f, 2000f, 0.2f, 0.1f, 1.4f) }; swish(b, 0f, 0.5f, 1500f, 500f, 0.3f, 0.2f, 0.5f) }
-            S.ORB -> { fmBell(b, 0f, A6, 0.12f, 1.2f); pluck(b, 0.06f, 1318.5f, 0.14f, 1f, 0.8f) }
+            S.FIREDASH -> { swish(b, 0f, 0.5f, 300f, 2600f, 0.5f, 0.3f, 0.5f); crackle(b, 0.05f, 0.4f, 0.4f, 0.3f) }
+            // hitting something: a crack
+            S.IMP_HIT -> crack(b, 0f, 0.9f)
+            S.IMP_DIE -> { crack(b, 0f, 0.9f, true); swish(b, 0.02f, 0.3f, 2400f, 280f, 0.4f, 0.05f, 0.8f) }
+            S.COUNTER -> { crack(b, 0f, 1f, true); thud(b, 0f, 150f, 50f, 0.35f, 0.7f) }
+            S.SHATTER -> { crack(b, 0f, 1f, true); repeat(6) { crack(b, 0.03f + it * 0.03f, 0.25f) } }
+            // finds: a pluck or two, a little glitter
+            S.PICKUP -> { pluck(b, 0f, D5, 0.3f, 1f, 0.7f); pluck(b, 0.08f, A5, 0.26f, 1f, 0.7f) }
+            S.FETCH -> pluck(b, 0f, A5, 0.28f, 1f, 0.7f)
+            S.LEGENDARY -> { pad(b, 0f, 2.4f, D3, 0.22f); pad(b, 0f, 2.4f, A3, 0.16f); floatArrayOf(D5, F5, A5, D6).forEachIndexed { i, f -> pluck(b, 0.1f + i * 0.12f, f, 0.24f, 1.6f, 0.75f) }; glitter(b, 0.5f, 1.2f, 40, 0.1f) }
+            S.EXOTIC -> { pad(b, 0f, 2.4f, D3 / 2, 0.3f); pad(b, 0f, 2.4f, A3 / 2, 0.18f); glitter(b, 0f, 2f, 90, 0.1f, 1800f, 6500f); swish(b, 0f, 1.2f, 200f, 4000f, 0.15f, 0.9f, 0.3f) }
+            S.LEVEL_UP -> { floatArrayOf(D5, E5, F5, A5, D6).forEachIndexed { i, f -> pluck(b, i * 0.09f, f, 0.24f, 1.4f, 0.75f) }; glitter(b, 0.3f, 0.9f, 30, 0.09f) }
+            S.FRIEND_JOIN -> { floatArrayOf(G4, D5, G5).forEachIndexed { i, f -> pluck(b, i * 0.12f, f, 0.26f, 1.4f, 0.6f) }; pad(b, 0f, 1.6f, G4 / 2, 0.18f) }
+            S.FRIEND_SKILL -> { swish(b, 0f, 0.5f, 400f, 4500f, 0.35f, 0.6f, 0.4f); glitter(b, 0.15f, 0.6f, 30, 0.1f) }
+            S.FRIEND_HURT -> knock(b, 0f, 260f, 0.6f)
+            S.FRIEND_DOWN -> { floatArrayOf(D5, C5, A4, F4).forEachIndexed { i, f -> pluck(b, i * 0.22f, f, 0.24f, 1.2f, 0.4f) }; pad(b, 0.1f, 1.7f, D3, 0.2f, D3 * 0.97f) }
+            S.REVIVE -> { breath(b, 0f, 1.4f, 0.4f); pad(b, 0f, 2.4f, D3, 0.22f, A3); glitter(b, 0.4f, 1.4f, 50, 0.09f) }
+            // spells: glittery
+            S.SPELL -> { glitter(b, 0f, 1f, 60, 0.12f); swish(b, 0f, 0.9f, 300f, 2400f, 0.18f, 0.6f, 0.3f) }
+            S.HEX -> { glitter(b, 0f, 1.2f, 50, 0.11f, 1200f, 4000f, fall = true); pad(b, 0f, 1.6f, D3, 0.28f); pad(b, 0f, 1.6f, 207.7f, 0.22f) }
+            S.STARFALL -> { glitter(b, 0f, 0.6f, 50, 0.12f, 2500f, 8000f, fall = true); thud(b, 0.6f, 120f, 35f, 0.8f, 0.9f); swish(b, 0.6f, 0.6f, 1500f, 200f, 0.45f, 0.05f, 0.6f) }
+            S.BLINK -> { swish(b, 0f, 0.4f, 4000f, 500f, 0.3f, 0.7f, 0.4f); glitter(b, 0.25f, 0.3f, 18, 0.1f) }
+            S.BOSS_RUNE -> { pad(b, 0f, 2.4f, D3 / 2, 0.45f); pad(b, 0f, 2.4f, 77.8f, 0.35f); glitter(b, 0.1f, 2f, 50, 0.07f, 1000f, 3500f, fall = true); swish(b, 0.2f, 1.8f, 120f, 400f, 0.2f, 0.5f, 0.3f) }
+            // healing: a breath and a twinkle
+            S.MEND -> { breath(b, 0f, 0.9f, 0.45f); glitter(b, 0.15f, 0.9f, 26, 0.09f, 3000f, 7500f) }
+            S.ORB -> { breath(b, 0f, 0.6f, 0.35f); glitter(b, 0.1f, 0.6f, 14, 0.09f, 3500f, 8000f) }
+            // consecration: a choir, as if in worship
+            S.WORSHIP -> { choir(b, 0f, 1.7f, floatArrayOf(D4, 370f, A4, D5), 0.7f); glitter(b, 0.3f, 1.2f, 14, 0.04f) }
+            S.SLAM -> { thud(b, 0f, 90f, 22f, 1.8f, 1f); swish(b, 0f, 1f, 1200f, 90f, 0.6f, 0.03f, 0.6f); crack(b, 0f, 0.7f, true) }
+            S.PERISH -> { pad(b, 0f, 2.4f, A3, 0.3f, D3); pad(b, 0f, 2.4f, 233f, 0.2f, 155.6f); glitter(b, 0f, 2f, 60, 0.07f, 800f, 5000f, fall = true); swish(b, 0f, 2f, 3000f, 100f, 0.3f, 0.1f, 0.4f) }
+            S.BURN -> { crackle(b, 0f, 0.5f, 0.5f, 0.25f); swish(b, 0f, 0.5f, 1500f, 500f, 0.3f, 0.2f, 0.5f) }
             S.DUEL -> { for (i in 0 until 3) thud(b, i * 0.24f, 95f, 45f, 0.35f, 0.9f); pad(b, 0f, 1.8f, D3 / 2, 0.3f); pad(b, 0f, 1.8f, A3 / 2, 0.22f) }
-            S.SHATTER -> { swish(b, 0f, 0.4f, 7000f, 2200f, 0.45f, 0.03f, 1f); for (i in 0 until 6) fmBell(b, i * 0.03f, 2100f + i * 410f, 0.05f, 0.6f, 2.9f, 1.2f) }
-            S.FETCH -> pluck(b, 0f, A5, 0.24f, 1f, 0.7f)
-            S.DOOR_UNLOCK -> { swish(b, 0f, 0.06f, 4000f, 1200f, 0.5f, 0.05f, 1f); thud(b, 0.02f, 120f, 40f, 0.5f, 0.9f); fmBell(b, 0.1f, D4, 0.2f, 1.2f, 1.41f, 2.5f) }
-            S.DOOR_GRIND -> { swish(b, 0f, 2.6f, 260f, 140f, 0.8f, 0.2f, 0.25f); thud(b, 0f, 60f, 35f, 2.6f, 0.4f); val r = kotlin.random.Random(11); repeat(24) { swish(b, r.nextFloat() * 2.4f, 0.05f, 3000f + r.nextFloat() * 2000f, 1200f, 0.18f, 0.1f, 1.2f) } }
+            S.DOOR_UNLOCK -> { crack(b, 0f, 0.9f, true); thud(b, 0.02f, 120f, 40f, 0.5f, 0.9f); glitter(b, 0.1f, 0.5f, 20, 0.08f) }
+            S.DOOR_GRIND -> { swish(b, 0f, 2.6f, 260f, 140f, 0.8f, 0.2f, 0.25f); thud(b, 0f, 60f, 35f, 2.6f, 0.4f); val r = kotlin.random.Random(11); repeat(24) { crack(b, r.nextFloat() * 2.4f, 0.12f + r.nextFloat() * 0.1f) } }
             S.DOOR_OPEN -> { thud(b, 0f, 85f, 26f, 1.4f, 1f); pad(b, 0.1f, 2.4f, D3, 0.25f); pad(b, 0.1f, 2.4f, A3, 0.2f); pad(b, 0.1f, 2.4f, 370f, 0.14f)
-                floatArrayOf(D5, 740f, A5, D6).forEachIndexed { i, f -> pluck(b, 0.3f + i * 0.12f, f, 0.2f, 1.6f, 0.8f) }; for (i in 0 until 5) fmBell(b, 0.5f + i * 0.13f, A6 + i * 90f, 0.05f, 1.2f) }
+                floatArrayOf(D5, 740f, A5, D6).forEachIndexed { i, f -> pluck(b, 0.3f + i * 0.12f, f, 0.22f, 1.6f, 0.8f) }; glitter(b, 0.4f, 1.8f, 70, 0.08f) }
         }
-        reverb(b.a, when (s) { S.IMP_HIT, S.ZAP, S.HURT, S.FRIEND_HURT -> 0.22f; S.SPRINT, S.FIREDASH, S.BURN, S.FETCH, S.PICKUP -> 0.3f; else -> 0.45f })
+        reverb(b.a, when (s) { S.IMP_HIT, S.ZAP, S.HURT, S.HURT_BIG, S.FRIEND_HURT, S.COUNTER -> 0.15f; S.WORSHIP -> 0.6f; S.SPRINT, S.FIREDASH, S.BURN, S.FETCH, S.PICKUP -> 0.3f; else -> 0.45f })
         // fade the tail so nothing clicks off; a clean, soft-knee limiter
         val fade = minOf(b.a.size, len(0.08f)); for (i in 0 until fade) b.a[b.a.size - 1 - i] *= i / fade.toFloat()
         var peak = 0.0001f; for (v in b.a) peak = maxOf(peak, kotlin.math.abs(v))
-        val target = when (s) { S.ZAP -> 0.5f; S.IMP_HIT, S.SPRINT -> 0.55f; S.PICKUP, S.FETCH, S.MEND, S.ORB -> 0.6f; else -> 0.8f }
+        val target = when (s) { S.ZAP -> 0.5f; S.IMP_HIT, S.SPRINT -> 0.6f; S.PICKUP, S.FETCH, S.MEND, S.ORB -> 0.6f; else -> 0.8f }
         val g = target / peak
         return ShortArray(b.a.size) { (kotlin.math.tanh(b.a[it] * g * 1.1) * 27000).toInt().toShort() }
     }

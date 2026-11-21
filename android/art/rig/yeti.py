@@ -16,34 +16,35 @@ def yeti(pose):
     r=Rig(); b=pose.get('bob',0); hurt=pose.get('hurt',False)
     hy=b
     # legs: thick, bowed, clawed feet
-    for side,(hx,kx,fx) in ((-1,(42,36,33)),(1,(58,64,67))):
-        r.cap(hx,72+hy,10,kx,86+hy*0.5,8.5,FUR,1,fur=0.08)
-        r.cap(kx,86+hy*0.5,8.5,fx,96,7,FUR,1,fur=0.06)
-        r.ell(fx+side*2,97.5,9,3.6,SKIN,2,edge=True)
+    for side,(hx,kx,fx) in ((-1,(44,41,39)),(1,(56,59,61))):
+        r.cap(hx,72+hy,7.5,kx,86+hy*0.5,6.5,FUR,1,fur=0.08)
+        r.cap(kx,86+hy*0.5,6.5,fx,96,5.5,FUR,1,fur=0.06)
+        r.ell(fx+side*2,97.5,7.5,3.2,SKIN,2,edge=True)
         for k in(-1,0,1): r.poly([(fx+side*2+k*4-1.4,98.5),(fx+side*2+k*4+side*2.2,101),(fx+side*2+k*4+1.4,98.5)],BONE,3,flat=3)
     # the hulking body
-    r.ell(50,60+hy,26,23,FUR,3,fur=0.07,furn=20)
-    r.ell(50,67+hy,15,13,BELLY,4,fur=0.04,furn=16,flat=None)
-    # shoulders, hunched high
-    r.ell(28,44+hy,13,11,FUR,5,fur=0.1,furn=10)
-    r.ell(72,44+hy,13,11,FUR,5,fur=0.1,furn=10)
-    # head, sunk between them, a shaggy mane
-    r.ell(50,28+hy,19,9,FUR,6,fur=0.25,furn=16)
-    r.ell(50,36+hy,16,13.5,SKIN,7,fur=0.0)
+    r.ell(50,60+hy,18,22,FUR,3,fur=0.07,furn=20)
+    r.ell(50,66+hy,10.5,12,BELLY,4,fur=0.04,furn=16,flat=None)
+    # no neck: the head runs down in two shaggy slopes straight into the arms
+    r.poly([(50,18+hy),(60,22+hy),(70,46+hy),(62,54+hy),(38,54+hy),(30,46+hy),(40,22+hy)],FUR,5,edge=False)
+    r.cap(47,22+hy,7,32,46+hy,7.5,FUR,5,fur=0.14,edge=False)
+    r.cap(53,22+hy,7,68,46+hy,7.5,FUR,5,fur=0.14,edge=False)
+    # the head, set into the slope, a shaggy mane
+    r.ell(50,28+hy,15,8,FUR,6,fur=0.25,furn=16)
+    r.ell(50,36+hy,13,12.5,SKIN,7,fur=0.0)
     r.ell(50,22.5+hy,14,4.5,FUR,8,fur=0.22,furn=14)
     # horns, curling up and out
     for side in(-1,1):
         r.poly([(50+side*9,24+hy),(50+side*19,18+hy),(50+side*23,8+hy),(50+side*19,12+hy),(50+side*14,17+hy),(50+side*7,21+hy)],HORN,9,grad=(0.2,1))
     # arms
     def arm(side,mode):
-        sx=50+side*24; sy=46+hy
-        if mode=='down': e=(sx+side*6,64+hy); w=(sx+side*7,80+hy)
-        elif mode=='out': e=(sx+side*14,50+hy); w=(sx+side*27,46+hy)
-        elif mode=='reach': e=(sx+side*10,58+hy); w=(sx+side*13,70+hy)
-        else: e=(sx+side*10,30+hy); w=(sx+side*8,14+hy)   # up
-        r.cap(sx,sy,8.5,e[0],e[1],7.5,FUR,10,fur=0.12)
-        r.cap(e[0],e[1],7.5,w[0],w[1],6,FUR,10,fur=0.1)
-        r.ell(w[0],w[1]+2,6.5,6,SKIN,11,edge=True)
+        sx=50+side*18; sy=47+hy
+        if mode=='down': e=(sx+side*5,66+hy); w=(sx+side*6,84+hy)
+        elif mode=='out': e=(sx+side*13,52+hy); w=(sx+side*26,47+hy)
+        elif mode=='reach': e=(sx+side*9,61+hy); w=(sx+side*12,76+hy)
+        else: e=(sx+side*9,30+hy); w=(sx+side*7,12+hy)   # up
+        r.cap(sx,sy,7,e[0],e[1],6.2,FUR,10,fur=0.12)
+        r.cap(e[0],e[1],6.2,w[0],w[1],5,FUR,10,fur=0.1)
+        r.ell(w[0],w[1]+2,5.6,5.2,SKIN,11,edge=True)
         # claws
         dirx=w[0]-e[0]; diry=w[1]-e[1]; dl=math.hypot(dirx,diry); ux=dirx/dl; uy=diry/dl
         for k in(-1,0,1):
@@ -68,7 +69,7 @@ def yeti(pose):
         r.poly(pts,STEEL,14,grad=(0,1))
     r.cap(top[0]-ux*7,top[1]-uy*7,3.2,top[0]+ux*1,top[1]+uy*1,3.2,STEEL,15,edge=True)
     # the hand closes over the haft
-    r.ell(ax,ay,6.5,6,SKIN,16,edge=True)
+    r.ell(ax,ay,5.6,5.2,SKIN,16,edge=True)
 
     blink=pose.get('blink',False); mouth=pose.get('mouth',0.3)
     def face(g,sc,ox,oy):
@@ -119,10 +120,10 @@ POSES={
 }
 if __name__=='__main__':
     # the hall sheet: 6 cells of 72, figure 56 tall standing on the cell's floor
-    sc=0.56
+    sc=0.62
     sheet=Image.new('RGBA',(72*6,72),(0,0,0,0))
     for f in range(6):
-        g=yeti(POSES[f]).render(72,72,ox=-8/sc-3,oy=-16/sc-2,scale=sc)
+        g=yeti(POSES[f]).render(72,72,ox=-8,oy=-13.5,scale=sc)
         sheet.alpha_composite(to_img(g),(f*72,0))
     sheet.save('hall_yeti_axe.png')
     # the duel: menacing, axe raised

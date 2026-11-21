@@ -340,6 +340,11 @@ class HallBattle(
     private fun finish(s: String) { say(s) { st = St.END; done = true } }
 
     /** How a blow lands: 0 not countered, 1 softened, 2 blocked, 3 parried. */
+    /** Half his blows come too fast to meet: no softening, no block, it just lands. */
+    private fun toDefend() {
+        if (rnd.nextFloat() < 0.5f) { pop(if (queen) "TOO FAST!" else "NO DEFENCE!", 92f, 64f, 0xFFE04848.toInt()); land(0) }
+        else { st = St.DEF1; t = 0f; lastScore = -1f }
+    }
     private fun land(how: Int) {
         val base = (atk.dmg * (if (guard && how < 2) 0.75f else 1f)).toInt()
         val softK = if (worn(Loot.AEGIS_SHARD)) 0.3f else 0.5f
@@ -383,7 +388,7 @@ class HallBattle(
             St.INTRO -> { st = St.MENU; cursor = 0 }
             St.MENU -> options().getOrNull(cursor)?.act?.invoke()
             St.TEXT -> if (t > 0.3f) after?.invoke()
-            St.ATTACK -> if (t > 0.5f) { st = St.DEF1; t = 0f; lastScore = -1f }
+            St.ATTACK -> if (t > 0.5f) toDefend()
             else -> {}
         }
     }
@@ -425,7 +430,7 @@ class HallBattle(
         if (FANCY && st == St.INTRO && t < 0.1f && pts.size < 50) { flashOf(0xFFFFFF, 0.7f); for (i in 0 until 40) { val a = i * 0.157f; pts += Pt(120f, 88f, cos(a) * 300f, sin(a) * 220f, 0.5f, 0xFFFFFFFF.toInt(), 1.5f, 0f, 2) } }
         when (st) {
             St.INTRO -> if (t > 2.2f) { st = St.MENU; cursor = 0 }
-            St.ATTACK -> if (t > 1.5f) { st = St.DEF1; t = 0f; lastScore = -1f }
+            St.ATTACK -> if (t > 1.5f) toDefend()
             St.DEF1 -> if (t > limit1) land(0)
             St.DEF2 -> if (t > limit2) land(1)
             else -> {}

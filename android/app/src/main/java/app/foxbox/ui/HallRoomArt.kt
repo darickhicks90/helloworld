@@ -27,6 +27,10 @@ internal class HallRoomArt {
         val hallOpen: BooleanArray? = null,
         /** The wood's ground, 40 x 35 cells of 6 x 5: 0 open, 1 deep forest, 2 rock, 3 water. */
         val mass: ByteArray? = null,
+        /** Each bridge: true if you cross it up-and-down (the river runs across the screen there). */
+        val bridgeVert: List<Boolean> = emptyList(),
+        /** The river's current: x, y, heading, every few pixels. */
+        val flow: FloatArray? = null,
     )
 
     private companion object {
@@ -66,6 +70,7 @@ internal class HallRoomArt {
     // =====================================================================================
     private fun bake(s: Spec) {
         if (s.kind == FOREST) { forest(s); return }
+        if (s.kind == 7) { glasshouse(s); return }
         val crypt = s.kind == 5
         floor(s, crypt)
         when (s.kind) { 0 -> carpet(104, 86, 136, H, 0xFF9A2434.toInt(), 0xFF6E1626.toInt()); 4 -> carpet(104, 31, 136, H - 3, 0xFF2E4A8C.toInt(), 0xFF1E3366.toInt()); 3 -> rug(104, 128, 158, 166) }
@@ -96,6 +101,45 @@ internal class HallRoomArt {
             box(x - 2, 29, x + 8, 33, MID); box(x - 2, 29, x + 8, 30, WHITE)
         }
         for (k in 0 until 3) box(72, k, 168, k + 1, intArrayOf(0x18000000, 0x10000000, 0x08000000)[k])
+    }
+
+    /**
+     * A Victorian glasshouse: a black-and-white tiled floor, a wall of iron-framed glass with the
+     * sky behind it, arched panes, ferns hanging from the cross-bars, palms in tubs.
+     */
+    private fun glasshouse(s: Spec) {
+        // the floor: chequered marble
+        box(0, 31, W, H, 0xFFE8E6E0.toInt())
+        for (ty in 0 until (H - 31) / 12 + 1) for (tx in 0 until W / 12 + 1) {
+            val x0 = tx * 12; val y0 = 31 + ty * 12; val dark = (tx + ty) % 2 == 0
+            box(x0, y0, x0 + 12, y0 + 12, if (dark) 0xFF34383E.toInt() else 0xFFE8E6E0.toInt())
+            box(x0, y0, x0 + 12, y0 + 1, if (dark) 0xFF4A4E56.toInt() else 0xFFFFFFFF.toInt())
+            if (h(tx, ty, 77) % 7 == 0) px(x0 + 3, y0 + 4, if (dark) 0xFF5A5E66.toInt() else 0xFFD0CEC8.toInt())
+        }
+        // the glass wall: sky through arched panes in a green-black iron frame
+        val iron = 0xFF1E2A24.toInt(); val ironL = 0xFF3E5246.toInt()
+        for (y in 0 until 31) box(0, y, W, y + 1, if (y < 12) 0xFFB8DCE8.toInt() else if (y < 22) 0xFFCCE8EE.toInt() else 0xFFDDF0EE.toInt())
+        for (k in 0 until W / 20 + 1) {
+            val x = k * 20
+            box(x, 0, x + 2, 31, iron); box(x + 2, 0, x + 3, 31, ironL)
+            // the arch at the top of each pane
+            for (q in 0 until 9) { val a = 3.1416f * q / 8f; box((x + 10 + cos(a.toDouble()) * 9).toInt(), (8 - sin(a.toDouble()) * 6).toInt(), (x + 11 + cos(a.toDouble()) * 9).toInt(), (9 - sin(a.toDouble()) * 6).toInt(), iron) }
+            // a glint on the glass
+            box(x + 5, 12, x + 6, 22, 0x80FFFFFF.toInt()); box(x + 7, 14, x + 8, 18, 0x60FFFFFF)
+        }
+        box(0, 18, W, 19, iron); box(0, 28, W, 31, iron); box(0, 28, W, 29, ironL)
+        // ferns hanging from the bar, trailing down the glass
+        for (i in 0 until 9) { val x = 12 + i * 26 + h(i, 5, 7) % 8; val len = 6 + h(i, 6, 7) % 8
+            box(x - 3, 18, x + 4, 21, 0xFF6A4A2A.toInt())
+            for (y in 21 until 21 + len) { px(x - 2 + (y % 3), y, if (y % 2 == 0) LEAF_D else 0xFF4E8A34.toInt()); px(x + 2 - (y % 3), y, 0xFF6AA848.toInt()) } }
+        sides(s, false); ambient(s)
+        for (w in s.pools) pool(w, 2)
+        for ((k, f) in s.props) shadow(k, f)
+        // palms in tubs along the walls
+        for (x in intArrayOf(14, 222)) for (y in intArrayOf(48, 120)) {
+            box(x - 5, y + 6, x + 5, y + 14, 0xFF8A5A30.toInt()); box(x - 5, y + 6, x + 5, y + 8, 0xFFB07E48.toInt())
+            for (q in 0 until 6) { val a = -2.6f + q * 0.42f; for (d in 0 until 9) px((x + cos(a.toDouble()) * d).toInt(), (y + 6 + sin(a.toDouble()) * d * 0.8 + d * d * 0.05).toInt(), if (d % 2 == 0) 0xFF3E7A30.toInt() else 0xFF6AA848.toInt()) }
+        }
     }
 
     private fun floor(s: Spec, crypt: Boolean) {
@@ -447,6 +491,10 @@ internal class HallRoomArt {
             glow.color = 0xFFF8B030.toInt(); cv.drawRect(x - 0.5f - (if (f == 1) 0.5f else 0f), y - 8f - f * 0.5f, x + 0.5f, y - 5f, glow)
             glow.color = 0xFFFFF4C0.toInt(); cv.drawRect(x - 0.5f, y - 6f, x + 0.5f, y - 5f, glow)
         }
+        if (s.kind == 7) for (k in 0 until 6) {
+            val x0 = 20f + k * 40f; val a = (0x14 + (6 * sin(time * 0.6f + k)).toInt()).coerceIn(4, 40)
+            glow.color = (a shl 24) or 0xFFF8E0; for (y in 31 until 150 step 2) cv.drawRect(x0 + (y - 31) / 3f, y.toFloat(), x0 + (y - 31) / 3f + 12f, y + 1f, glow)
+        }
         // dust drifting in the window light
         val wins = when (s.kind) { 0 -> intArrayOf(56, 176); 2 -> intArrayOf(30, 84, 148, 202); 6 -> intArrayOf(28, 204); else -> IntArray(0) }
         for ((wi, wx) in wins.withIndex()) for (i in 0 until 5) {
@@ -497,7 +545,7 @@ internal class HallRoomArt {
         for ((k, f) in s.props) if (k == PLAZA) plaza(f, s.id)
         water(s)
         s.mass?.let { massArt(it, s.id) }
-        for (b in s.bridges) bridge(b)
+        s.bridges.forEachIndexed { i, b -> if (s.bridgeVert.isNotEmpty()) bridge2(b, s.bridgeVert.getOrElse(i) { true }) else bridge(b) }
         val cliffs = s.props.filter { it.first == CLIFF }.map { it.second }
         for ((k, f) in s.props) when (k) { THICKET -> thicket(f, s.id); PALISADE -> palisade(f); CLIFF -> cliffTop(f, s.id); PLAZA, FLOWERBED -> {}; else -> shadow(k, f) }
         for (f in cliffs) cliffFace(f, cliffs, s.id)
@@ -651,6 +699,32 @@ internal class HallRoomArt {
             else { val y = t + k * 14 + v % 8; box(l - 4, y, l + 1, y + 1, 0xFF3E6A28.toInt()); box(r - 1, y + 2, r + 4, y + 3, 0xFF3E6A28.toInt()) }
         }
     }
+    /**
+     * A footbridge as it would really be built: planks laid across the way you walk, two stringers
+     * under them, posts at the corners standing in the banks, a rope rail each side, its shadow
+     * dark on the water.
+     */
+    private fun bridge2(b: RectF, vert: Boolean) {
+        val l = b.left.toInt(); val t = b.top.toInt(); val r = b.right.toInt(); val bt = b.bottom.toInt()
+        val wood = 0xFF8A6238.toInt(); val woodD = 0xFF4E321C.toInt(); val woodL = 0xFFB89058.toInt(); val rope = 0xFFC8B078.toInt()
+        // shadow on the water
+        if (vert) box(l + 3, t + 2, r + 3, bt + 2, 0x40000000) else box(l + 2, t + 3, r + 2, bt + 3, 0x40000000)
+        if (vert) {
+            // you walk up and down: planks run left-right, stringers along the sides
+            box(l + 1, t, l + 3, bt, woodD); box(r - 3, t, r - 1, bt, woodD)
+            var y = t; while (y < bt) { val v = h(l, y, 31); val wob = v % 2
+                box(l + wob, y, r - (1 - wob), y + 3, woodD); box(l + 1 + wob, y, r - 1 - (1 - wob), y + 2, if (v % 5 == 0) woodL else wood); box(l + 2, y, l + 3, y + 2, woodD); y += 4 }
+            for ((px, py) in listOf(l to t - 2, r - 3 to t - 2, l to bt - 4, r - 3 to bt - 4)) { box(px - 1, py, px + 3, py + 6, INK); box(px, py, px + 2, py + 5, woodL) }
+            box(l - 1, t, l, bt, rope); box(r, t, r + 1, bt, rope)
+        } else {
+            // you walk left and right: planks run up-down, stringers along top and bottom
+            box(l, t + 1, r, t + 3, woodD); box(l, bt - 3, r, bt - 1, woodD)
+            var x = l; while (x < r) { val v = h(x, t, 33); val wob = v % 2
+                box(x, t + wob, x + 3, bt - (1 - wob), woodD); box(x, t + 1 + wob, x + 2, bt - 1 - (1 - wob), if (v % 5 == 0) woodL else wood); x += 4 }
+            for ((px, py) in listOf(l - 2 to t - 3, r - 2 to t - 3, l - 2 to bt - 3, r - 2 to bt - 3)) { box(px - 1, py, px + 3, py + 6, INK); box(px, py, px + 2, py + 5, woodL) }
+            box(l, t - 1, r, t, rope); box(l, bt, r, bt + 1, rope)
+        }
+    }
     /** A plank bridge with rails, the water running under it. */
     private fun bridge(b: RectF) {
         val l = b.left.toInt(); val t = b.top.toInt(); val r = b.right.toInt(); val bt = b.bottom.toInt()
@@ -719,14 +793,24 @@ internal class HallRoomArt {
             val v = h(gx, gy, id)
             if ((gx + gy) % 2 == 1 && depth[gy * 40 + gx] >= 2 && v % 3 != 0) continue
             val cx = gx * 6 + 3f + (v % 5 - 2); val cy = gy * 5 + 1.5f + ((v shr 3) % 3 - 1)
-            val r = 5f + (v shr 5) % 3 + (if (depth[gy * 40 + gx] >= 2) 1.5f else 0f)
+            val r = 4f + (v shr 5) % 4 + (if (depth[gy * 40 + gx] >= 2) 1.5f else 0f)
             val dk = depth[gy * 40 + gx]
-            val body = if (dk >= 3) 0xFF1E4A34.toInt() else if (dk == 2) 0xFF245A36.toInt() else CAN
-            p.color = 0xFF0C1814.toInt(); c.drawCircle(cx, cy, r + 1f, p)
-            p.color = body; c.drawCircle(cx, cy, r, p)
-            p.color = if (dk >= 2) 0xFF3E7A3A.toInt() else CAN_L; c.drawCircle(cx - r * 0.28f, cy - r * 0.32f, r * 0.55f, p)
-            if (v % 4 == 0) { p.color = CAN_H; c.drawCircle(cx - r * 0.42f, cy - r * 0.48f, r * 0.2f, p) }
-            if (v % 23 == 0) px(cx.toInt() + 1, cy.toInt() + 1, 0xFFE04848.toInt())       // a berry
+            // a few kinds of bush: dark holly, bright fern-green, a blue-green yew
+            val kind = h(gx / 4, gy / 4, id + 5) % 3
+            val body = when { dk >= 3 -> 0xFF1E4A34.toInt(); dk == 2 -> 0xFF245A36.toInt(); kind == 1 -> 0xFF3A7A3A.toInt(); kind == 2 -> 0xFF2C6050.toInt(); else -> CAN }
+            val lite = when { dk >= 2 -> 0xFF3E7A3A.toInt(); kind == 1 -> 0xFF6AA848.toInt(); kind == 2 -> 0xFF4E8C74.toInt(); else -> CAN_L }
+            // an irregular crown: three to five lobes round a centre
+            val lobes = 3 + v % 3
+            p.color = 0xFF0C1814.toInt()
+            for (q in 0 until lobes) { val a = q * 6.283f / lobes + (v % 7); val lr = r * (0.55f + ((v shr (q + 2)) % 4) * 0.1f); c.drawCircle(cx + cos(a) * r * 0.45f, cy + sin(a) * r * 0.35f, lr + 1f, p) }
+            p.color = body
+            for (q in 0 until lobes) { val a = q * 6.283f / lobes + (v % 7); val lr = r * (0.55f + ((v shr (q + 2)) % 4) * 0.1f); c.drawCircle(cx + cos(a) * r * 0.45f, cy + sin(a) * r * 0.35f, lr, p) }
+            p.color = lite; c.drawCircle(cx - r * 0.3f, cy - r * 0.35f, r * 0.45f, p)
+            // leaf texture: dark and light flecks across the crown
+            for (q in 0 until 7) { val hv = h(gx * 7 + q, gy, id + 11); val fx = (cx - r + hv % (2 * r.toInt() + 1)).toInt(); val fy = (cy - r * 0.8f + (hv shr 6) % (r.toInt() + 2)).toInt()
+                px(fx, fy, if (q % 2 == 0) 0xFF0E2418.toInt() else lite); if (q == 3) px(fx + 1, fy, lite) }
+            if (v % 4 == 0) { p.color = CAN_H; c.drawCircle(cx - r * 0.42f, cy - r * 0.48f, r * 0.18f, p) }
+            if (v % 19 == 0) px(cx.toInt() + 1, cy.toInt() + 1, if (kind == 2) 0xFFE8E0F0.toInt() else 0xFFE04848.toInt())       // a berry, or a pale flower
         }
         // a soft shadow cast onto the open ground below the forest's edge
         for (gy in 0 until 35) for (gx in 0 until 40) if (at(gx, gy) == 1 && at(gx, gy + 1) == 0) { box(gx * 6, gy * 5 + 5, gx * 6 + 6, gy * 5 + 7, 0x38000000); box(gx * 6, gy * 5 + 7, gx * 6 + 6, gy * 5 + 9, 0x18000000) }
@@ -823,6 +907,24 @@ internal class HallRoomArt {
             glow.color = if (i % 3 == 0) 0xFFE8B040.toInt() else if (i % 3 == 1) 0xFF9AC850.toInt() else 0xFFD07030.toInt()
             val flip = (time * 3f + i).toInt() % 2
             cv.drawRect(x, y, x + 2f - flip, y + 1f + flip, glow)
+        }
+        // the winding river's current: long streaks sliding downstream, ripples, a little foam at the banks
+        s.flow?.let { fl ->
+            var i = 0; var k = 0
+            while (i + 2 < fl.size) {
+                val x = fl[i]; val y = fl[i + 1]; val a = fl[i + 2]
+                val ca = cos(a); val sa = sin(a)
+                val ph = (time * 0.9f + k * 0.173f) % 1f
+                val side = ((k * 37) % 13 - 6).toFloat()
+                val sx = x + ca * (ph * 14f - 7f) - sa * side; val sy = y + sa * (ph * 14f - 7f) + ca * side
+                val al = ((1f - abs(ph - 0.5f) * 2f) * 150).toInt().coerceIn(0, 255)
+                glow.color = (al shl 24) or (if (k % 3 == 0) 0xFFFFFF else 0xC8E8F8)
+                cv.drawRect(sx, sy, sx + ca * 3f + 1f, sy + sa * 3f + 1f, glow)
+                if (k % 4 == 0) { val fo = (if (k % 8 == 0) 1f else -1f) * 9f; val fx = x - sa * fo; val fy = y + ca * fo
+                    if (((time * 2f + k) % 3f) < 1.6f) { glow.color = 0x90FFFFFF.toInt(); cv.drawRect(fx, fy, fx + 1f, fy + 1f, glow) } }
+                if (k % 7 == 0) { val rr = 2f + ((time * 1.5f + k) % 1f) * 4f; glow.color = (((1f - ((time * 1.5f + k) % 1f)) * 70).toInt() shl 24) or 0xE0F0FF; cv.drawRect(x - rr, y, x + rr, y + 0.7f, glow) }
+                i += 3; k++
+            }
         }
         // the current: glints drifting downstream
         for ((ri, w) in s.rivers.withIndex()) {

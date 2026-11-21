@@ -67,14 +67,16 @@ class HallScreen(c: Context) : PixelView(c) {
         /** The water spirit in the treasury: the first meeting, and what it says after. */
         val SPIRIT_FIRST = listOf(
             "...AH. THE ONE WHO TOOK HIS EYES OFF ME.",
-            "HE KEPT ME IN THIS BASIN FOR A HUNDRED WINTERS, POLISHING HIS GOLD.",
-            "TAKE THIS, WITH MY THANKS. AND DRINK: THE WATER REMEMBERS YOU NOW.",
+            "HE KEPT ME IN THIS BASIN FOR A HUNDRED WINTERS. DRINK, AND BE WHOLE.",
+            "THERE IS A TUNNEL IN THE EAST WALL. I HAVE OPENED IT. FOLLOW IT.",
+            "AT ITS END, AMONG THE GLASS AND THE FLOWERS, SHE IS WAITING.",
         )
         val SPIRIT_AGAIN = listOf(
             "THE WATER HEALS YOU. COME BACK WHENEVER YOU LIKE.",
             "LISTEN... THE IMPS ARE STILL OUT THERE. THEY MISS HIM. I DO NOT.",
             "TRACE YOUR RUNES SLOWLY. WATER IS PATIENT; SO SHOULD YOU BE.",
             "HIS AXE SUITS YOU. IT NEVER SUITED HIM.",
+            "THE TUNNEL, IN THE EAST WALL. SHE IS WAITING.",
         )
         val MUTTER = listOf("#@%&!", "\$%@#!", "&*#@!!", "@#\$%...", "HMPH.")
         val MUTTER2 = listOf("HUSH.", "BLOOM...", "TSK.", "GROW.", "DEAR ME.")
@@ -109,7 +111,7 @@ class HallScreen(c: Context) : PixelView(c) {
         fun propH(k: Int) = when (k) { PILLAR -> 70f; ROCK -> 12f; SHRUB -> 14f; STATUE -> 28f; FOUNTAIN -> 18f; TABLE -> 8f; BRAZIER -> 14f; TOMB -> 14f; TREE -> 46f; STUMP -> 9f; LOG -> 9f; MUSHROOM -> 9f; EXIT -> 34f; THICKET -> 8f; GRAVE -> 12f; RUIN_PILLAR -> 26f; RUIN_WALL -> 12f; DEADTREE -> 40f; TENT -> 22f; CAMPFIRE -> 6f; STALL -> 16f; PALISADE -> 10f; WELL -> 18f; CRATES -> 14f; BARREL -> 10f; HAY -> 10f; LANTERN -> 18f; BENCH -> 6f; CART -> 14f; SIGNPOST -> 18f; FLOWERBED -> 4f; LAUNDRY -> 20f; PLAZA -> 0f; COLUMN -> 46f; ARCH -> 40f; RUIN_STATUE -> 30f; FALLEN_COLUMN -> 8f; CLIFF -> 14f; BUILDING -> 40f; EXIT -> 58f; else -> 12f }
         const val BOSS_MAX = 400; const val LAST = 100
         /** How long a seal on a behemoth waits for the strike before it fades (or the brainwash begins). */
-        const val SEAL_TIME = 1.1f
+        const val SEAL_TIME = 2.4f
     }
 
     private val screen = Bitmap.createBitmap(W, H, Bitmap.Config.ARGB_8888)
@@ -188,9 +190,9 @@ class HallScreen(c: Context) : PixelView(c) {
     private val rooms = mapOf(
         0 to Room("ARMORY", 4, "S", listOf(pr(STATUE, 40, 64, 56, 74), pr(STATUE, 76, 64, 92, 74), pr(STATUE, 148, 64, 164, 74), pr(STATUE, 184, 64, 200, 74),
             pr(BRAZIER, 60, 140, 72, 148), pr(BRAZIER, 168, 140, 180, 148), pr(ROCK, 100, 150, 114, 158)), listOf(pool(104, 96, 136, 116))),
-        2 to Room("CHAPEL", 2, "S", listOf(pr(FOUNTAIN, 100, 70, 140, 88), pr(SHRUB, 44, 60, 60, 68), pr(SHRUB, 180, 60, 196, 68), pr(TOMB, 52, 132, 84, 142), pr(TOMB, 156, 132, 188, 142)),
-            listOf(pool(28, 100, 60, 120), pool(180, 100, 212, 120))),
-        1 to Room("TREASURY", 6, "S", listOf(pr(PILLAR, 44, 72, 60, 80), pr(PILLAR, 180, 72, 196, 80), pr(CHEST, 108, 62, 132, 72)), listOf(pool(160, 116, 200, 132))),
+        2 to Room("THE GLASSHOUSE", 7, "", listOf(pr(FOUNTAIN, 100, 112, 140, 130), pr(TABLE, 26, 70, 66, 76), pr(TABLE, 174, 70, 214, 76), pr(TABLE, 26, 140, 66, 146), pr(TABLE, 174, 140, 214, 146),
+            pr(SHRUB, 80, 150, 96, 158), pr(SHRUB, 144, 150, 160, 158)), listOf(pool(30, 104, 58, 120), pool(182, 104, 210, 120))),
+        1 to Room("TREASURY", 6, "S", listOf(pr(PILLAR, 44, 72, 60, 80), pr(PILLAR, 180, 72, 196, 80)), listOf(pool(160, 116, 200, 132))),
         3 to Room("WEST GALLERY", 1, "NES",
             listOf(pr(STATUE, 36, 60, 52, 70), pr(STATUE, 84, 60, 100, 70), pr(STATUE, 140, 60, 156, 70), pr(STATUE, 188, 60, 204, 70),
                 pr(SHRUB, 40, 132, 56, 140), pr(SHRUB, 184, 132, 200, 140), pr(ROCK, 60, 152, 74, 160)),
@@ -199,7 +201,7 @@ class HallScreen(c: Context) : PixelView(c) {
             listOf(pr(PILLAR, 44, 72, 60, 80), pr(PILLAR, 180, 72, 196, 80), pr(PILLAR, 44, 150, 60, 158), pr(PILLAR, 180, 150, 196, 158),
                 pr(ROCK, 74, 146, 88, 154), pr(ROCK, 152, 146, 166, 154)),
             listOf(pool(70, 112, 98, 128), pool(142, 112, 170, 128))),
-        5 to Room("EAST GALLERY", 2, "NWS",
+        5 to Room("EAST GALLERY", 2, "WS",
             listOf(pr(FOUNTAIN, 100, 72, 140, 90), pr(SHRUB, 56, 56, 72, 64), pr(SHRUB, 168, 56, 184, 64), pr(ROCK, 150, 152, 164, 160), pr(ROCK, 70, 100, 84, 108)),
             listOf(pool(36, 124, 68, 144), pool(172, 124, 204, 144))),
         6 to Room("LIBRARY", 3, "EN",
@@ -231,7 +233,13 @@ class HallScreen(c: Context) : PixelView(c) {
     private val zoneRoom get() = rooms.getValue(zone)
     private fun zoneOX(z: Int) = (z % 3) * 240f
     private fun zoneOY(z: Int) = (z / 3) * 176f
-    private val TX = 240f; private val TY = 176f          // the throne room's corner
+    /** The boss's room's corner: the throne room (him), the glasshouse (her). */
+    private val TX get() = if (chapter == 2) 480f else 240f
+    private val TY get() = if (chapter == 2) 0f else 176f
+    private val bossZone get() = if (chapter == 2) 2 else 4
+    /** The tunnel from the treasury to the glasshouse: opened when the spirit tells you of it. */
+    private var tunnelOpen = false
+    private val tunnelPassable get() = tunnelOpen || chapter == 2
     private fun joined(a: Int, b: Int): Boolean {
         if (a == 1 || b == 1) return false
         val ra = rooms[a] ?: return false
@@ -257,13 +265,15 @@ class HallScreen(c: Context) : PixelView(c) {
                 o[2] -> { out += RectF(ox, oy, ox + 72, oy + 31); out += RectF(ox + 168, oy, ox + 240, oy + 31) }
                 else -> out += RectF(ox, oy, ox + 240, oy + 31)
             }
-            if (!o[0]) out += RectF(ox, oy, ox + 4, oy + 176)
-            if (!o[1]) out += RectF(ox + 236, oy, ox + 240, oy + 176)
+            if (!o[0]) { if (z == 2) { out += RectF(ox, oy, ox + 8, oy + 66); out += RectF(ox, oy + 120, ox + 8, oy + 176) } else out += RectF(ox, oy, ox + 4, oy + 176) }
+            if (!o[1]) { if (z == 1) { out += RectF(ox + 232, oy, ox + 240, oy + 66); out += RectF(ox + 232, oy + 120, ox + 240, oy + 176) } else out += RectF(ox + 236, oy, ox + 240, oy + 176) }
         }
         out
     }
     /** The throne room's back wall where it cracks through to the treasury. */
-    private val crackWall = RectF(TX + 104, TY, TX + 136, TY + 31)
+    private val crackWall = RectF(240f + 104, 176f, 240f + 136, 176f + 31)
+    /** The tunnel's mouth in the wall between treasury and glasshouse. */
+    private val tunnelWall = RectF(472f, 66f, 488f, 120f)
     private val crackPassable get() = crackOpen && (phase == Phase.WON || chapter == 2)
     private var openRoom = Room("", 10, "WENS", emptyList(), emptyList())
     /** The world's size (the hall: one screen), the camera, and where new foes may appear. */
@@ -293,17 +303,21 @@ class HallScreen(c: Context) : PixelView(c) {
      * down everything inside it; as many times as you can manage.
      */
     private var energy = 0f; private var furyT = 0f
-    private val ENERGY_MAX = 96f
+    private val ENERGY_MAX = 288f
     private var furyRing: FloatArray? = null; private var furyRingT = 0f
     private fun charge(n: Int) {
         if (n <= 0 || furyT > 0f || phase != Phase.FIGHT) return
-        energy += n
-        if (energy >= ENERGY_MAX) {
-            energy = 0f; furyT = 8f; furyRing = null
-            flashT = 0.3f; shakeT = 0.3f
-            say("FURY! CIRCLE THEM, THEN SLASH THROUGH, AS MANY TIMES AS YOU CAN!", 2.6f)
-            sfx.play(HallSfx.S.EXOTIC); sfx.rumbleFanfare()
-        }
+        val was = energy
+        energy = minOf(ENERGY_MAX, energy + n)
+        if (was < ENERGY_MAX && energy >= ENERGY_MAX) { say("FURY IS READY: PRESS L AND R TOGETHER", 2.2f); sfx.play(HallSfx.S.LEVEL_UP, 0.7f); sfx.rumbleSoft() }
+    }
+    /** L and R together, with the energy full: Fury. */
+    private fun unleashFury() {
+        if (energy < ENERGY_MAX || furyT > 0f || phase != Phase.FIGHT) return
+        energy = 0f; furyT = 8f; furyRing = null; drawing.clear(); drawLen = 0f
+        flashT = 0.3f; shakeT = 0.3f
+        say("FURY! CIRCLE THEM, THEN SLASH THROUGH, AS MANY TIMES AS YOU CAN!", 2.6f)
+        sfx.play(HallSfx.S.EXOTIC); sfx.rumbleFanfare()
     }
     /** Coins, from fallen foes and odd corners; spent at the forts. */
     private var coins = 0
@@ -447,9 +461,8 @@ class HallScreen(c: Context) : PixelView(c) {
         eachComp { val fk = friend; if (fk != null && friendHere) frHp = fk.maxHp }
         talking = true; line = 0; shown = 0f
         if (!spiritGift) {
-            spiritGift = true; talkLines = SPIRIT_FIRST
-            val ex = Loot.values().filter { it.rarity == Rarity.EXOTIC && it !in bag.owned }
-            msg = takeLoot(if (ex.isNotEmpty()) ex[rnd.nextInt(ex.size)] else rollLoot(0f)); msgT = 4f
+            spiritGift = true; talkLines = SPIRIT_FIRST; sfx.play(HallSfx.S.MEND)
+            if (chapter == 1) { tunnelOpen = true; saveSoon = true }
         } else { talkLines = listOf(SPIRIT_AGAIN[spiritTalks % SPIRIT_AGAIN.size]); spiritTalks++; sfx.play(HallSfx.S.MEND, 0.7f) }
         sfx.rumbleSoft()
     }
@@ -488,6 +501,8 @@ class HallScreen(c: Context) : PixelView(c) {
         var ally = false; var perm = false; var atkCd = 0f; var slot = -1; var supCd = 4f
         /** A drake: behemoth-class, but it comes down out of the sky, breathes fire and takes off again. */
         var drake = false; var airT = 0f; var flyCd = 6f; var breathCd = 3f
+        /** A golem: behemoth-class too, a tall walking stone. A summons lasts [summonLife] seconds. */
+        var golem = false; var summonLife = 0f
         /** Hired at a fort: fights for you this level, then goes its way. */
         var merc = false
         /** The behemoth: dazed (circle him now!), enraged, his slam wind-up and cool-down, rising from the floor. */
@@ -571,7 +586,7 @@ class HallScreen(c: Context) : PixelView(c) {
     private val fxs = ArrayList<Fx>()
     private val FX_NOVA = 1; private val FX_NOVA_STAR = 2; private val FX_MOON = 3; private val FX_FROST = 4; private val FX_AEGIS = 5
     private val FX_SHATTER = 6; private val FX_MEND = 7; private val FX_HEX = 8; private val FX_REVIVE = 9; private val FX_JOIN = 10
-    private val FX_PETALS = 16
+    private val FX_PETALS = 16; private val FX_SIGIL = 17
     private val FX_BIND = 11; private val FX_HASTE = 12; private val FX_HEALBEAM = 13; private val FX_WALL = 14; private val FX_STRIKE = 15
     /** A heal travelling from (x, y) to (x2, y2). */
     private class Beam(val x: Float, val y: Float, val toFriend: Boolean) { var life = 0.6f }
@@ -674,10 +689,14 @@ class HallScreen(c: Context) : PixelView(c) {
         GRUMBLE("GRUMBLE", 680, 0.9f, 8, 3.2f, false, "STONE AEGIS", 11f),
         EMBER("EMBER", 380, 1.15f, 7, 2.6f, false, "FLAME RING", 9f),
         SPROUT("SPROUT", 400, 1.25f, 5, 2.8f, false, "BLOOM FIELD", 12f),
+        WOLF("WOLF", 380, 1.45f, 7, 2.0f, false, "PACK HOWL", 9f),
+        HEDGEHOG("HEDGEHOG", 430, 1.0f, 5, 2.4f, false, "QUILL BURST", 8f),
+        IMP("IMP", 320, 1.2f, 5, 2.2f, false, "EMBER MEND", 10f),
+        GAZER("GAZER", 300, 1.1f, 5, 2.5f, true, "WARDING GLARE", 9f),
     }
     /** Each companion's support: what its wall is made of, what its heal looks like. */
-    private fun wallName(k: Friend) = when (k) { Friend.BRAMBLE -> "THORN HEDGE"; Friend.PIP -> "MOON VEIL"; Friend.TOVE -> "ICE WALL"; Friend.GRUMBLE -> "STONE WALL"; Friend.EMBER -> "FIRE WALL"; Friend.SPROUT -> "ROOT WALL" }
-    private fun healName(k: Friend) = when (k) { Friend.BRAMBLE -> "HEALING SAP"; Friend.PIP -> "MOTE OF LIGHT"; Friend.TOVE -> "COOL MIST"; Friend.GRUMBLE -> "EARTH'S MEND"; Friend.EMBER -> "WARM EMBERS"; Friend.SPROUT -> "BLOSSOM DEW" }
+    private fun wallName(k: Friend) = when (k) { Friend.BRAMBLE -> "THORN HEDGE"; Friend.PIP -> "MOON VEIL"; Friend.TOVE -> "ICE WALL"; Friend.GRUMBLE -> "STONE WALL"; Friend.EMBER -> "FIRE WALL"; Friend.SPROUT -> "ROOT WALL"; Friend.WOLF -> "BRUSH WALL"; Friend.HEDGEHOG -> "QUILL HEDGE"; Friend.IMP -> "FIRE WALL"; Friend.GAZER -> "MOON VEIL" }
+    private fun healName(k: Friend) = when (k) { Friend.BRAMBLE -> "HEALING SAP"; Friend.PIP -> "MOTE OF LIGHT"; Friend.TOVE -> "COOL MIST"; Friend.GRUMBLE -> "EARTH'S MEND"; Friend.EMBER -> "WARM EMBERS"; Friend.SPROUT -> "BLOSSOM DEW"; Friend.WOLF -> "LICKED WOUNDS"; Friend.HEDGEHOG -> "WARM NEST"; Friend.IMP -> "EMBER MEND"; Friend.GAZER -> "GLIMMER" }
     /** One companion's state. You travel with two; the code below works on "the current one" (cur). */
     private class Comp {
         var kind: Friend? = null; var wallCd = 4f; var healCd = 3f; var guardCd = 0f; var state = 0; var room = 3
@@ -729,9 +748,11 @@ class HallScreen(c: Context) : PixelView(c) {
 
     /** Your companion comes with you from the start of every match (the same one, once chosen). */
     private fun spawnFriend() {
-        val all = Friend.values(); val k = savedFriend ?: all[rnd.nextInt(all.size)]
+        val firstPool = listOf(Friend.WOLF, Friend.HEDGEHOG, Friend.IMP, Friend.GAZER)
+        val secondPool = listOf(Friend.BRAMBLE, Friend.PIP, Friend.TOVE, Friend.EMBER, Friend.SPROUT)
+        val k = savedFriend?.takeIf { it in firstPool } ?: firstPool[rnd.nextInt(firstPool.size)]
         savedFriend = k
-        val k2 = savedFriend2?.takeIf { it != k } ?: all.filter { it != k }[rnd.nextInt(all.size - 1)]
+        val k2 = savedFriend2?.takeIf { it in secondPool } ?: secondPool[rnd.nextInt(secondPool.size)]
         savedFriend2 = k2
         shieldHits = 0
         for ((i, kk) in listOf(k, k2).withIndex()) {
@@ -914,7 +935,7 @@ class HallScreen(c: Context) : PixelView(c) {
                 val cx = px + ux * minOf(18f, d * 0.6f); val cy = py + uy * minOf(18f, d * 0.6f)
                 val nx = -uy; val ny = ux; val half = 16f
                 val seg = FloatArray(10) { i -> val t = (i / 2) / 4f * 2f - 1f; if (i % 2 == 0) cx + nx * half * t + ux * (1 - t * t) * 3f else cy + ny * half * t + uy * (1 - t * t) * 3f }
-                val style = when (k) { Friend.BRAMBLE -> 1; Friend.PIP -> 2; Friend.TOVE -> 3; Friend.GRUMBLE -> 4; Friend.EMBER -> 5; Friend.SPROUT -> 6 }
+                val style = when (k) { Friend.BRAMBLE -> 1; Friend.PIP -> 2; Friend.TOVE -> 3; Friend.GRUMBLE -> 4; Friend.EMBER -> 5; Friend.SPROUT -> 6; Friend.WOLF -> 1; Friend.HEDGEHOG -> 1; Friend.IMP -> 5; Friend.GAZER -> 2 }
                 wards += Ward(seg, roomId, false, 5.5f, style)
                 fxs += Fx(FX_WALL, cx, cy, 0.5f, style.toFloat())
                 say(wallName(k) + "!", 1f)
@@ -989,6 +1010,33 @@ class HallScreen(c: Context) : PixelView(c) {
                 if (bigHere && hypot(gx - frX, gy - frY) < 60f) damageBoss(6)
                 sfx.play(HallSfx.S.THUNDER, 0.4f)
             }
+            Friend.WOLF -> {
+                // the pack's howl: you're quickened; foes close by falter and lose their nerve
+                swiftT = maxOf(swiftT, 3.5f); rings += Ring(frX, frY); fxs += Fx(FX_HEX, frX, frY, 0.6f)
+                for (m in minions) if (m.room == roomId && !m.ally && hypot(m.x - frX, m.y - frY) < 75f) { m.conf = maxOf(m.conf, 2.5f); m.weak = maxOf(m.weak, 3f) }
+                sfx.play(HallSfx.S.SPRINT, 0.7f)
+            }
+            Friend.HEDGEHOG -> {
+                // it curls and bursts: quills flung all round, everything close stung and thrown back
+                rings += Ring(frX, frY); fxs += Fx(FX_NOVA, frX, frY - 4, 0.5f); shakeT = maxOf(shakeT, 0.12f)
+                for (m in minions) if (m.room == roomId && !m.ally) { val dx = m.x - frX; val dy = m.y - frY; val dd = hypot(dx, dy); if (dd < 58f) { hitImp(m, 3, true); val q = dd.coerceAtLeast(1f); m.kx = dx / q * 170f; m.ky = dy / q * 170f; bursts += Burst(m.x, m.y) } }
+                if (bigHere && hypot(gx - frX, gy - frY) < 60f) damageBoss(4)
+                sfx.play(HallSfx.S.SHATTER, 0.5f)
+            }
+            Friend.IMP -> {
+                // a stream of warm embers: you, your thralls, your other companion
+                hp = minOf(maxHp, hp + 12); beams += Beam(frX, frY - 8, false)
+                for (m in minions) if (m.room == roomId && m.ally) m.hp = minOf(m.maxHp, m.hp + 10)
+                for (c in comps) { val ck = c.kind; if (ck != null && c !== cur && c.hp > 0) c.hp = minOf(ck.maxHp, c.hp + 20) }
+                fxs += Fx(FX_MEND, frX, frY - 4, 0.7f); sfx.play(HallSfx.S.MEND, 0.7f)
+            }
+            Friend.GAZER -> {
+                // its glare: everything close frozen where it stands, the shots round you burned away
+                for (m in minions) if (m.room == roomId && !m.ally && hypot(m.x - frX, m.y - frY) < 85f) { m.para = maxOf(m.para, 2f); fxs += Fx(FX_BIND, m.x, m.y, 0.5f) }
+                shots.removeAll { s0 -> !s0.ally && hypot(s0.x - (hx + 8), s0.y - (hy + 13)) < 60f }
+                if (bigHere && hypot(gx - frX, gy - frY) < 85f) bossPara = maxOf(bossPara, 1f)
+                sfx.play(HallSfx.S.ZAP, 0.6f)
+            }
             Friend.SPROUT -> {
                 // a field of blossoms: you and every friend mended, foes in it tangled and slowed
                 hp = minOf(maxHp, hp + 30); beams += Beam(frX, frY - 8, false)
@@ -1013,7 +1061,11 @@ class HallScreen(c: Context) : PixelView(c) {
         listOf(listOf("..KKKKKK..........K.....K...", ".KsslssrK........KkK...KkK..", ".KssssrlK........KkK..KkqK..", ".KsssrrqK........KkqK.KkkK..", ".KssrrqqK........KkkkKkkkK..", "KsssrqqqjK.......KkkilikkK..", "KssrqkkjjK.......KkilkkikK..", "KlqqkkjjiK......KlilkkkjiiK.", "KkkkkkjjiK..KKKKKklkksqKjiK.", "KkkkkjjjiKKKlllriiikkqKjikK.", "KkkkjjjiiKllrllssssijiiilkjK", "KjjjjjiillllslkkissiissikjKK", "KjjjjiikllrllkkkissiisiiKKK.", ".KjjiiikklskkkkkirriiiiKWK..", "..KiiiikkkkkkrkjjiiiiiiK....", "...KKKKjkkkiisjjjriiiiiK....", ".......KjjilkijjisilkiK.....", ".......KiiilkiiiiiilkK......", "......KkkikkjiiiiikkjiK.....", "......KkkikkjiKiiikkjiK.....", ".......KjiKjiK.KjiKjiK......", ".......KiqKiqK.KiqKiqK......"), listOf("..KKKKKK..........K.....K...", ".KsslssrK........KkK...KkK..", ".KssssrlK........KkK..KkqK..", ".KsssrrqK........KkqK.KkkK..", ".KssrrqqK........KkkkKkkkK..", "KsssrqqqjK.......KkkilikkK..", "KssrqkkjjK.......KkilkkikK..", "KlqqkkjjiK......KlilkkkjiiK.", "KkkkkkjjiK..KKKKKklkksqKjiK.", "KkkkkjjjiKKKlllriiikkqKjikK.", "KkkkjjjiiKllrllssssijiiilkjK", "KjjjjjiillllslkkissiissikjKK", "KjjjjiikllrllkkkissiisiiKKK.", ".KjjiiikklskkkkkirriiiiKWK..", "..KiiiikkkkkkrkjjiiiiiiK....", "...KKKKjkkkijsjjjriiiiiK....", ".......KjjikijjjisikiiK.....", ".......KiilkjiiiiilkjK......", ".......KlilkjiiiiilkjK......", ".......KkikjiKKKiikjiK......", ".......KjijjiK.KjijjiK......", "........KiqqK...KiqqK.......")),
         listOf(listOf(".......KccccccK.......", "......KcccccccK.......", "......KcmmmmmmdK......", "......KcmmmmmmcK......", ".....KmdmooooomKE.....", "......KmoooooooK......", "......KmmsrmrsmK......", ".KKKKKmnnqnnnqnK.KKKK.", "KmcdcmomdmmmmmmoKccdmK", "KommmmpooooooooommmmoK", "KoooompooooroomomooooK", ".KKKKopmooorooomoKKKK.", "..KKKmpcmnrqrnmnnKKK..", ".KooompcmnnrnnnnmoooK.", ".KooompcmnnrnnnnmoooK.", "..KKKKbpmnnqnnnnKKKK..", ".KKKKKmpmnrrrnmmKKKKK.", "KooooKnpnnnrnmccKooooK", "KooooKnpnnnqnmccKooooK", ".KKKKKnpmnnrnmccKKKKK.", "KooooKnnnmrrrnmaoooooK", "KooooomnnnnqnnnmoooooK", "KoooooKmmmmmmmmKoooooK", "KnnnnEKmmmmmmmmKnnnnnK", "KnnnnnKommmmmmoKnnnnnK", ".KnnnKKnnnnnnnnKKnnnK.", "..KKK.KnnnKKnnnK.KKK..", "......KnnnKKnnnK......", "......KnnnKKnnnK......", ".....KKnnnKKnnnKK.....", "....KooooooooooooK....", "....KooooooooooooK....", "....KooooooooooooK....", ".....KKKKKKKKKKKK....."), listOf(".......KccccccK.......", "......KcccccccK.......", "......KcmmmmmmdK......", "......KcmmmmmmcK......", ".....KmdmooooomKE.....", "......KmoooooooK......", "......KmmsrmrsmK......", ".KKKKKmnnqnnnqnK.KKKK.", "KmcdcmomdmmmmmmoKccdmK", "KommmmpooooooooommmmoK", "KoooompooooroomomooooK", ".KKKKopmooorooomoKKKK.", "..KKKmpcmnrqrnmnnKKK..", ".KooompcmnnrnnnnmoooK.", ".KooompcmnnrnnnnmoooK.", "..KKKKbpmnnqnnnnKKKK..", ".KKKKKmpmnrrrnmmKKKKK.", "KooooKnpnnnrnmccKooooK", "KooooKnpnnnqnmccKooooK", "KKKKKKnpmnnrnmccKKKKK.", "oooooKnnnmrrrnmbKooooK", "oooooKnnnnnqnnnmKooooo", "oooooKKmmmmmmmmKKooooo", "nnnnnEKmmmmmmmmKKnnnnn", "nnnnnKKommmmmmoKKnnnnK", "KnnnK.KnnnnnnnnKKnnnK.", ".KKK..KnnnKKnnnK.KKK..", "......KnnnKKnnnK......", "......KnnnKKnnnK......", ".....KKnnnKKnnnKK.....", "....KooooooooooooK....", "....KooooooooooooK....", "....KoooooonnnnnnK....", ".....KKKKKKKKKKKK.....")),
         listOf(listOf("..............................", "..................K...........", "............K....KwK.K........", "...........KwK.K.KwKKwK.......", "...........KwKKwKKwKKwK.......", ".........K.KwKKwKKwwKwKKK.....", "........KwKKwwKwKKwwKwwtvKK...", "........KwKKwwKwwKwwwwwtvvuK..", "........KwwKwwwwwKKttttvvuutK.", "........KwwttttttvtvwvvvWKutK.", "..KKKK..KttwwwwvvvtvvvvuYKttw.", ".KwwvuKKwwwwwwvvtwtuuuuuuttKK.", ".vwvvuKvwwvvtwttttutwutttttt..", "wKvuuttvvtwtwwwwwwttttwttKK...", ".KttttvttwwwwwtwwvvvvtKKK.....", "..KKKKvttwwwwvvvvvvvvtvK......", "......KwvtttvvvvvvtttvvtK.....", "......KvvutvtttKttttvvutK.....", ".......KutKKutK.KutKKutK......", "........KK..KK...KK..KK......."), listOf("..............................", "......................K.......", "................K....KwK......", "..........K....KwK.K.KwK......", ".........KwK.K.KwKKwKKwK......", ".........KwKKwKKwKKwKwwKK.....", ".........KwKKwKwwKwwKwwtvKK...", "........KwwKwwKwwKwwtwwwtvuK..", "........KwwKwwKwwwKtwtttvuutK.", "........KwwtttwttttvwvvvWKutK.", "..KKKK..KttwwwwvvvtvvvvuYKttv.", ".KwwvuKKwwwwwwvvtwtuuuuuuttKK.", ".KwvvuKvwwvvtwttttutwutttttt..", ".wvuuttvvtwtwwwwwwttttwttKK...", ".vttttvttwwwwwtwwvvvvtKKK.....", "..KKKKvttwwwwvvvvvvvvtuK......", "......KKwtttvvvvvvtttvuK......", ".......KvutvttKKKtttvutK......", ".......KuttuttK.KuttuttK......", "........KKKKKK...KKKKKK.......")),
-        listOf(listOf("..............KFFDK.KFEK..", "..............KEYDKKKDYK..", "..............KCCCdcKeK...", "...............KKKbaeK....", ".................KeegK....", "................KKKgeKK...", "...............KggKKhggKK.", "................KghhhggfeK", "...............KhehhggKWeK", "...............KhegggfKeeK", "..............KgheffffeeeN", "..............KgggeeeeeKK.", "............KK.KgfffeeK...", ".....K..KKKKggKKfffeeeK...", "....KPKKhhhhhgggeeeeeK....", "...KPPThhhhhhgPgfeeKK.....", "...KPTThhhhPggggfffeK.....", "....KTghhgPPPTThPfeeK.....", ".....KggPPPPTTThhheeK.....", ".....KfgTTTTPThhhheeK.....", "......KehhhhhhhhhheK......", "......KhgehhhhhhgeeK......", "......KhfeeKeeKhfefK......", "......KgfefKKKKgfefK......", "......KgfefK..KgfefK......", "......KfeeeK..KfeeeK......", "......KeeeeK..KeeeeK......", ".......dKKK....KKdK......."), listOf("..............KFFDK.KFEK..", "..............KEYDKKKDYK..", "..............KCCCdcKeK...", "...............KKKbaeK....", ".................KeegK....", "................KKKgeKK...", "...............KggKKhggKK.", "................KghhhggfeK", "...............KhehhggKWeK", "...............KhegggfKeeK", "..............KgheffffeeeN", "..............KgggeeeeeKK.", "............KK.KgfffeeK...", ".....K..KKKKggKKfffeeeK...", "....KPKKhhhhhgggeeeeeK....", "...KPPThhhhhhgPgfeeKK.....", "...KPTThhhhPggggfffeK.....", "....KTghhgPPPTThPfeeK.....", ".....KggPPPPTTThhheeK.....", ".....KfgTTTTPThhhheeK.....", "......KfhhhhhhhhhheK......", ".......KhehhhhhhheK.......", ".......KgeKKeeKKgeK.......", ".......KgeK.KK.KgeK.......", ".......KgeK....KgeK.......", ".......KfeK....KfeK.......", ".......KeeK....KeeK.......", "........dK......dK........"))
+        listOf(listOf("..............KFFDK.KFEK..", "..............KEYDKKKDYK..", "..............KCCCdcKeK...", "...............KKKbaeK....", ".................KeegK....", "................KKKgeKK...", "...............KggKKhggKK.", "................KghhhggfeK", "...............KhehhggKWeK", "...............KhegggfKeeK", "..............KgheffffeeeN", "..............KgggeeeeeKK.", "............KK.KgfffeeK...", ".....K..KKKKggKKfffeeeK...", "....KPKKhhhhhgggeeeeeK....", "...KPPThhhhhhgPgfeeKK.....", "...KPTThhhhPggggfffeK.....", "....KTghhgPPPTThPfeeK.....", ".....KggPPPPTTThhheeK.....", ".....KfgTTTTPThhhheeK.....", "......KehhhhhhhhhheK......", "......KhgehhhhhhgeeK......", "......KhfeeKeeKhfefK......", "......KgfefKKKKgfefK......", "......KgfefK..KgfefK......", "......KfeeeK..KfeeeK......", "......KeeeeK..KeeeeK......", ".......dKKK....KKdK......."), listOf("..............KFFDK.KFEK..", "..............KEYDKKKDYK..", "..............KCCCdcKeK...", "...............KKKbaeK....", ".................KeegK....", "................KKKgeKK...", "...............KggKKhggKK.", "................KghhhggfeK", "...............KhehhggKWeK", "...............KhegggfKeeK", "..............KgheffffeeeN", "..............KgggeeeeeKK.", "............KK.KgfffeeK...", ".....K..KKKKggKKfffeeeK...", "....KPKKhhhhhgggeeeeeK....", "...KPPThhhhhhgPgfeeKK.....", "...KPTThhhhPggggfffeK.....", "....KTghhgPPPTThPfeeK.....", ".....KggPPPPTTThhheeK.....", ".....KfgTTTTPThhhheeK.....", "......KfhhhhhhhhhheK......", ".......KhehhhhhhheK.......", ".......KgeKKeeKKgeK.......", ".......KgeK.KK.KgeK.......", ".......KgeK....KgeK.......", ".......KfeK....KfeK.......", ".......KeeK....KeeK.......", "........dK......dK........")),
+        listOf(listOf("............................", "...................K....K...", "..................KoK..KoK..", "..................KoE..KEK..", "..................KooKKooK..", "..................KooomooK..", "..................KoompmoK..", "K............KKKKKKmmpoomnK.", "kK.........KKkkkkkkmoooYKmK.", "KkKK.....KKkkkkkkkmooonnmmK.", ".KkkKKK.KppmmkknkmmnnnnmomKK", ".KkkkkkKppppnmmmmonmnmmmoooK", "..KkkkkioppoooooonnnmmmKoKWK", "...KjjjioonolllkkjnmmmK.K...", "....KKjinolllkkkkjjimmK.....", "......KKKnkiikjjjiiimK......", ".......KpmKpoiiiiimKpoK.....", ".......KpoKpoKKKKmmKpoK.....", ".......KonKonK..KonKonK.....", ".......KnmKnmK..KnmKnmK.....", ".......KnmKnmK..KnmKnmK.....", "........KK.KK....KK.KK......"), listOf("............................", "...................K....K...", "..................KoK..KoK..", "..................KoE..KEK..", "..................KooKKooK..", "..................KooomooK..", "..................KoompmoK..", "K............KKKKKKmmpoomnK.", "kK.........KKkkkkkkmoooYKmK.", "KkKK.....KKkkkkkkkmooonnmmK.", ".KkkKKK.KppmmkknkmmnnnnmomKK", ".KkkkkkKppppnmmmmonmnmmmoooK", "..KkkkkioppoooooonnnmmmKoKWK", "...KjjjioonolllkkjnmmmK.K...", "....KKjinolllkkkkjjimmK.....", "......KKKniikkjjjiiimK......", "........KmpoiiiiiimpoK......", ".......KpmpomKKKKmmpomK.....", ".......KomonmK..KomonmK.....", ".......KomonmK..KomonmK.....", "........KmnmK....KmnmK......", ".........KKK......KKK.......")),
+        listOf(listOf("........................", "........................", "........................", ".......K.K..K...........", "......KgKgKKgKK.K.K.....", "......KgKgTKgTgKgKgKK...", "....K.KTgggegggegKgKgK..", "...KgKggggggTggTgegKgK..", "...KgggggTgggggggeeegK..", "...KggggggeeeeeeePPTeK..", "...KggeeeeggggePPPTThhK.", "...KeeggggggffePPTTKhhK.", "...KggggggffffeTTThhTTTK", "....KfffffffffehhhhhDTKN", ".....KfffffeeeeeehhhKK..", "......KeeeeeeeeeeKKK....", "......KeeKKKKKeeK.......", ".......KK.....KK........"), listOf("........................", "........................", "........................", ".......K.K..K...........", "......KgKgKKgKK.K.K.....", "......KgKgTKgTgKgKgKK...", "....K.KTgggegggegKgKgK..", "...KgKggggggTggTgegKgK..", "...KgggggTgggggggeeegK..", "...KggggggeeeeeeePPTeK..", "...KggeeeeggggePPPTThhK.", "...KeeggggggffePPTTKhhK.", "...KggggggffffeTTThhTTTK", "....KfffffffffehhhhhDTKN", ".....KfffffeeeeeehhhKK..", "......KeeeeeeeeeeKKK....", "......KeeeKKKeeeK.......", ".......KKK...KKK........")),
+        listOf(listOf("......s............Ks.....", "K....KgK..........KgK....K", "FK....KgK........KgK....KF", "FFK...KggK......KggK...KFF", "EEEK..KgggKKKKKKgggK..KEEK", "KEEYY..KgKKhgggKggK..KYYEK", "KEEKYK..KhhhhgggegK.KEKYEK", "KEEEEEKKhhhhhgggfeKKEEEEEK", "KEEEEEEKhhhhhgggffKEEEEEEK", ".KEEEEChhWYYgggWYYeCEEEEK.", ".KEEEEChhYKYgggYKYeCEEEEK.", "..KEEEKhhYKYeeeYKYeKEEEK..", "...KKKKgggePyyTefeeKKKK...", ".....KKggePPPyTheeeKK.....", "....KgegePPPPTThheeegK....", "...KggKgePPTTThgheeKggK...", "..KfKKKfeTTgTThhheeKKKfK..", ".KfK...KeTTThhghheK...KfK.", "KfK....KehhhghhhheK....KfK", ".K......KehhhghheK......K.", ".........KKhhhhKK.........", "...........KKKK...........", "...........yy.yy..........", ".........................."), listOf("......s............Ks.....", ".....KgK..........KgK.....", "......KgK........KgK......", "......KggK......KggK......", "......KgggKKKKKKgggK......", ".......KgKKhgggKggK.......", "........KhhhhgggegK.......", ".......KhhhhhgggfeK.......", ".......KhhhhhgggffK.......", "......KhhWYYgggWYYeK......", "....KKKhhYKYgggYKYeKKK....", "...KEEKhhYKYeeeYKYeCEEK...", "..KEEECgggePyyTefeeCEEEK..", ".KEEEECggePPPyTheeeCEEEEK.", "KEEEEEKgePPPPTThheeCEEEEEK", "KDDDDgegePPTTThgheeegDDDDK", "KDDYYgefeTTgTThhheeeggYYDK", "KDDKYfKKeTTThhghheKKffKYDK", "DDKKfK.KehhhghhhheKKffKDDD", "DKKffK..KehhhghheK..KffKDD", "K.KfK....KKhhhhKK....KfKKD", "...K.......KKKK.......K..K", "...........yy.yy..........", "..........................")),
+        listOf(listOf("......s............Ks.....", "K....KgK..........KgK....K", "FK....KgK........KgK....KF", "FFK...KggK......KggK...KFF", "EEEK..KgggKKKKKKgggK..KEEK", "KEEYY..KgKKhgggKggK..KYYEK", "KEEKYK..KhhhhgggegK.KEKYEK", "KEEEEEKKhhhhhgggfeKKEEEEEK", "KEEEEEEKhhhhhgggffKEEEEEEK", ".KEEEEChhWYYgggWYYeCEEEEK.", ".KEEEEChhYKYgggYKYeCEEEEK.", "..KEEEKhhYKYeeeYKYeKEEEK..", "...KKKKgggePyyTefeeKKKK...", ".....KKggePPPyTheeeKK.....", "....KgegePPPPTThheeegK....", "...KggKgePPTTThgheeKggK...", "..KfKKKfeTTgTThhheeKKKfK..", ".KfK...KeTTThhghheK...KfK.", "KfK....KehhhghhhheK....KfK", ".K......KehhhghheK......K.", ".........KKhhhhKK.........", "...........KKKK...........", "...........yy.yy..........", ".........................."), listOf("......s............Ks.....", ".....KgK..........KgK.....", "......KgK........KgK......", "......KggK......KggK......", "......KgggKKKKKKgggK......", ".......KgKKhgggKggK.......", "........KhhhhgggegK.......", ".......KhhhhhgggfeK.......", ".......KhhhhhgggffK.......", "......KhhWYYgggWYYeK......", "....KKKhhYKYgggYKYeKKK....", "...KEEKhhYKYeeeYKYeCEEK...", "..KEEECgggePyyTefeeCEEEK..", ".KEEEECggePPPyTheeeCEEEEK.", "KEEEEEKgePPPPTThheeCEEEEEK", "KDDDDgegePPTTThgheeegDDDDK", "KDDYYgefeTTgTThhheeeggYYDK", "KDDKYfKKeTTThhghheKKffKYDK", "DDKKfK.KehhhghhhheKKffKDDD", "DKKffK..KehhhghheK..KffKDD", "K.KfK....KKhhhhKK....KfKKD", "...K.......KKKK.......K..K", "...........yy.yy..........", ".........................."))
     )
     private val friendSprites = friendRows.map { frames -> frames.map { Sprite(it, friendPal, outline = null) } }
     private val friendFlash = friendRows.map { frames -> frames.map { rows -> Sprite(rows.map { r -> r.map { ch -> if (ch == '.') '.' else 'W' }.joinToString("") }, friendPal, outline = null) } }
@@ -1052,6 +1104,7 @@ class HallScreen(c: Context) : PixelView(c) {
         }
         if (phase != Phase.WON && chapter == 1 && r > dais.left + 4 && l < dais.right - 4 && t < dais.bottom - 2 && b > dais.top) return true
         for (w in hallWalls) if (r > w.left && l < w.right && b > w.top && t < w.bottom) return true
+        if (!tunnelPassable && r > tunnelWall.left && l < tunnelWall.right && b > tunnelWall.top && t < tunnelWall.bottom) return true
         if (!crackPassable && r > crackWall.left && l < crackWall.right && b > crackWall.top && t < crackWall.bottom) return true
         // the empty corners of the grid (if any): solid
         if (rooms[((((t + b) / 2) / 176f).toInt().coerceIn(0, 2)) * 3 + (((l + r) / 2) / 240f).toInt().coerceIn(0, 2)] == null) return true
@@ -1218,7 +1271,7 @@ class HallScreen(c: Context) : PixelView(c) {
                 if (thrall != null) { wards.removeAt(wards.size - 1); beginWash(thrall); drawing.clear(); drawLen = 0f; return }
                 for (m in minions) if (m.room == roomId && !m.ally && inside(pts, m.x, m.y)) {
                     if (m.kind == 2) { if (m.daze <= 0f) spurned(m); continue }
-                    curse(m); hit++
+                    curse(m); hit++; fxs += Fx(FX_SIGIL, m.x, m.y - 6, 1.6f, rnd.nextFloat() * 6.28f)
                 }
                 minions.removeAll { it.kind == 2 && it.hp < 0 }
                 seeds.removeAll { sd -> (sd.room == roomId && inside(pts, sd.x, sd.y)).also { if (it) { fxs += Fx(FX_PETALS, sd.x, sd.y - 6, 0.5f); hit++ } } }
@@ -1709,6 +1762,10 @@ class HallScreen(c: Context) : PixelView(c) {
     /** An ally's turn: fight the nearest foe (or the big one), else keep near you. */
     private fun updateAlly(m: Minion, dt: Float, px: Float, py: Float) {
         m.atkCd -= dt
+        if (m.summonLife > 0f) {
+            m.summonLife -= dt
+            if (m.summonLife <= 0f) { m.hp = -1; bursts += Burst(m.x, m.y - 10); fxs += Fx(FX_REVIVE, m.x, m.y - 10, 0.8f); say("THE GREAT ALLY RETURNS TO WHERE IT CAME FROM", 1.6f); return }
+        }
         if (!m.merc) { m.supCd -= dt; if (m.supCd <= 0f) partySupport(m, px, py) }
         if (m.para > 0f || m.ice > 0f || m.stun > 0f || m.hp <= 0) return
         // the foe nearest you (thralls guard you; they don't roam off hunting)
@@ -1817,6 +1874,7 @@ class HallScreen(c: Context) : PixelView(c) {
     private fun enterZone(nx: Int, ny: Int) {
         rx = nx; ry = ny; bannerT = 1.8f
         val z = zone
+        if (z == 2 && chapter == 1 && phase == Phase.WON && tunnelOpen) { beginChapter2(); return }
         spL = zoneOX(z); spT = zoneOY(z); spR = spL + 240f; spB = spT + 176f
         if (!visited.add(z)) return
         if (z == 1 || z == 4 || phase != Phase.FIGHT) return
@@ -1886,6 +1944,10 @@ class HallScreen(c: Context) : PixelView(c) {
             // a drake instead: a shadow on the ground, growing, and a shriek from above
             minions += Minion(x, y, roomId, 2).also { it.drake = true; it.popT = DRAKE_DROP; it.slamCd = 2.5f; it.face = if (hx + 8 > x) 1f else -1f }
             say("A SHADOW SWEEPS OVER... LOOK UP!", 1.6f); sfx.play(HallSfx.S.SPRINT, 0.6f); sfx.rumbleSoft(); return
+        }
+        if (rnd.nextFloat() < 0.3f) {
+            minions += Minion(x, y, roomId, 2).also { it.golem = true; it.popT = BEH_POP; it.slamCd = 2.5f }
+            say("THE GROUND HEAVES... STONE STANDS UP.", 1.6f); sfx.play(HallSfx.S.SLAM, 0.5f); sfx.rumbleSoft(); return
         }
         minions += Minion(x, y, roomId, 2).also { it.popT = BEH_POP; it.slamCd = 2.5f }
         say("SOMETHING STIRS BENEATH THE FLOOR...", 1.6f)
@@ -1963,7 +2025,7 @@ class HallScreen(c: Context) : PixelView(c) {
         WW = 720f; WH = 528f; topY = 32f; gates.clear(); chunkArt.clear()
         spL = 240f; spT = 352f; spR = 480f; spB = 528f; visited.clear()
         hp = maxHp; invulnT = 0f; paraT = 0f; poisonT = 0f; invertT = 0f
-        perishT = 0f; bossGone = false; spiritGift = false; spiritTalks = 0
+        perishT = 0f; bossGone = false; spiritGift = false; spiritTalks = 0; tunnelOpen = false
         chapter = 1; bossRoom = 4; followT = 0f; seeds.clear(); lashes.clear(); mandalas.clear()
         bossHp = bossMax; stage = Stage.DAIS; bx = TX + 120f; by = TY + 64f; bossPara = 0f; bossWeak = 0f; bossConf = 0f
         bossShotT = 3f; spellT = 6f; summonT = 4f; castRune = -1; crackOpen = false; chestOpen = false
@@ -1973,7 +2035,7 @@ class HallScreen(c: Context) : PixelView(c) {
         rx = 1; ry = 1; hx = 352f; hy = 472f; visited += 7; phase = Phase.FIGHT; bannerT = 1.8f; talking = false; orbT = 18f
         camX = (hx + 8 - W / 2f).coerceIn(0f, WW - W); camY = (hy + 12 - H / 2f).coerceIn(0f, WH - H)
         msg = "FIGHT!"; msgT = 1.2f
-        if (ch == 2) { chapter = 2; bossHp = bossMax; crackOpen = true; seedT = 5f; lashT = 7f; summonT = 6f; spellT = 7f; msg = "SHE IS WAITING."; msgT = 1.6f }
+        if (ch == 2) { chapter = 2; bx = TX + 120f; by = TY + 64f; bossHp = bossMax; crackOpen = true; seedT = 5f; lashT = 7f; summonT = 6f; spellT = 7f; msg = "SHE IS WAITING."; msgT = 1.6f }
     }
 
     private fun fire(sx: Float, sy: Float, tx: Float, ty: Float, speed: Float, boss: Boolean, weak: Boolean, conf: Boolean) {
@@ -2394,7 +2456,7 @@ class HallScreen(c: Context) : PixelView(c) {
         arcs.removeAll { it.life -= dt; it.life <= 0f }
         bursts.removeAll { it.life -= dt; it.life <= 0f }
         rings.removeAll { it.life -= dt; it.life <= 0f }
-        stompCd -= dt; sprintCd -= dt; sprintT -= dt; swiftT -= dt; interactCd -= dt
+        stompCd -= dt; sprintCd -= dt; sprintT -= dt; swiftT -= dt; interactCd -= dt; summonCd -= dt
         levelFxT -= dt; flashT -= dt; hurtFlashT -= dt; impSfxT -= dt; burnSfxT -= dt
         fxs.removeAll { it.life -= dt; it.life <= 0f }
         fires.removeAll { it.life -= dt; it.life <= 0f }
@@ -2453,8 +2515,7 @@ class HallScreen(c: Context) : PixelView(c) {
                 bossGone = true
                 if (chapter == 2) {
                     drops += Drop(bx, by - 6, bossRoom, Loot.BLOSSOM_DAGGER).also { it.life = 1e9f }
-                    chestOpen = false
-                    msg = "SHE IS GONE. HER DAGGER REMAINS, AND THE CHEST HAS FILLED AGAIN."; msgT = 3f
+                    msg = "SHE IS GONE. HER DAGGER REMAINS. BEYOND THE GLASS, THE WILDWOOD. (A)"; msgT = 3.4f
                 } else { drops += Drop(bx, by - 6, bossRoom, Loot.FIVE_EYED_AXE).also { it.life = 1e9f }; msg = "HE IS GONE. HIS AXE REMAINS."; msgT = 2.4f }
                 saveSoon = true
             }
@@ -2469,11 +2530,11 @@ class HallScreen(c: Context) : PixelView(c) {
             // a boss's room is a room: the view holds still on it, and you leave by its sides
             val wl0 = wild
             if (wl0 != null && wl0.bossLevel && ry * wl0.w + rx == wl0.exit) { tx = rx * 240f; ty = ry * 176f }
-            else if (wl0 == null && zone == 4) { tx = TX; ty = TY }
+            else if (wl0 == null && zone == bossZone && !(phase == Phase.WON && bossGone)) { tx = TX; ty = TY }
             camX += (tx - camX) * minOf(1f, dt * 10f); camY += (ty - camY) * minOf(1f, dt * 10f)
         }
         updateFriend(dt)
-        if (chapter == 2 && phase == Phase.INTRO && throne && !talking && talkLines !== RANT2) { talking = true; talkLines = RANT2; line = 0; shown = 0f; sfx.play(HallSfx.S.BOSS_RUNE) }
+        if (chapter == 2 && phase == Phase.INTRO && zone == 2 && !talking && talkLines !== RANT2) { talking = true; talkLines = RANT2; line = 0; shown = 0f; sfx.play(HallSfx.S.BOSS_RUNE) }
         if (phase != Phase.FIGHT || talking) return
         invulnT -= dt; paraT -= dt; invertT -= dt
         if (poisonT > 0f) { poisonT -= dt; poisonTick -= dt; if (poisonTick <= 0f) { poisonTick = 1.5f; invulnT = 0f; hurt(8) } }
@@ -2728,7 +2789,7 @@ class HallScreen(c: Context) : PixelView(c) {
         if (mended) sfx.play(HallSfx.S.ORB, 0.4f)
         sfx.play(HallSfx.S.ZAP, 0.8f)
         // the Thunder Crown: every fourth spark, lightning out of the sky onto everything in the room
-        if (bag.wearing(Loot.THUNDER_CROWN) && ++zapCount % 4 == 0) {
+        if (bag.wearing(Loot.THUNDER_CROWN) && ++zapCount % 4 == 0 && rnd.nextFloat() < 0.1f) {
             var d = 0f
             for (m in minions) if (m.room == roomId && !m.ally) { stars += Star(m.x, m.y, m, d, true, 2); d += 0.05f }
             if (bigHere) stars += Star(gx, gy - 24, null, d, true, 10)
@@ -2881,7 +2942,7 @@ class HallScreen(c: Context) : PixelView(c) {
         return hypot(x - (l.x0 + dx * t), y - (l.y0 + dy * t))
     }
     private fun beginChapter2() {
-        chapter = 2; phase = Phase.INTRO; bossRoom = 4; bossHp = bossMax; stage = Stage.DAIS; bx = TX + 120f; by = TY + 64f
+        chapter = 2; phase = Phase.INTRO; bossRoom = 4; bossHp = bossMax; stage = Stage.DAIS; bx = TX + 120f; by = TY + 64f; tunnelOpen = true
         bossGone = false; perishT = 0f; castRune = -1; crackOpen = true; followT = 0f
         minions.clear(); shots.clear(); seeds.clear(); lashes.clear(); mandalas.clear(); stars.clear(); bossBurn = 0f; bossPara = 0f; bossWeak = 0f; bossConf = 0f
         hp = maxHp; spellT = 6f; bossShotT = 3f; summonT = 6f; seedT = 5f; lashT = 7f
@@ -2896,7 +2957,7 @@ class HallScreen(c: Context) : PixelView(c) {
                 .putInt("lvl", lvl).putInt("xp", xp).putInt("maxHp", maxHp)
                 .putString("owned", bag.owned.joinToString(",") { it.name }).putString("worn", bag.worn.joinToString(",") { it.name })
                 .putInt("herbs", bag.herbs).putInt("blooms", bag.blooms)
-                .putInt("chapter", if (chapter == 2 && !(phase == Phase.WON && bossGone)) 2 else if (chapter == 1 && phase == Phase.WON && chestOpen) 2 else 1)
+                .putInt("chapter", if (chapter == 2 && !(phase == Phase.WON && bossGone)) 2 else if (chapter == 1 && phase == Phase.WON && tunnelOpen) 2 else 1)
                 .putString("friend", savedFriend?.name ?: "").putString("friend2", savedFriend2?.name ?: "")
                 .putInt("depth", depth).putInt("beastDepth", beastDepth).putLong("wildSeed", wildSeed).putBoolean("forest", forestOpen)
                 .putInt("coins", coins)
@@ -2913,7 +2974,7 @@ class HallScreen(c: Context) : PixelView(c) {
         bag.herbs = sp.getInt("herbs", 0).coerceIn(0, 9); bag.blooms = sp.getInt("blooms", 0).coerceIn(0, 5)
         savedFriend = Friend.values().firstOrNull { it.name == sp.getString("friend", "") }
         savedFriend2 = Friend.values().firstOrNull { it.name == sp.getString("friend2", "") }
-        if (sp.getInt("chapter", 1) == 2) { chapter = 2; bossHp = bossMax; crackOpen = true; talkLines = RANT2; line = 0; shown = 0f }
+        if (sp.getInt("chapter", 1) == 2) { chapter = 2; bx = TX + 120f; by = TY + 64f; bossHp = bossMax; crackOpen = true; talkLines = RANT2; line = 0; shown = 0f }
         pool.clear(); sp.getString("pool", "")!!.split(',').mapNotNull { it.toIntOrNull() }.filter { it in 0..3 }.forEach { pool += it }
         partyOn.clear(); sp.getString("party", "")!!.split(',').mapNotNull { it.toIntOrNull() }.filter { it in pool.indices }.forEach { partyOn += it }
         forestOpen = sp.getBoolean("forest", false); beastDepth = sp.getInt("beastDepth", 0); wildSeed = sp.getLong("wildSeed", 0L)
@@ -3011,8 +3072,23 @@ class HallScreen(c: Context) : PixelView(c) {
             if (r.kind == 6) for ((gx, gy) in GOLD_GLINTS) if (((time * 2).toInt() + gx.toInt()) % 4 == 0) { box(gx - 1, gy - 9, gx + 1, gy - 7, WHITE); box(gx - 2, gy - 8, gx + 2, gy - 8.5f, WHITE) }
             sc.restore()
         }
+        drawTunnel(time)
     }
     private val hallArt = Array(9) { HallRoomArt() }
+    /** The tunnel between treasury and glasshouse: shut (a cracked stone plug), or a dark arched passage. */
+    private fun drawTunnel(time: Float) {
+        if (wild != null) return
+        val l = 470f; val t = 62f; val r = 490f; val b = 122f
+        if (!tunnelPassable) {
+            box(l + 2, t + 4, r - 2, b, 0xFF8E8878.toInt()); for (k in 0 until 6) box(l + 3, t + 8 + k * 9f, r - 3, t + 9 + k * 9f, 0xFF5A544A.toInt())
+            return
+        }
+        box(l, t, r, b, INK); box(l + 1, t + 1, r - 1, b, 0xFF1A1620.toInt())
+        for (k in 0 until 4) box(l + 3, t + 10 + k * 13f, r - 3, t + 11 + k * 13f, 0xFF2A2430.toInt())
+        // a lantern either end, flickering
+        for (lx in floatArrayOf(l - 4, r + 1)) { val f = 0.7f + 0.3f * sin(time * 9f + lx); p.color = ((0x40 * f).toInt() shl 24) or 0xFFC060; sc.drawCircle(lx + 1.5f, t + 4, 8f, p); box(lx, t + 1, lx + 3, t + 6, 0xFFFFD070.toInt()) }
+        box(l - 2, t - 3, r + 2, t, 0xFFB8B2A2.toInt()); box(l - 2, t - 3, r + 2, t - 2, 0xFFDCD6C6.toInt())
+    }
     /** The open wood: each stretch in view, baked once and kept (a few at a time); its gates and keys. */
     private fun drawOpenWood(time: Float) {
         val wl = wild ?: return
@@ -3027,7 +3103,7 @@ class HallScreen(c: Context) : PixelView(c) {
             val bg = a.background(r + depth * 1000) {
                 HallRoomArt.Spec(100 + r + depth * 1000, FOREST, booleanArrayOf(true, true, true, true), false,
                     (wl.props[r] + chunkExtra[r]).map { it[0] to RectF(it[1].toFloat(), it[2].toFloat(), it[3].toFloat(), it[4].toFloat()) },
-                    wl.pools[r].map { rf(it) }, 0, dais, wl.rivers[r].map { rf(it) }, wl.bridges[r].map { rf(it) }, open = true, mass = wl.mass[r])
+                    wl.pools[r].map { rf(it) }, 0, dais, wl.rivers[r].map { rf(it) }, wl.bridges[r].map { rf(it) }, open = true, mass = wl.mass[r], bridgeVert = wl.bridges[r].map { it.size > 4 && it[4] == 1 }, flow = wl.flow[r].toFloatArray())
             }
             sc.save(); sc.translate(cx * 240f, cy * 176f)
             sc.drawBitmap(bg, 0f, 0f, bmpP); a.overlay(sc, time)
@@ -3902,6 +3978,7 @@ class HallScreen(c: Context) : PixelView(c) {
     }
     /** The behemoth: rising through a burning crack in the floor, stomping, winding up a slam, or down on one knee. */
     private val drakeSet = MonSet(DRAKE_ROWS)
+    private val golemSet = MonSet(GOLEM_ROWS)
     private fun drawBehemoth(m: Minion, time: Float) {
         if (m.drake && (m.popT > 0f || m.airT > 0f)) {
             // in the air: its shadow on the ground, and the drake itself high above, wings up
@@ -3945,14 +4022,14 @@ class HallScreen(c: Context) : PixelView(c) {
             for (i in 0 until 24) if (i % 2 == 0) { val a0 = i * 0.2618f + time; val a1 = a0 + 0.2618f; sc.drawLine(m.x + cos(a0) * rr, m.y - 6 + sin(a0) * rr * 0.8f, m.x + cos(a1) * rr, m.y - 6 + sin(a1) * rr * 0.8f, line1) }
         }
         val f = when { m.daze > 0f -> 3; m.slamT > 0f -> 2; m.popT > 0f -> 0; else -> (m.step * 4).toInt() % 2 }
-        val s = (if (m.drake) drakeSet else behSet).pick(m, f, time)
+        val s = (if (m.drake) drakeSet else if (m.golem) golemSet else behSet).pick(m, f, time)
         allyRing(m, 13f, time)
         // rising: only what's above the floor shows
         val rise = if (m.popT > 0f) { val t = (m.popT / 1.2f).coerceIn(0f, 1f); t * t * 32f } else 0f
         sc.save()
         if (m.popT > 0f) sc.clipRect(x - 4, 0f, x + 36, feet + 1)
         if (m.face < 0f) sc.scale(-1f, 1f, m.x, 0f)
-        if (m.drake) dst.set(x - 4, y - 2, x + 36, y + 32) else dst.set(x, y + rise, x + 32, y + 32 + rise)
+        if (m.drake) dst.set(x - 4, y - 2, x + 36, y + 32) else if (m.golem) dst.set(m.x - 14, feet - 44 + rise, m.x + 14, feet + rise) else dst.set(x, y + rise, x + 32, y + 32 + rise)
         src.set(0, 0, s.w, s.h)
         sc.drawBitmap(s.bmp, src, dst, bmpP)
         sc.restore()
@@ -3999,12 +4076,17 @@ class HallScreen(c: Context) : PixelView(c) {
         if (m.stun > 0f && (time * 8).toInt() % 2 == 0) { box(m.x - 4, y - 4, m.x - 2, y - 2, WHITE); box(m.x + 2, y - 4, m.x + 4, y - 2, WHITE) }
     }
 
+    private fun fSpr(k: Friend, f: Int, flash: Boolean): Sprite = when (k) {
+        Friend.IMP -> (if (flash) impSet.flash else impSet.ally).let { it[f.coerceAtMost(it.size - 1)] }
+        Friend.GAZER -> (if (flash) gazeSet.flash else gazeSet.ally).let { it[f.coerceAtMost(it.size - 1)] }
+        else -> (if (flash) friendFlash[k.ordinal] else friendSprites[k.ordinal]).let { it[f.coerceAtMost(it.size - 1)] }
+    }
     /** Your companion: waiting to be found (with a ? over it), at your side, or knocked out on its back. */
     private fun drawFriend(time: Float) {
         val k = friend ?: return
         val ko = frState == 2
         val fl = k.flies && !ko
-        val f0 = friendSprites[k.ordinal][0]
+        val f0 = fSpr(k, 0, false)
         val w = f0.w.toFloat(); val h = f0.h.toFloat()
         var x = frX - w / 2; var y = frY - h
         if (fl) y -= 8 + sin(time * 4f) * 2f
@@ -4014,7 +4096,7 @@ class HallScreen(c: Context) : PixelView(c) {
         if (frInv > 0f && !ko && frHurt <= 0f && (time * 16).toInt() % 2 == 0 && frInv < 1.5f) { /* blinking after a hit */ }
         else {
             val f = when { ko -> 0; frMoving -> (frStep * 8).toInt() % 2; fl -> (time * 6).toInt() % 2; else -> if ((time * 1.5f).toInt() % 3 == 0) 1 else 0 }
-            val sp = if (frHurt > 0f && (time * 20).toInt() % 2 == 0) friendFlash[k.ordinal][f] else friendSprites[k.ordinal][f]
+            val sp = fSpr(k, f, frHurt > 0f && (time * 20).toInt() % 2 == 0)
             src.set(0, 0, sp.w, sp.h)
             sc.save()
             if (ko) sc.rotate(if (frFace > 0) -90f else 90f, frX, frY - h / 2)
@@ -4531,6 +4613,18 @@ class HallScreen(c: Context) : PixelView(c) {
                     p.color = (((1f - k) * 120).toInt() shl 24) or 0xFFF0A0; sc.drawRect(f.x - 5, 0f, f.x + 5, f.y + 2, p)
                     for (i in 0 until 10) { val ph = (i * 0.23f + k * 1.5f) % 1f; box(f.x - 6 + (i * 5 % 13), f.y - ph * 40, f.x - 5 + (i * 5 % 13), f.y - ph * 40 + 2, if (i % 2 == 0) WHITE else GOLD) }
                 }
+                FX_SIGIL -> {
+                    // a turning geometry: a ring, a six-pointed star, a triangle inside turning the other way, dots at the points
+                    val al = ((1f - k) * 255).toInt().coerceIn(0, 255); val rr = 9f + 4f * minOf(1f, k * 4f)
+                    val rot = f.a + time * 2f
+                    line1.color = (al shl 24) or 0xF0CC50; sc.drawOval(f.x - rr, f.y - rr * 0.7f, f.x + rr, f.y + rr * 0.7f, line1)
+                    for (tri in 0..1) for (q in 0 until 3) { val a0 = rot + tri * 3.1416f / 3f + q * 2.094f; val a1 = a0 + 2.094f
+                        sc.drawLine(f.x + cos(a0) * rr, f.y + sin(a0) * rr * 0.7f, f.x + cos(a1) * rr, f.y + sin(a1) * rr * 0.7f, line1) }
+                    line1.color = (al shl 24) or 0x8CE0F8
+                    for (q in 0 until 3) { val a0 = -rot * 1.5f + q * 2.094f; val a1 = a0 + 2.094f; val r2 = rr * 0.45f
+                        sc.drawLine(f.x + cos(a0) * r2, f.y + sin(a0) * r2 * 0.7f, f.x + cos(a1) * r2, f.y + sin(a1) * r2 * 0.7f, line1) }
+                    for (q in 0 until 6) { val a0 = rot + q * 1.047f; box(f.x + cos(a0) * rr - 0.5f, f.y + sin(a0) * rr * 0.7f - 0.5f, f.x + cos(a0) * rr + 0.5f, f.y + sin(a0) * rr * 0.7f + 0.5f, (al shl 24) or 0xFFFFFF) }
+                }
                 FX_PETALS -> {
                     // a burst of petals, drifting as they fall
                     for (j in 0 until 22) {
@@ -4609,16 +4703,20 @@ class HallScreen(c: Context) : PixelView(c) {
         box(0f, 0f, W.toFloat(), 10f, INK)
         // the traveller's health: a bar, green going to red
         font.color = WHITE; sc.drawText("HP", 2f, 9f, font); font.color = INK
-        box(19f, 2f, 71f, 8f, INK); box(20f, 3f, 70f, 7f, 0xFFF080B0.toInt())
-        val f = hp / maxHp.toFloat()
-        box(20f, 3f, 20f + 50f * f, 7f, rarityCol(Rarity.EXOTIC, time))
+        box(19f, 2f, 71f, 8f, INK); box(20f, 3f, 70f, 7f, DARK)
+        val f = (hp / maxHp.toFloat()).coerceIn(0f, 1f)
+        val e = if (furyT > 0f) furyT / 8f else (energy / ENERGY_MAX).coerceIn(0f, 1f)
+        val hc = when { f > 0.5f -> 0xFF48C058.toInt(); f > 0.25f -> 0xFFE8C048.toInt(); else -> 0xFFE04848.toInt() }
+        box(20f, 3f, 20f + 50f * f, 7f, hc)
+        // where the Fury energy lies over your health it flickers like an exotic's name; past your health it is pink
+        if (e > 0f) {
+            box(20f, 3f, 20f + 50f * minOf(e, f), 7f, rarityCol(Rarity.EXOTIC, time))
+            if (e > f) box(20f + 50f * f, 3f, 20f + 50f * e, 7f, 0xFFF080B0.toInt())
+            if (energy >= ENERGY_MAX && furyT <= 0f && (time * 4).toInt() % 2 == 0) { box(19f, 1f, 71f, 2f, WHITE); box(19f, 8f, 71f, 9f, WHITE) }
+        }
         // your level, and the experience toward the next as a gold line under the health
         font.color = GOLD; sc.drawText("L$lvl", 74f, 9f, font); font.color = INK
         box(20f, 8f, 20f + 50f * (if (lvl >= 20) 1f else xp / xpNeed(lvl).toFloat()), 9f, GOLD)
-        // energy toward Fury (or the Fury itself, burning down)
-        box(100f, 2f, 124f, 8f, INK)
-        if (furyT > 0f) box(101f, 3f, 101f + 22f * (furyT / 8f), 7f, if ((time * 10).toInt() % 2 == 0) GOLD else 0xFFE04848.toInt())
-        else box(101f, 3f, 101f + 22f * (energy / ENERGY_MAX), 7f, if (energy > ENERGY_MAX * 0.9f && (time * 6).toInt() % 2 == 0) WHITE else 0xFFF0A030.toInt())
         var sx = 128f
         fun tag(t: String, col: Int) { box(sx, 1f, sx + 9, 9f, col); font.color = WHITE; sc.drawText(t, sx + 1, 9f, font); font.color = INK; sx += 11 }
         if (paraT > 0f) tag("B", RUNE)
@@ -4825,13 +4923,13 @@ class HallScreen(c: Context) : PixelView(c) {
         if (msgT > 0f && msg.isNotEmpty() && !talking && wash == null) banner(msg, H - 58f)
         if (talking) return
         if (phase == Phase.LOST) { banner("YOU FELL...", 70f); if ((time * 2).toInt() % 2 == 0) banner("A: TRY AGAIN", 86f) }
-        if (phase == Phase.WON && chestOpen && nearChest() && (time * 2).toInt() % 2 == 0) banner(if (chapter == 1) "A: CONTINUE" else "A: INTO THE WILDWOOD", 86f)
+        if (phase == Phase.WON && chapter == 2 && bossGone && zone == 2 && wild == null && (time * 2).toInt() % 2 == 0) banner("A: INTO THE WILDWOOD", 86f)
         if (nearSpirit()) banner("A: SPEAK", 90f)
         if (inWild && phase == Phase.FIGHT && msgT <= 0f) nearNpc()?.let { banner("A: TALK", H - 58f) }
         if (phase == Phase.WON && zone == 1 && wild == null && !chestOpen && nearChest() && !nearSpirit()) banner("A: OPEN", 90f)
         else if ((phase == Phase.FIGHT || phase == Phase.WON) && msgT <= 0f) reachable().takeIf { it >= 0 }?.let { banner("A: " + actLabel(room.props[it].kind), H - 58f) }
     }
-    private fun nearChest() = wild == null && hypot(hx + 8 - 360f, hy + 12 - 74f) < 26f
+    private fun nearChest() = false
 
     // =====================================================================================
     // The handheld around the screen: D-pad and L on the left; R, A / B and the XY pad on the right
@@ -4922,6 +5020,12 @@ class HallScreen(c: Context) : PixelView(c) {
                 font.color = 0xFFC83030.toInt(); sc.drawText(if (resetAsk) "SURE? A AGAIN WIPES ALL" else "RESET PROGRESS", l + 28, y, font); font.color = INK
                 continue
             }
+            if (i in 2..4) {
+                box(l + 15, y - 8, l + 24, y + 1, 0xFF8A4AC8.toInt()); font.color = WHITE; sc.drawText("S", l + 16, y, font)
+                font.color = 0xFF8A4AC8.toInt(); sc.drawText("SUMMON " + SUMMONS[i - 2], l + 28, y, font)
+                font.color = MID; sc.drawText(if (summonCd > 0f) "${summonCd.toInt() + 1}s" else "30s", r - 36, y, font); font.color = INK
+                continue
+            }
             if (i < np) {
                 val on = i - TOP in partyOn
                 box(l + 15, y - 8, l + 24, y + 1, 0xFF22A08A.toInt()); font.color = WHITE; sc.drawText("P", l + 16, y, font)
@@ -4941,6 +5045,7 @@ class HallScreen(c: Context) : PixelView(c) {
         box(l + 6, b - 24, r - 6, b - 23, MID)
         if (bagCursor == 0) { font.color = DARK; sc.drawText("LISTEN WHILE YOU PLAY", l + 8, b - 4, font); font.color = INK }
         else if (bagCursor == 1) { font.color = DARK; sc.drawText("START OVER FROM NOTHING", l + 8, b - 4, font); font.color = INK }
+        else if (bagCursor in 2..4) { font.color = DARK; sc.drawText("A GREAT ALLY FOR 30 SECONDS", l + 8, b - 4, font); font.color = INK }
         else if (bagCursor < pool.size + TOP) {
             font.color = 0xFF22A08A.toInt(); sc.drawText("PARTY ${partyOn.size}/$extraSlots  POWER ${(powerK * 100).toInt()}%", l + 8, b - 14, font)
             font.color = DARK; sc.drawText("EACH ONE ALONG: -10% YOUR POWER", l + 8, b - 4, font); font.color = INK
@@ -5140,7 +5245,7 @@ class HallScreen(c: Context) : PixelView(c) {
                 val b = if (Loot.THUNDER_CROWN in bag.owned) rollLoot(0f) else Loot.THUNDER_CROWN
                 takeLoot(a); takeLoot(b)
                 talking = true; talkLines = CHEST_LINES + "BENEATH THE GOLD, TWO CHARMS: ${a.label} AND ${b.label}!"; line = 0; shown = 0f
-            } else if (chestOpen && nearChest()) { if (chapter == 1) beginChapter2() else { forestOpen = true; startWild(1) } }
+            } else if (chapter == 2 && bossGone && zone == 2) { forestOpen = true; startWild(1) }
             else actOrSprint()
         } else if (phase == Phase.FIGHT) { val n0 = if (inWild) nearNpc() else null; if (n0 != null) npcAct(n0) else actOrSprint() }
     }
@@ -5239,7 +5344,21 @@ class HallScreen(c: Context) : PixelView(c) {
         bagCursor = bagCursor.coerceAtMost((bagRows().size + pool.size + TOP - 1).coerceAtLeast(0))
     }
     /** The bag's top rows: the radio, and starting over. */
-    private val TOP = 2
+    private val TOP = 5
+    /** The great allies you can call for a while: the golem, the drake, the behemoth. */
+    private var summonCd = 0f
+    private val SUMMONS = listOf("GOLEM", "DRAKE", "BEHEMOTH")
+    private fun summon(which: Int) {
+        if (phase != Phase.FIGHT) { say("ONLY IN A FIGHT", 1.4f); return }
+        if (minions.any { it.summonLife > 0f }) { say("ONE AT A TIME", 1.4f); return }
+        if (summonCd > 0f) { say("NOT YET: ${summonCd.toInt() + 1}s", 1.4f); return }
+        val x = (hx + 8 + (if (facing == 2) -22f else 22f)).coerceIn(20f, WW - 20f); val y = (hy + 14).coerceIn(topY + 14f, WH - 8f)
+        val m = Minion(x, y, roomId, 2).also { it.golem = which == 0; it.drake = which == 1 }
+        minions += m; makeAlly(m, false); m.merc = true; m.summonLife = 30f
+        summonCd = 60f; bagOpen = false
+        rings += Ring(x, y); rings += Ring(x, y); fxs += Fx(FX_JOIN, x, y - 12, 0.9f); flashT = 0.2f; shakeT = maxOf(shakeT, 0.3f)
+        say("THE ${SUMMONS[which]} ANSWERS! (30 SECONDS)", 2f); sfx.play(HallSfx.S.SLAM, 0.6f); sfx.rumbleBig()
+    }
     private var resetAsk = false
     /** Everything gone: level, finds, party, coins, how far into the wood; back to the start of the hall. */
     private fun resetProgress() {
@@ -5257,6 +5376,7 @@ class HallScreen(c: Context) : PixelView(c) {
         dropAsk = null
         if (bagCursor == 0) { bagOpen = false; onRadio?.invoke(); return }
         if (bagCursor == 1) { if (resetAsk) resetProgress() else { resetAsk = true; sfx.play(HallSfx.S.HURT, 0.4f) }; return }
+        if (bagCursor in 2..4) { summon(bagCursor - 2); return }
         resetAsk = false
         if (bagCursor < pool.size + TOP) { toggleParty(bagCursor - TOP); return }
         val l = bagRows().getOrNull(bagCursor - pool.size - TOP) ?: return
@@ -5291,8 +5411,8 @@ class HallScreen(c: Context) : PixelView(c) {
                     exitRect.contains(x, y) -> { exitDown = true; performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP) }
                     bagRect.contains(x, y) -> { if (bagOpen) bagOpen = false else openBag(); performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP) }
                     selRect.contains(x, y) && bagOpen -> { saveGame(); bagOpen = false; say("GAME SAVED", 1.6f); sfx.play(HallSfx.S.COUNTER); performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP) }
-                    selRect.contains(x, y) -> { selDown = true; selPointer = e.getPointerId(i); drawing.clear(); drawLen = 0f; performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP) }
-                    startRect.contains(x, y) -> { startDown = true; if (bagOpen) bagDrop() else zap(); performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP) }
+                    selRect.contains(x, y) -> { selDown = true; if (startDown && energy >= ENERGY_MAX) unleashFury(); selPointer = e.getPointerId(i); drawing.clear(); drawLen = 0f; performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP) }
+                    startRect.contains(x, y) -> { startDown = true; if (bagOpen) bagDrop() else if (selDown && energy >= ENERGY_MAX) unleashFury() else zap(); performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP) }
                     xyRect.contains(x, y) -> { xyPointer = e.getPointerId(i); stroke.clear(); aimFly(x, y) }
                     near(aKey, x, y) -> { aDown = true; pressA(); performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP) }
                     near(bKey, x, y) -> { bDown = true; pressB(); performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP) }
@@ -5347,6 +5467,13 @@ private val BEH_ROWS = listOf(
     listOf("..KDK......................K....", "...KdK....................KdK...", "...KddK.................KKddK...", "...KdddKKK...........KKKdddK....", "....KdddddKKKKKKKKKKKddddddK....", ".....KddddddRHHHhhhRddddddK.....", "......KKdddRHHHHhhhRddddKK......", "........KKKKHHHHhhhhRKKK........", "........KHRHKKHhhhhKKRRK........", "........KHHHHhhhhhrrrrRK........", ".......KhhhYYWhhhhWYYRRRK.......", "......KRhhhYKYhhrrYKYRRRRKKKK...", ".....KHHRhhhDhhrrrrRDRRRrRHhhK..", "...KKKHHRrrrDrrrrrRRDRRRRHHHhrK.", "..KHhhRHHRrMMWWWMWWWMMRrRHHhhrK.", ".KHHHhrRHHRrMMMMMMMMMRrRHHHhhrRK", ".KHHhhrRHHhRRMWMWMWMRrrRHHhhhrRK", "KHHHhhrRRhhRffffffffRrrRhhhhrrRR", "KHHhhhrRRhRGGGGGhhhggRrRhhhhrrRR", "KhhhhrrRRRGGGGGhhhhgggRRhhhrrRRR", "KhhhhrrRRGGGGGhhhhgggffRrrRRRRRR", "KhhhrrRRRhhhhhhhhggggffRRRHHhhKK", "KrRRRRRRRhhhhhhhggggfffRRHHHhhrK", ".KHHhhRRRhhhhhgggggffffRhHhhhrrR", "KHHHhhrRrRgggggggfffffRRhhhhrrRR", "hHhhhrrRRRRggggffffffRRRRrrrRRRK", "hhhhrrRRRRRRffffffffRRRRRRRRRRK.", "KrrrRRRRhrRRRRRRRRRRRRrRRKDKDKDK", ".KRRRRKRRRRRRKKKKKKRRRRRRKK.K.K.", ".KDKDKDDDddccK....KDDDddccK.....", "..K.KKdddccbbK....KdddccbbK.....", "......KbbbbbK......KbbbbbK......"),
     listOf(".KDDDKDK.................KDRDKDK", "KHHRdRrK................KHRdRhrK", "KHHRddRK................KRddRrrK", "hhhRdddRKK...........KKKdddRrrRR", "KhhrRdddddKKKKKKKKKKKddddddRrRRK", "KrrrRRddddddRHHHhhhRddddddRrRRRK", ".KRRRRRRdddRHHHHhhhRddddRRRRRRK.", ".KHRRhrrKKKKHHHHhhhhRKKKHHhRRrK.", ".KhhhhrRKHRHKKHhhhhKKRRKhhhhrRK.", ".KhhhrrRKHHHHhhhhhrrrrRKhhhrrRK.", ".KhhrrRRhhhYYWhhhhWYYRRRRhrrRRK.", ".KrrrrRRhhhYKYhhrrYKYRRRRrrrRRK.", ".KrrrRRRRhhhDhhrrrrRDRRRrrrRRRK.", "..KRRRRRRrrrDrrrrrRRDRRRRRRRRK..", "...KRRRHHRrMMWWWMWWWMMRrrRRRK...", "....KRHHHHRrMMMMMMMMMRrrrRRK....", "....KhHHHHhRRMWMWMWMRrrrRRRK...K", "....KhhhhhhRffffffffRrrrRRRK..Kh", "....KhhhhhRGGGGGhhhggRrRRRRK.Khh", "....KhhhhRGGGGGhhhhgggRRRRRKKKhh", "....KhhhRGGGGGhhhhgggffRRRRRhhKh", "....KrhhRhhhhhhhhggggffRRRRRhhKK", ".....KrrRhhhhhhhggggfffRRRRhhhhK", ".....KrrRhhhhhgggggffffRRRKKKhhK", "......KrrRgggggggfffffRRRK...KK.", ".....KHRRRRggggffffffRRRRRK.....", ".....KhhRRRRffffffffRRRRRRK.....", ".....KhhhrRRRRRRRRRRRRrrRRK.....", "......KRRRRRRKKKKKKRRRRRRK......", ".....KDDDddccK....KDDDddccK.....", ".....KdddccbbK....KdddccbbK.....", "......KbbbbbK......KbbbbbK......"),
     listOf("................................", "................................", "................................", "................................", "...K............................", "..KDK......................K....", "...KdK....................KdK...", "...KddK.................KKddK...", "...KdddKKK...........KKKdddK....", "....KdddddKKKKKKKKKKKddddddK....", ".....KddddddRHHHhhhRddddddK.....", "......KKdddRHHHHhhhRddddKK......", "........KKdRHHHHhhhhRdKK........", ".......KRHRHHHHhhhhrrRRRK.......", "......KHRHHHHhhhhhrrrrRRrK......", ".....KHRhhhKhKhhhhrKrKRRRRK.....", ".....KHRhhhhKhhhrrrrKRRRRRK.....", "....KHHHRhhhDhhrrrrRDRRRrRRK....", "....KHHHRrrrDrrrrrRRDRRRrRRK....", "....KhHHHRrMMWWWMWWWMMRrRRRK...K", "....KhhhhhRrMMMMMMMMMRrrRRRK..Kh", "....KRhhhhRfRMWMWMWMfRrRRRRK.Khh", "...KHhRhhRGGffffffffggRRRRHhKKhh", "..KHHhhRRGGGGGhhhhgggffRRHHhhRKh", ".KHHHhhrRhhhhhhhhggggffRHHHhhrKK", ".KHHhhrrRhhhhhhhggggfffRHHhhrrRK", ".KRRRRRRRhhhhhgggggffffRhRRRRRRK", ".KHHhhrRRRgggggggfffffRRRHHhhrK.", "KhHhhrrRRRRggggffffffRRRhHhhrrRK", "KhhhrrRRbbRRffffffffRRbbhhhrrRRK", ".KrrRRRbdcbbRRRRRRRRbbccbrrRRRK.", "..KKRRKbbbbbRKKKKKKRbbbbbKRRKK.."),
+)
+
+private val GOLEM_ROWS = listOf(
+    listOf(".......KCCCCCCK.......", "......KCCCCCCCK.......", "......KCkkkkkkFK......", "......KCkkkkkkCK......", ".....KkFkTTTTTkKh.....", "......KkTTTTTTTK......", "......KkkUukuUkK......", ".KKKKKklltllltlK.KKKK.", "KkCFCkTkFkkkkkkTKCCFkK", "KTkkkkVTTTTTTTTTkkkkTK", "KTTTTkVTTTTuTTkTkTTTTK", ".KKKKTVkTTTuTTTkTKKKK.", "..KKKkVCklutulkllKKK..", ".KTTTkVCkllullllkTTTK.", ".KTTTkVCkllullllkTTTK.", "..KKKKBVklltllllKKKK..", ".KKKKKkVkluuulkkKKKKK.", "KTTTTKlVlllulkCCKTTTTK", "KTTTTKlVllltlkCCKTTTTK", ".KKKKKlVkllulkCCKKKKK.", "KTTTTKlllkuuulkATTTTTK", "KTTTTTklllltlllkTTTTTK", "KTTTTTKkkkkkkkkKTTTTTK", "KllllhKkkkkkkkkKlllllK", "KlllllKTkkkkkkTKlllllK", ".KlllKKllllllllKKlllK.", "..KKK.KlllKKlllK.KKK..", "......KlllKKlllK......", "......KlllKKlllK......", ".....KKlllKKlllKK.....", "....KTTTTTTTTTTTTK....", "....KTTTTTTTTTTTTK....", "....KTTTTTTTTTTTTK....", ".....KKKKKKKKKKKK....."),
+    listOf(".......KCCCCCCK.......", "......KCCCCCCCK.......", "......KCkkkkkkFK......", "......KCkkkkkkCK......", ".....KkFkTTTTTkKh.....", "......KkTTTTTTTK......", "......KkkUukuUkK......", ".KKKKKklltllltlK.KKKK.", "KkCFCkTkFkkkkkkTKCCFkK", "KTkkkkVTTTTTTTTTkkkkTK", "KTTTTkVTTTTuTTkTkTTTTK", ".KKKKTVkTTTuTTTkTKKKK.", "..KKKkVCklutulkllKKK..", ".KTTTkVCkllullllkTTTK.", ".KTTTkVCkllullllkTTTK.", "..KKKKBVklltllllKKKK..", ".KKKKKkVkluuulkkKKKKK.", "KTTTTKlVlllulkCCKTTTTK", "KTTTTKlVllltlkCCKTTTTK", "KKKKKKlVkllulkCCKKKKK.", "TTTTTKlllkuuulkBKTTTTK", "TTTTTKllllltlllkKTTTTT", "TTTTTKKkkkkkkkkKKTTTTT", "lllllhKkkkkkkkkKKlllll", "lllllKKTkkkkkkTKKllllK", "KlllK.KllllllllKKlllK.", ".KKK..KlllKKlllK.KKK..", "......KlllKKlllK......", "......KlllKKlllK......", ".....KKlllKKlllKK.....", "....KTTTTTTTTTTTTK....", "....KTTTTTTTTTTTTK....", "....KTTTTTTllllllK....", ".....KKKKKKKKKKKK....."),
+    listOf(".......KCCCCCCK.......", "......KCCCCCCCK.......", "......KCkkkkkkFK......", "......KCkkkkkkCK......", ".....KkFkTTTTTkKh.....", "......KkTTTTTTTK......", "......KkkUukuUkK......", ".KKKKKklltllltlK.KKKK.", "KkCFCkTkFkkkkkkTKCCFkK", "KTkkkkVTTTTTTTTTkkkkTK", "KTTTTkVTTTTuTTkTkTTTTK", ".KKKKTVkTTTuTTTkTKKKK.", "..KKKkVCklutulkllKKK..", ".KTTTkVCkllullllkTTTK.", ".KTTTkVCkllullllkTTTK.", "..KKKKBVklltllllKKKK..", ".KKKKKkVkluuulkkKKKKK.", "KTTTTKlVlllulkCCKTTTTK", "KTTTTKlVllltlkCCKTTTTK", ".KKKKKlVkllulkCCKKKKK.", "KTTTTKlllkuuulkATTTTTK", "KTTTTTklllltlllkTTTTTK", "KTTTTTKkkkkkkkkKTTTTTK", "KllllhKkkkkkkkkKlllllK", "KlllllKTkkkkkkTKlllllK", ".KlllKKllllllllKKlllK.", "..KKK.KlllKKlllK.KKK..", "......KlllKKlllK......", "......KlllKKlllK......", ".....KKlllKKlllKK.....", "....KTTTTTTTTTTTTK....", "....KTTTTTTTTTTTTK....", "....KTTTTTTTTTTTTK....", ".....KKKKKKKKKKKK....."),
+    listOf(".......KCCCCCCK.......", "......KCCCCCCCK.......", "......KCkkkkkkFK......", "......KCkkkkkkCK......", ".....KkFkTTTTTkKh.....", "......KkTTTTTTTK......", "......KkkUukuUkK......", ".KKKKKklltllltlK.KKKK.", "KkCFCkTkFkkkkkkTKCCFkK", "KTkkkkVTTTTTTTTTkkkkTK", "KTTTTkVTTTTuTTkTkTTTTK", ".KKKKTVkTTTuTTTkTKKKK.", "..KKKkVCklutulkllKKK..", ".KTTTkVCkllullllkTTTK.", ".KTTTkVCkllullllkTTTK.", "..KKKKBVklltllllKKKK..", ".KKKKKkVkluuulkkKKKKK.", "KTTTTKlVlllulkCCKTTTTK", "KTTTTKlVllltlkCCKTTTTK", "KKKKKKlVkllulkCCKKKKK.", "TTTTTKlllkuuulkBKTTTTK", "TTTTTKllllltlllkKTTTTT", "TTTTTKKkkkkkkkkKKTTTTT", "lllllhKkkkkkkkkKKlllll", "lllllKKTkkkkkkTKKllllK", "KlllK.KllllllllKKlllK.", ".KKK..KlllKKlllK.KKK..", "......KlllKKlllK......", "......KlllKKlllK......", ".....KKlllKKlllKK.....", "....KTTTTTTTTTTTTK....", "....KTTTTTTTTTTTTK....", "....KTTTTTTllllllK....", ".....KKKKKKKKKKKK.....")
 )
 
 private val DRAKE_ROWS = listOf(

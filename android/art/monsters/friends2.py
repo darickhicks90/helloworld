@@ -156,9 +156,38 @@ def sprout(f):
     put(g,16,1,'Y'); put(g,22,1,'Y')
     put(g,7+st,27,'d'); put(g,17-st,27,'d')               # it leaves a bit of green where it steps
     return [''.join(r) for r in g]
-out={'BRAMBLE':[bramble(0),bramble(1)],'PIP':[pip(0),pip(1)],'TOVE':[tove(0),tove(1)],'GRUMBLE':[grumble(0),grumble(1)],'EMBER':[ember(0),ember(1)],'SPROUT':[sprout(0),sprout(1)]}
+def wolf(f):
+    # a lean grey wolf, tail streaming, ears up
+    W,H=28,22; s=S(W,H); st=[0,1][f]
+    s.tri([(3,10),(8,12),(9,15),(4,14),(0,8)],'ijkl',0)                   # the tail
+    for (lx,o) in ((9,st),(12,-st),(18,st),(21,-st)): s.blob(lx+o*0.7,18.5,1.4,3,'mnop',1 if lx in (9,18) else 3)
+    s.blob(15,13,7.5,4.2,'mnop',2)
+    s.blob(15,15,5,2,'ijkl',2)                                            # a pale belly
+    s.blob(22.5,9,4,3.6,'mnop',4)
+    s.tri([(24,10),(28,11.5),(24,13)],'mnop',5)                           # the long snout
+    s.tri([(19.5,7),(19.5,2),(22,6)],'mnop',5); s.tri([(22.5,6),(24.5,1.5),(25,7)],'mnop',5)
+    s.tri([(10,10),(14,8),(20,8),(17,11)],'ijkl',6)                       # a lighter ruff
+    g=grid(s)
+    put(g,23,8,'Y'); put(g,24,8,'K'); put(g,27,11,'K'); put(g,26,12,'W'); put(g,25,12,'K')
+    put(g,20,3,'E'); put(g,24,3,'E')
+    for (x,y) in [(12,11),(15,10),(17,12),(10,13)]: put(g,x,y,'n')
+    return [''.join(r) for r in g]
+def hedgehog(f):
+    # a round hedgehog, a back of brown quills, a pointed snout
+    W,H=24,18; s=S(W,H); st=[0,1][f]
+    s.blob(8+st*0.5,16,1.6,1.4,'efgh',0); s.blob(15-st*0.5,16,1.6,1.4,'efgh',0)
+    s.blob(12,11,8,5.5,'efgh',1)
+    for i in range(9):
+        x=5+i*1.8; s.tri([(x-1.4,9+abs(i-4)*0.5),(x+(-1 if i<4 else 1)*1.2,2+abs(i-4)*0.9),(x+1.4,9+abs(i-4)*0.5)],'efgh',2)
+    s.blob(18.5,12,3.6,3,'hhTP',3)                                        # the pale face
+    s.tri([(20,11.5),(24,13),(20,14)],'hhTP',3)
+    g=grid(s)
+    put(g,19,11,'K'); put(g,23,13,'N'); put(g,20,13,'D')
+    for (x,y) in [(7,6),(10,5),(13,5),(9,8),(12,7),(15,7)]: put(g,x,y,'T')
+    return [''.join(r) for r in g]
+out={'BRAMBLE':[bramble(0),bramble(1)],'PIP':[pip(0),pip(1)],'TOVE':[tove(0),tove(1)],'GRUMBLE':[grumble(0),grumble(1)],'EMBER':[ember(0),ember(1)],'SPROUT':[sprout(0),sprout(1)],'WOLF':[wolf(0),wolf(1)],'HEDGEHOG':[hedgehog(0),hedgehog(1)]}
 json.dump({'rows':out,'pal':FP},open('friends2.json','w'))
-S8=8; im=Image.new('RGB',(12*31*S8,34*S8),(120,170,90)); i=0
+S8=8; im=Image.new('RGB',(16*31*S8,34*S8),(120,170,90)); i=0
 for n in out:
     for fr in out[n]:
         for y,row in enumerate(fr):

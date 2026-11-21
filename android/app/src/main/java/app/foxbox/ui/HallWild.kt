@@ -17,8 +17,9 @@ import kotlin.math.sqrt
  * old root door that takes a key too.
  */
 internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
-    val w = 6; val h = 5; val n = w * h
     private val rnd = kotlin.random.Random(seed)
+    /** Each level its own size: a quarter to all of the old 6 x 5. */
+    val w = 3 + rnd.nextInt(4); val h = 3 + rnd.nextInt(3); val n = w * h
     /** Each screen's open sides, as "WENS" letters (0 W, 1 E, 2 N, 3 S). */
     val doors = Array(n) { "" }
     /** Locked sides: room * 4 + side (both sides of each gate are listed). */
@@ -42,7 +43,7 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
     private val ways = Array(n) { ArrayList<IntArray>() }
     /** Each screen's ground, cell by cell (M_*): the forest and rock and water you can't cross. */
     val mass = Array(n) { ByteArray(GX * GY) }
-    private val core = Array(n) { BooleanArray(GX * GY) }
+    internal val core = Array(n) { BooleanArray(GX * GY) }
     private val shaped = BooleanArray(n)
     fun massAt(r: Int, x: Float, y: Float): Int { val gx = (x / CW).toInt(); val gy = (y / CH).toInt(); return if (gx < 0 || gy < 0 || gx >= GX || gy >= GY) 0 else mass[r][gy * GX + gx].toInt() }
     /** The key that opens the stone door (the last key); the others open wooden gates. */
@@ -85,6 +86,8 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
     private val fortKeep = HashSet<Int>()
     /** The great glade: a block of screens opened into one huge room, crawling with foes. */
     val glade = HashSet<Int>()
+    /** River samples per screen (x, y, heading), for drawing the current. */
+    val flow = Array(n) { ArrayList<Float>() }
     private fun nbAll(r: Int, d: Int): Int { val x = r % w + DX[d]; val y = r / w + DY[d]; return if (x < 0 || y < 0 || x >= w || y >= h) -1 else y * w + x }
     private fun nb(r: Int, d: Int): Int { val o = nbAll(r, d); return if (o >= 0 && dead[o]) -1 else o }
     private fun open(r: Int, d: Int) { val o = nb(r, d); if (o < 0) return; sides[r][d] = true; sides[o][OPP[d]] = true }
@@ -93,7 +96,7 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
         // 0. a few whole screens of solid wood (the rest must all still join up)
         start = (h - 1) * w + rnd.nextInt(w)
         run {
-            val want = 6 + rnd.nextInt(4)
+            val want = n / 5 + rnd.nextInt(n / 8 + 1)
             // a fort-sized block near the start is kept alive
             val sx = start % w; val ox = (sx + rnd.nextInt(-1, 1)).coerceIn(0, w - 2)
             val keepAlive = fortKeep; if (!bossLevel) for (x in ox until ox + 2) keepAlive += (h - 2) * w + x
@@ -161,7 +164,7 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
             keys += intArrayOf(best, 0, 0)
         }
         // 6a. the great glade: up to 2 x 2 screens in one region, thrown open into a single huge room
-        if (!bossLevel) run {
+        if (!bossLevel && rnd.nextFloat() < 0.5f) run {
             var best: List<Int>? = null; var bestScore = -1e9f
             for ((bw, bh) in listOf(2 to 2, 2 to 1, 1 to 2)) {
                 for (oy in 0..h - bh) for (ox in 0..w - bw) {
@@ -183,7 +186,7 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
         // 6. scenery for each screen, a fort near the start, rivers from pond to pond
         for (r in 0 until n) furnish(r)
         // the fort: the biggest block of screens (3 x 2 at best) all in one region, never the start or exit
-        if (!bossLevel) run {
+        if (!bossLevel && rnd.nextFloat() < 0.5f) run {
             var best: List<Int>? = null; var bestScore = -1e9f
             for ((bw, bh) in listOf(2 to 1, 1 to 2, 1 to 1)) {
                 for (oy in 0..h - bh) for (ox in 0..w - bw) {
@@ -203,8 +206,8 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
                 furnishFort(b)
             }
         }
-        repeat(if (depth >= 3) 2 else 1) { river() }
-        for (r in 0 until n) if (shaped[r] && r !in fortRooms && !dead[r]) fillMass(r)
+        for (r in 0 until n) if (shaped[r] && !dead[r]) fillMass(r)
+        repeat(if (depth >= 3 && n >= 16) 2 else 1) { windingRiver() }
         for (k in keys) { val spot = clearSpot(k[0]); k[1] = spot.first; k[2] = spot.second }
         for (r in 0 until n) names[r] = A[rnd.nextInt(A.size)] + " " + B[rnd.nextInt(B.size)]
         for ((r, nm) in special) names[r] = nm
@@ -256,7 +259,8 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
         fun passage(ax: Float, ay: Float, bx: Float, by: Float, bendK: Float) {
             val mx = (ax + bx) / 2; val my = (ay + by) / 2; val dx = bx - ax; val dy = by - ay; val L = kotlin.math.hypot(dx, dy).coerceAtLeast(1f)
             val cx = mx - dy / L * bendK; val cy = my + dx / L * bendK
-            val wA = (if (tight) 8f else 11f) + rnd.nextFloat() * (if (tight) 3f else 6f); val wB = (if (tight) 8f else 11f) + rnd.nextFloat() * (if (tight) 4f else 9f); val ph = rnd.nextFloat() * 6f
+            val base = if (size == 2) 30f else if (tight) 8f else 11f
+            val wA = base + rnd.nextFloat() * (if (tight) 3f else 6f); val wB = base + rnd.nextFloat() * (if (tight) 4f else 9f); val ph = rnd.nextFloat() * 6f
             val steps = (L / 2f).toInt().coerceAtLeast(8)
             for (i in 0..steps) {
                 val t = i / steps.toFloat(); val u = 1 - t
@@ -304,7 +308,10 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
         keep?.let { k -> val c = cl.minByOrNull { kotlin.math.hypot(it[0] - (k[0] + k[2]) / 2f, it[1] - (k[1] + k[3]) / 2f) }!!; passage((k[0] + k[2]) / 2f, (k[1] + k[3]) / 2f, c[0], c[1], 20f) }
         keep?.let { k -> for (gy in 0 until GY) for (gx in 0 until GX) { val cx = gx * CW + CW / 2f; val cy = gy * CH + CH / 2f; if (cx > k[0] && cx < k[2] && cy > k[1] && cy < k[3]) { open[gy * GX + gx] = true; cr[gy * GX + gx] = true } }; w0 += k }
         if (size == 2) {
-            java.util.Arrays.fill(open, true)
+            // a great rounded floor with a wavering rim (the joins to the next screens are wide passages)
+            for (gy in 0 until GY) for (gx in 0 until GX) { val dx = (gx * CW + CW / 2f - 120f) / 108f; val dy = (gy * CH + CH / 2f - 92f) / 78f
+                val a = kotlin.math.atan2(dy, dx); val rim = 1f + 0.09f * kotlin.math.sin(a * 4f + r) + 0.06f * kotlin.math.sin(a * 7f + r * 2)
+                if (dx * dx + dy * dy < rim * rim) { open[gy * GX + gx] = true; if (dx * dx + dy * dy < 0.5f) cr[gy * GX + gx] = true } }
             // bits of cover: small stands of trees and rocks round the edge of the fight, none in the middle or the ways in
             repeat(6 + rnd.nextInt(3)) {
                 for (k in 0 until 12) {
@@ -367,6 +374,13 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
      */
     private fun fillMass(r: Int) {
         val ms = mass[r]
+        // ponds become part of the ground's water (one body with the rivers)
+        for (pl in pools[r]) {
+            val cx = (pl[0] + pl[2]) / 2f; val cy = (pl[1] + pl[3]) / 2f; val rx = (pl[2] - pl[0]) / 2f; val ry = (pl[3] - pl[1]) / 2f
+            if (rx <= 0f || ry <= 0f) continue
+            for (gy in 0 until GY) for (gx in 0 until GX) { val dx = (gx * CW + CW / 2f - cx) / rx; val dy = (gy * CH + CH / 2f - cy) / ry; if (dx * dx + dy * dy < 1f) ms[gy * GX + gx] = M_WATER.toByte() }
+        }
+        pools[r].clear()
         val ph = rnd.nextFloat() * 6.28f; val ph2 = rnd.nextFloat() * 6.28f
         val rockK = if (rnd.nextFloat() < 0.4f) 1.45f else 9f; val waterK = if (rnd.nextFloat() < 0.45f) 1.5f else 9f
         for (gy in 0 until GY) for (gx in 0 until GX) {
@@ -424,7 +438,7 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
             val door = when { !sd[2] -> intArrayOf(96, 38, 144, 50); !sd[3] -> intArrayOf(96, 146, 144, 158); !sd[0] -> intArrayOf(14, 70, 62, 82); else -> intArrayOf(178, 70, 226, 82) }
             shape(r, if (bossLevel) 2 else 1, intArrayOf(door[0] - 8, door[1] - 6, door[2] + 8, door[3] + 18))
             props[r] += intArrayOf(EXIT, door[0], door[1], door[2], door[3])
-            if (!bossLevel) { repeat(3) { place(r, TREE, 12, 6) }; repeat(2) { place(r, SHRUB, 16, 8) } }
+            if (!bossLevel) { repeat(3) { place(r, TREE, 12, 6) }; place(r, SHRUB, 16, 8) }
             else { repeat(4) { place(r, MUSHROOM, 8, 5, area = intArrayOf(10, 130, 230, 166)) } }
             return
         }
@@ -434,8 +448,8 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
         when (type) {
             10 -> { graveyard(r); special[r] = "THE " + listOf("BARROWS", "GRAVEYARD", "BONE GARDEN", "OLD CHURCHYARD")[rnd.nextInt(4)]; return }
             11 -> { ruins(r); special[r] = listOf("FALLEN SHRINE", "BROKEN HALL", "OLD RUINS", "TUMBLED TOWER")[rnd.nextInt(4)]; return }
-            0 -> { repeat(5 + rnd.nextInt(4)) { place(r, TREE, 12, 6) }; repeat(2) { place(r, SHRUB, 16, 8) } }       // a grove
-            1 -> { repeat(2) { place(r, TREE, 12, 6) }; repeat(3) { place(r, SHRUB, 16, 8) }; repeat(2) { place(r, MUSHROOM, 8, 5) } }  // a glade
+            0 -> { repeat(5 + rnd.nextInt(4)) { place(r, TREE, 12, 6) }; if (rnd.nextBoolean()) place(r, SHRUB, 16, 8) }       // a grove
+            1 -> { repeat(2) { place(r, TREE, 12, 6) }; place(r, SHRUB, 16, 8); repeat(2) { place(r, MUSHROOM, 8, 5) } }  // a glade
             2, 7 -> {   // a lake (or two), as big as the ways through allow
                 repeat(2) { lake(r) }
                 repeat(2) { place(r, TREE, 12, 6) }; place(r, SHRUB, 16, 8)
@@ -443,7 +457,7 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
             8, 9 -> { repeat(2) { place(r, MUSHROOM, 8, 5, pad = 3) } }      // a narrow way: just paths through the trees
             3 -> { repeat(6) { place(r, MUSHROOM, 8, 5, pad = 3) }; repeat(3) { place(r, TREE, 12, 6) }; place(r, STUMP, 12, 6) }   // fungus
             4 -> { repeat(3) { place(r, ROCK, 14, 8) }; repeat(2) { place(r, STUMP, 12, 6) }; place(r, LOG, 28, 7); repeat(2) { place(r, TREE, 12, 6) } }  // old fall
-            5 -> { repeat(6) { place(r, SHRUB, 16, 8, pad = 3) }; repeat(3) { place(r, TREE, 12, 6) } }   // thicket
+            5 -> { repeat(2) { place(r, SHRUB, 16, 8, pad = 6) }; repeat(4) { place(r, TREE, 12, 6) } }   // brush
             else -> { repeat(8 + rnd.nextInt(4)) { place(r, TREE, 12, 6, pad = 5) } }    // deep wood
         }
     }
@@ -483,57 +497,207 @@ internal class WildLevel(val depth: Int, seed: Long, val bossLevel: Boolean) {
      * barrels, hay, benches, lanterns, flower beds, washing on a line; townsfolk going about.
      */
     private fun furnishFort(block: List<Int>) {
-        val xs = block.map { it % w }; val ys = block.map { it / w }
-        val minX = xs.min(); val maxX = xs.max(); val minY = ys.min(); val maxY = ys.max()
         val kinds = listOf(0, 1, 3, 0, 1, 3, 2).shuffled(rnd)
         val heart = fort
         for (r in block) {
-            props[r].clear(); pools[r].clear(); shaped[r] = false; java.util.Arrays.fill(mass[r], 0)
-            // the fort keeps its ways straight: in from each side to the middle
-            ways[r].clear(); ways[r] += intArrayOf(92, 76, 148, 132)
-            if (sides[r][0]) ways[r] += intArrayOf(0, 78, 120, 130); if (sides[r][1]) ways[r] += intArrayOf(120, 78, 240, 130)
-            if (sides[r][2]) ways[r] += intArrayOf(96, 28, 144, 104); if (sides[r][3]) ways[r] += intArrayOf(96, 104, 144, 176)
-            val sd = sides[r]; val cx = r % w; val cy = r / w
-            fun wall(l: Int, t: Int, rr: Int, b: Int) { props[r] += intArrayOf(PALISADE, l, t, rr, b) }
-            fun guard(x: Int, y: Int) { npcs += intArrayOf(r, x, y, NPC_GUARD, listOf(2, 1, 2, 3)[rnd.nextInt(4)]) }
-            // the outer walls only: north, south, west, east, each with a gap (and a guard) where a way leads out
-            if (cy == minY) { if (sd[2]) { wall(0, 34, 98, 42); wall(142, 34, 240, 42); guard(92, 56); guard(148, 56) } else wall(0, 34, 240, 42) }
-            if (cy == maxY) { if (sd[3]) { wall(0, 162, 98, 170); wall(142, 162, 240, 170); guard(92, 156); guard(148, 156) } else wall(0, 162, 240, 170) }
-            if (cx == minX) { if (sd[0]) { wall(0, 42, 8, 78); wall(0, 130, 8, 162); guard(22, 76); guard(22, 136) } else wall(0, 42, 8, 162) }
-            if (cx == maxX) { if (sd[1]) { wall(232, 42, 240, 78); wall(232, 130, 240, 162); guard(218, 76); guard(218, 136) } else wall(232, 42, 240, 162) }
+            props[r].clear(); pools[r].clear()
+            shape(r, 1, null)
+            fun spotFor(x0: Int, y0: Int, rad: Int): IntArray? {
+                for (k in 0 until 40) { val x = x0 + rnd.nextInt(-rad, rad + 1); val y = y0 + rnd.nextInt(-rad, rad + 1)
+                    if (x in 16..224 && y in 30..166 && onOpen(r, x - 7, y - 8, x + 7, y + 2) && props[r].none { p -> x + 8 > p[1] && x - 8 < p[3] && y + 4 > p[2] && y - 8 < p[4] }) return intArrayOf(x, y) }
+                return null
+            }
+            fun npc(role: Int, kind: Int, x0: Int = 120, y0: Int = 100, rad: Int = 90) { spotFor(x0, y0, rad)?.let { npcs += intArrayOf(r, it[0], it[1], role, kind) } }
+            // a guard on each way in from outside the village
+            for (d in 0 until 4) {
+                if (!sides[r][d]) continue
+                val o = nbAll(r, d); if (o in block) continue
+                val (gx, gy) = when (d) { 0 -> 30 to 104; 1 -> 210 to 104; 2 -> 120 to 30; else -> 120 to 154 }
+                npc(NPC_GUARD, listOf(2, 1, 2, 3)[rnd.nextInt(4)], gx, gy, 18)
+            }
             if (r == heart) {
-                // the market: two tents, the stall, the fire, and the folk who trade
-                props[r] += intArrayOf(TENT, 24, 54, 58, 70); props[r] += intArrayOf(TENT, 182, 54, 216, 70)
-                props[r] += intArrayOf(CAMPFIRE, 62, 140, 74, 146)
-                props[r] += intArrayOf(STALL, 160, 140, 198, 148)
-                props[r] += intArrayOf(LANTERN, 84, 62, 88, 66); props[r] += intArrayOf(LANTERN, 152, 62, 156, 66)
-                place(r, BUILDING, 52, 14, pad = 8, area = intArrayOf(60, 38, 180, 74))
-                npcs += intArrayOf(r, 179, 138, NPC_TOAD, 0)
-                npcs += intArrayOf(r, 40, 150, NPC_MOTH, 0)
-                npcs += intArrayOf(r, 66, 98, NPC_MERC, kinds[0]); npcs += intArrayOf(r, 176, 98, NPC_MERC, kinds[1])
+                // the market: two tents, the stall, the fire, a hall, and the folk who trade
+                place(r, BUILDING, 52, 14, pad = 8); repeat(2) { place(r, TENT, 34, 16, pad = 6) }
+                place(r, STALL, 38, 8, pad = 6); place(r, CAMPFIRE, 12, 6, pad = 8); repeat(2) { place(r, LANTERN, 4, 4) }
+                npc(NPC_TOAD, 0); npc(NPC_MOTH, 0); npc(NPC_MERC, kinds[0]); npc(NPC_MERC, kinds[1])
+                repeat(2) { npc(NPC_FOLK, rnd.nextInt(6)) }
                 continue
             }
-            // every other screen: a corner of the village, a house or two first
             repeat(1 + rnd.nextInt(2)) { place(r, BUILDING, 44 + rnd.nextInt(3) * 8, 14, pad = 10) }
-            val pick = (r * 7 + rnd.nextInt(5)) % 4
-            when (pick) {
+            when ((r * 7 + rnd.nextInt(5)) % 4) {
                 0 -> { place(r, WELL, 18, 10, pad = 8); repeat(2) { place(r, BENCH, 16, 5) }; repeat(3) { place(r, FLOWERBED, 20, 6, pad = 3) }; repeat(2) { place(r, LANTERN, 4, 4) } }
                 1 -> { place(r, CART, 26, 10, pad = 6); repeat(3) { place(r, CRATES, 12, 8, pad = 2) }; repeat(4) { place(r, BARREL, 7, 6, pad = 2) }; repeat(2) { place(r, HAY, 14, 8, pad = 3) } }
                 2 -> { place(r, TENT, 34, 16); repeat(2) { place(r, LAUNDRY, 3, 3, pad = 30) }; place(r, CAMPFIRE, 12, 6); repeat(2) { place(r, BENCH, 16, 5) }; place(r, BARREL, 7, 6) }
-                else -> { repeat(4) { place(r, FLOWERBED, 20, 6, pad = 3) }; place(r, SIGNPOST, 6, 4); repeat(2) { place(r, HAY, 14, 8) }; place(r, TREE, 12, 6); repeat(2) { place(r, LANTERN, 4, 4) } }
+                else -> { repeat(4) { place(r, FLOWERBED, 20, 6, pad = 3) }; place(r, SIGNPOST, 6, 4); repeat(2) { place(r, HAY, 14, 8) }; repeat(2) { place(r, LANTERN, 4, 4) } }
             }
-            if (rnd.nextFloat() < 0.5f) { place(r, CRATES, 12, 8); place(r, BARREL, 7, 6) }
-            if (rnd.nextFloat() < 0.4f) npcs += intArrayOf(r, 120, 104, NPC_MERC, kinds[2 + rnd.nextInt(3)])
-            // townsfolk, going about their business
-            repeat(2 + rnd.nextInt(2)) {
-                for (k in 0 until 20) {
-                    val x = 30 + rnd.nextInt(180); val y = 56 + rnd.nextInt(96)
-                    if (props[r].none { p -> x + 8 > p[1] && x - 8 < p[3] && y + 4 > p[2] && y - 8 < p[4] }) { npcs += intArrayOf(r, x, y, NPC_FOLK, rnd.nextInt(6)); break }
+            if (rnd.nextFloat() < 0.4f) npc(NPC_MERC, kinds[2 + rnd.nextInt(3)])
+            repeat(2 + rnd.nextInt(2)) { npc(NPC_FOLK, rnd.nextInt(6)) }
+        }
+    }
+    /**
+     * A river that winds like a real one: from a pond, through four to six screens (solid wood
+     * included), in a long meandering curve, to another pond. Where it crosses a way, a bridge
+     * (lying across the water, the way you walk over it).
+     */
+    private fun windingRiver() {
+        val starts = (0 until n).filter { !dead[it] && it !in fortRooms && it != exit }
+        if (starts.isEmpty()) return
+        val a = starts[rnd.nextInt(starts.size)]
+        val dist = IntArray(n) { -1 }; val par = IntArray(n) { -1 }; dist[a] = 0
+        val q = ArrayDeque<Int>(); q += a
+        while (q.isNotEmpty()) { val r = q.removeFirst(); for (d in (0 until 4).shuffled(rnd)) { val o = nbAll(r, d); if (o >= 0 && dist[o] < 0 && o !in fortRooms) { dist[o] = dist[r] + 1; par[o] = r; q += o } } }
+        val ends = (0 until n).filter { dist[it] in 3..6 && !dead[it] }.ifEmpty { (0 until n).filter { dist[it] >= 2 } }
+        if (ends.isEmpty()) return
+        val b = ends[rnd.nextInt(ends.size)]
+        val path = ArrayList<Int>(); run { var r = b; while (r >= 0) { path.add(0, r); r = par[r] } }
+        // waypoints: a point in each screen it passes through
+        val pts = path.map { c -> floatArrayOf((c % w) * 240f + 120f + rnd.nextInt(-60, 61), (c / w) * 176f + 92f + rnd.nextInt(-45, 46)) }
+        // a smooth curve through them, with a meander on top
+        val sm = ArrayList<FloatArray>()
+        for (i in 0 until pts.size - 1) {
+            val p0 = pts[maxOf(0, i - 1)]; val p1 = pts[i]; val p2 = pts[i + 1]; val p3 = pts[minOf(pts.size - 1, i + 2)]
+            val steps = (kotlin.math.hypot(p2[0] - p1[0], p2[1] - p1[1]) / 3f).toInt().coerceAtLeast(4)
+            for (k in 0 until steps) {
+                val t = k / steps.toFloat(); val t2 = t * t; val t3 = t2 * t
+                fun cr(a0: Float, a1: Float, a2: Float, a3: Float) = 0.5f * (2 * a1 + (-a0 + a2) * t + (2 * a0 - 5 * a1 + 4 * a2 - a3) * t2 + (-a0 + 3 * a1 - 3 * a2 + a3) * t3)
+                sm += floatArrayOf(cr(p0[0], p1[0], p2[0], p3[0]), cr(p0[1], p1[1], p2[1], p3[1]))
+            }
+        }
+        sm += pts.last()
+        val amp = 10f + rnd.nextFloat() * 8f; val wl = 70f + rnd.nextFloat() * 40f; var along = 0f
+        val pathPts = ArrayList<FloatArray>()
+        for (i in sm.indices) {
+            val p0 = sm[maxOf(0, i - 1)]; val p1 = sm[minOf(sm.size - 1, i + 1)]
+            val ang = kotlin.math.atan2(p1[1] - p0[1], p1[0] - p0[0])
+            if (i > 0) along += kotlin.math.hypot(sm[i][0] - sm[i - 1][0], sm[i][1] - sm[i - 1][1])
+            val off = amp * kotlin.math.sin(along / wl * 6.283f)
+            pathPts += floatArrayOf(sm[i][0] - kotlin.math.sin(ang) * off, sm[i][1] + kotlin.math.cos(ang) * off, ang)
+        }
+        val half = 10f + rnd.nextFloat() * 3f
+        val bridgeCell = Array(n) { BooleanArray(GX * GY) }
+        val angAt = Array(n) { FloatArray(GX * GY) }
+        fun paint(x: Float, y: Float, rad: Float, ang: Float) {
+            val c0 = ((x - rad) / 240f).toInt().coerceIn(0, w - 1); val c1 = ((x + rad) / 240f).toInt().coerceIn(0, w - 1)
+            val r0 = ((y - rad) / 176f).toInt().coerceIn(0, h - 1); val r1 = ((y + rad) / 176f).toInt().coerceIn(0, h - 1)
+            for (cy in r0..r1) for (cx in c0..c1) {
+                val r = cy * w + cx; if (r in fortRooms) continue
+                val lx = x - cx * 240f; val ly = y - cy * 176f
+                for (gy in ((ly - rad) / CH).toInt().coerceIn(0, GY - 1)..((ly + rad) / CH).toInt().coerceIn(0, GY - 1)) for (gx in ((lx - rad) / CW).toInt().coerceIn(0, GX - 1)..((lx + rad) / CW).toInt().coerceIn(0, GX - 1)) {
+                    if (kotlin.math.hypot(gx * CW + CW / 2f - lx, gy * CH + CH / 2f - ly) > rad) continue
+                    val i = gy * GX + gx
+                    if (core[r][i] && shaped[r]) { bridgeCell[r][i] = true; angAt[r][i] = ang } else mass[r][i] = M_WATER.toByte()
                 }
             }
         }
-        // a few folk in the market too
-        repeat(2) { npcs += intArrayOf(heart, 100 + rnd.nextInt(40), 118 + rnd.nextInt(20), NPC_FOLK, rnd.nextInt(6)) }
+        for ((i, p) in pathPts.withIndex()) {
+            paint(p[0], p[1], half, p[2])
+            if (i % 2 == 0) { val cx = (p[0] / 240f).toInt().coerceIn(0, w - 1); val cy = (p[1] / 176f).toInt().coerceIn(0, h - 1); val r = cy * w + cx; flow[r] += p[0] - cx * 240f; flow[r] += p[1] - cy * 176f; flow[r] += p[2] }
+        }
+        // a pond at each end
+        for (e in listOf(pathPts.first(), pathPts.last())) for (k in 0 until 3) paint(e[0] + rnd.nextInt(-14, 15), e[1] + rnd.nextInt(-10, 11), 18f + rnd.nextFloat() * 8f, e[2])
+        // bridges: each patch of way the water crosses, decked over
+        for (r in 0 until n) {
+            val bc = bridgeCell[r]; if (bc.none { it }) continue
+            val seen = BooleanArray(GX * GY)
+            for (i0 in 0 until GX * GY) {
+                if (!bc[i0] || seen[i0]) continue
+                val comp = ArrayList<Int>(); val qq = ArrayDeque<Int>(); qq += i0; seen[i0] = true
+                while (qq.isNotEmpty()) { val i = qq.removeFirst(); comp += i; val gx = i % GX; val gy = i / GX
+                    for ((ox, oy) in listOf(1 to 0, -1 to 0, 0 to 1, 0 to -1)) { val x = gx + ox; val y = gy + oy; if (x < 0 || y < 0 || x >= GX || y >= GY) continue; val j = y * GX + x; if (bc[j] && !seen[j]) { seen[j] = true; qq += j } } }
+                var ca = 0f; var sa = 0f; var mx = 0f; var my = 0f
+                for (i in comp) { ca += kotlin.math.cos(angAt[r][i]); sa += kotlin.math.sin(angAt[r][i]); mx += (i % GX) * CW + CW / 2f; my += (i / GX) * CH + CH / 2f }
+                mx /= comp.size; my /= comp.size
+                // the river runs along x here? then you cross it up-and-down, and the deck is taller than wide
+                val vert = kotlin.math.abs(ca) >= kotlin.math.abs(sa)
+                // one deck, a bridge's width, straight across; the rest of the crossing stays water
+                val keep = comp.filter { i -> if (vert) kotlin.math.abs((i % GX) * CW + CW / 2f - mx) <= 14f else kotlin.math.abs((i / GX) * CH + CH / 2f - my) <= 14f }
+                for (i in comp) if (i !in keep) mass[r][i] = M_WATER.toByte()
+                comp.clear(); comp += keep
+                if (comp.isEmpty()) continue
+                var l = 999; var t = 999; var rr = 0; var bb = 0
+                for (i in comp) { val gx = i % GX; val gy = i / GX; l = minOf(l, gx * CW); t = minOf(t, gy * CH); rr = maxOf(rr, gx * CW + CW); bb = maxOf(bb, gy * CH + CH) }
+                if (vert) { t -= 4; bb += 4 } else { l -= 4; rr += 4 }
+                bridges[r] += intArrayOf(l, t, rr, bb, if (vert) 1 else 0)
+                for (i in comp) mass[r][i] = M_OPEN.toByte()
+                // the deck's ends rest on dry ground
+                for (gy in (t / CH).coerceIn(0, GY - 1)..((bb - 1) / CH).coerceIn(0, GY - 1)) for (gx in (l / CW).coerceIn(0, GX - 1)..((rr - 1) / CW).coerceIn(0, GX - 1)) if (core[r][gy * GX + gx]) mass[r][gy * GX + gx] = M_OPEN.toByte()
+            }
+        }
+        // make sure every way in still joins up: where the water cut a path, lay a boardwalk over it
+        for (r in 0 until n) {
+            if (dead[r] || !shaped[r]) continue
+            val ms = mass[r]; val cr = core[r]; val total = GX * GY
+            val added = BooleanArray(total)
+            // thin slivers of water (left where decks were cut) dry out
+            repeat(2) { for (i in 0 until total) if (ms[i].toInt() == M_WATER) { val gx = i % GX; val gy = i / GX
+                val wn = listOf(gx - 1 to gy, gx + 1 to gy, gx to gy - 1, gx to gy + 1).count { (x, y) -> x in 0 until GX && y in 0 until GY && ms[y * GX + x].toInt() == M_WATER }
+                if (wn <= 1) ms[i] = M_OPEN.toByte() } }
+            // where water runs over a way in at the screen's edge: decked, so the next screen's way meets it
+            for (i in 0 until total) { val gx = i % GX; val gy = i / GX
+                val atEdge = (sides[r][0] && gx < 3) || (sides[r][1] && gx >= GX - 3) || (sides[r][2] && gy < 3) || (sides[r][3] && gy >= GY - 3)
+                if (atEdge && cr[i] && ms[i].toInt() == M_WATER) { ms[i] = M_OPEN.toByte(); added[i] = true } }
+            var guard = 0
+            // a body needs two cells side by side: walk the grid as pairs (cell i and the one to its right)
+            fun isOpen(i: Int) = ms[i].toInt() == M_OPEN
+            fun wetOk(k: Int) = ms[k].toInt().let { it == M_OPEN || it == M_WATER }
+            fun pairOpen(i: Int) = i % GX < GX - 1 && i / GX < GY - 1 && isOpen(i) && isOpen(i + 1) && isOpen(i + GX) && isOpen(i + GX + 1)
+            fun pairWet(i: Int) = i % GX < GX - 1 && i / GX < GY - 1 && wetOk(i) && wetOk(i + 1) && wetOk(i + GX) && wetOk(i + GX + 1)
+            fun nbrs(i: Int): List<Int> { val gx = i % GX; val gy = i / GX; val o = ArrayList<Int>(4); if (gx > 0) o += i - 1; if (gx < GX - 2) o += i + 1; if (gy > 0) o += i - GX; if (gy < GY - 2) o += i + GX; return o }
+            while (guard++ < 400) {
+                val seen = BooleanArray(total); val qq = ArrayDeque<Int>()
+                val seed = (0 until total).firstOrNull { (cr[it] || (it % GX < GX - 1 && cr[it + 1])) && pairOpen(it) } ?: break
+                seen[seed] = true; qq += seed
+                while (qq.isNotEmpty()) { val i = qq.removeFirst(); for (j in nbrs(i)) if (!seen[j] && pairOpen(j)) { seen[j] = true; qq += j } }
+                val unreachedCore = (0 until total).any { (cr[it] || (it % GX < GX - 1 && cr[it + 1])) && pairOpen(it) && !seen[it] }
+                if (!unreachedCore) {
+                    // little cut-off pockets that aren't on any way: grown over
+                    for (i in 0 until total) if (isOpen(i) && !cr[i] && listOf(i, i - 1, i - GX, i - GX - 1).none { it in 0 until total && seen[it] }) ms[i] = M_FOREST.toByte()
+                    break
+                }
+                // the shortest way over the water from what you can reach to a cut-off path: decked over
+                val from = IntArray(total) { -2 }; val q2 = ArrayDeque<Int>()
+                for (i in 0 until total) if (seen[i]) { from[i] = -1; q2 += i }
+                var hit = -1
+                while (q2.isNotEmpty() && hit < 0) { val i = q2.removeFirst()
+                    for (j in nbrs(i)) { if (from[j] != -2 || !pairWet(j)) continue
+                        from[j] = i; if (pairOpen(j) && (cr[j] || cr[j + 1]) && !seen[j]) { hit = j; break }; q2 += j } }
+                if (hit < 0) break
+                var c = from[hit]
+                while (c >= 0 && !seen[c]) { for (k in intArrayOf(c, c + 1, c + GX, c + GX + 1)) if (ms[k].toInt() == M_WATER) { ms[k] = M_OPEN.toByte(); added[k] = true }; c = from[c] }
+                // widen the deck so a body fits on it easily
+                for (i in 0 until total) if (added[i]) { val gx = i % GX; val gy = i / GX; for (oy in -1..1) for (ox in -1..1) { val x = gx + ox; val y = gy + oy; if (x in 0 until GX && y in 0 until GY && ms[y * GX + x].toInt() == M_WATER) { ms[y * GX + x] = M_OPEN.toByte(); added[y * GX + x] = true } } }
+            }
+            // last resort: a way in still out of reach? cut straight through to it
+            for (d in 0 until 4) {
+                if (!sides[r][d]) continue
+                fun inBand(i: Int): Boolean { val gx = i % GX; val gy = i / GX; return when (d) { 0 -> gx < 2; 1 -> gx >= GX - 3; 2 -> gy < 2; else -> gy >= GY - 3 } }
+                val seen = BooleanArray(total); val qq = ArrayDeque<Int>()
+                val seed = (0 until total).firstOrNull { cr[it] && pairOpen(it) } ?: continue
+                seen[seed] = true; qq += seed
+                while (qq.isNotEmpty()) { val i = qq.removeFirst(); for (j in nbrs(i)) if (!seen[j] && pairOpen(j)) { seen[j] = true; qq += j } }
+                if ((0 until total).any { seen[it] && inBand(it) }) continue
+                val from = IntArray(total) { -2 }; val q2 = ArrayDeque<Int>()
+                for (i in 0 until total) if (seen[i]) { from[i] = -1; q2 += i }
+                var hit = -1
+                while (q2.isNotEmpty() && hit < 0) { val i = q2.removeFirst(); for (j in nbrs(i)) { if (from[j] != -2) continue; from[j] = i; if (inBand(j) && cr[j]) { hit = j; break }; q2 += j } }
+                var c = hit
+                while (c >= 0 && !seen[c]) { for (k in intArrayOf(c, c + 1, c + GX, c + GX + 1)) { if (ms[k].toInt() == M_WATER) added[k] = true; ms[k] = M_OPEN.toByte() }; c = from[c] }
+            }
+            // the boardwalks, as bridges to draw
+            val seen2 = BooleanArray(total)
+            for (i0 in 0 until total) {
+                if (!added[i0] || seen2[i0]) continue
+                val comp = ArrayList<Int>(); val qq = ArrayDeque<Int>(); qq += i0; seen2[i0] = true
+                while (qq.isNotEmpty()) { val i = qq.removeFirst(); comp += i; val gx = i % GX; val gy = i / GX
+                    for ((ox, oy) in listOf(1 to 0, -1 to 0, 0 to 1, 0 to -1)) { val x = gx + ox; val y = gy + oy; if (x < 0 || y < 0 || x >= GX || y >= GY) continue; val j = y * GX + x; if (added[j] && !seen2[j]) { seen2[j] = true; qq += j } } }
+                var l = 999; var t = 999; var rr = 0; var bb = 0
+                for (i in comp) { val gx = i % GX; val gy = i / GX; l = minOf(l, gx * CW); t = minOf(t, gy * CH); rr = maxOf(rr, gx * CW + CW); bb = maxOf(bb, gy * CH + CH) }
+                bridges[r] += intArrayOf(l, t, rr, bb, if (bb - t >= rr - l) 1 else 0)
+            }
+        }
+        // nothing stands in the water
+        fun wet(r: Int, p: IntArray): Boolean { for (gy in (p[2] / CH).coerceIn(0, GY - 1)..((p[4] - 1) / CH).coerceIn(0, GY - 1)) for (gx in (p[1] / CW).coerceIn(0, GX - 1)..((p[3] - 1) / CW).coerceIn(0, GX - 1)) if (mass[r][gy * GX + gx].toInt() == M_WATER) return true; return false }
+        for (r in 0 until n) props[r].removeAll { p -> p[0] != EXIT && wet(r, p) }
     }
     /** The ways through a screen (always kept open; a river crossing one gets a bridge). */
     private fun lanes(r: Int): List<IntArray> = ways[r].ifEmpty { listOf(intArrayOf(96, 80, 144, 128)) }

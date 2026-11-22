@@ -73,8 +73,9 @@ geo7: RIGHT MEDIUM
 rate1: RIGHT LOW
      - WARNING: Different readings of the problem gave different answers. Check the setup below.
      eqs: [f_c/c_c = f_60/60]  ask=f_60
-rate2: WRONG got [30.0] want 13.0 (MEDIUM)
+rate2: FLAGGED (no confident answer; got null)
      - WARNING: The 390 in the problem wasn't used. Check that's right.
+     - ERROR: Units don't match: length^2 is being added to or compared with length^-3.
      eqs: [g_old/d_old = 1/g_new]  ask=g_new
 rate3: RIGHT HIGH
 unit1: RIGHT HIGH
@@ -97,4 +98,4 @@ under3: RIGHT (said not enough info)
      - ERROR: price = 100 (original price of the shirt) doesn't appear in the problem.
      eqs: [save = price*off/100]  ask=save
 
-41 right, 8 flagged as unsure, 1 wrong out of 50. Wrong but marked HIGH confidence: []
+41 right, 9 flagged as unsure, 0 wrong out of 50. Wrong but marked HIGH confidence: []

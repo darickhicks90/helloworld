@@ -59,4 +59,6 @@ tasks.withType<Test>().configureEach {
     systemProperty("robolectric.offline", "true")
     systemProperty("robolectric.dependency.dir", robolectricDir.get().asFile.absolutePath)
     maxHeapSize = "3g"
+    // the word-problem scorer reads files Gradle doesn't track, so always run tests
+    outputs.upToDateWhen { false }
 }

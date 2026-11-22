@@ -3,53 +3,49 @@ motion2: RIGHT HIGH
 motion3: RIGHT HIGH
 motion4: RIGHT HIGH
 motion5: FLAGGED (no confident answer; got null)
-     - WARNING: The 1200 in the problem is used for more than one thing (d_out, d_in).
-     eqs: [d_out = v_w*t_out, d_in = (v_w - v_w)*t_in (Wait, the problem implies the plane flies at a constant speed relative to the air, let's re-read. The problem states 'A plane flies 1200 km with the wind in 2 hours and returns against the wind in 3 hours'. This implies the plane's speed relative to the air is constant, let's call it v_p. The wind speed is v_w. Then d_out = v_p + v_w*t_out and d_in = v_p - v_w*t_in. Since the problem asks for the wind speed, we need to solve for v_w. Let's assume the plane's speed relative to the air is constant, v_p.]  ask=v_w
+     - WARNING: The 1200 in the problem is used for more than one thing (d_out, d_return).
+     eqs: [d_out = v_w*t_out, d_return = (v_w - v_w)*t_return (Wait, the problem implies the plane's speed is constant, let's re-read. The problem states 'A plane flies 1200 km with the wind in 2 hours and returns against the wind in 3 hours'. This implies the distance covered in each leg is 1200 km. Let $v_p$ be the plane's speed and $v_w$ be the wind speed. For the outbound trip: $v_p + v_w = 1200/2$. For the return trip: $v_p - v_w = 1200/3$. We need to solve for $v_w$. Let's use the given information directly as stated in the problem structure, assuming the 1200 km is the distance for each leg.]  ask=v_w
 motion6: RIGHT MEDIUM
-     - WARNING: v_J = 4 (Jake's walking speed) was written down but never used.
-     - WARNING: v_S = 12 (Sister's biking speed) was written down but never used.
-     eqs: [d_J*(t_J + t) = d_S*t]  ask=t
+     eqs: [4*(t_J_start + t_s) = 12*t_s]  ask=t_s
 percent1: RIGHT HIGH
 percent2: RIGHT HIGH
-percent3: RIGHT HIGH
+percent3: RIGHT MEDIUM
+     eqs: [p_increase = (p_final - p_initial) / p_initial * 100]  ask=p_increase
 percent4: RIGHT MEDIUM
-     eqs: [price = price * (1 - off/100) / (1 - off/100)]  ask=price
-percent5: RIGHT MEDIUM
-     eqs: [total = meal + (meal*tax/100) + (meal*tip/100)]  ask=total
+     eqs: [sale = price*(1 - off/100)]  ask=price
+percent5: FLAGGED (no confident answer; got null)
+     - WARNING: The letter tax wasn't explained, so it's treated as an extra unknown.
+     - WARNING: The letter tip wasn't explained, so it's treated as an extra unknown.
+     - ERROR: Units don't match: no unit is being added to or compared with money·time^-1.
+     - ERROR: Units don't match: money is being added to or compared with no unit.
+     eqs: [tax = price*tax_rate/100, tip = price*tip_rate/100, total = price + tax + tip]  ask=total
 percent6: RIGHT HIGH
-interest1: FLAGGED (no confident answer; got null)
-     - ERROR: Units don't match: money is being added to or compared with money·percent.
-     eqs: [i = p*r*t]  ask=i
-interest2: RIGHT MEDIUM
-     eqs: [A = p*(1 + r/100)^t]  ask=A
-interest3: FLAGGED (no confident answer; got null)
-     - ERROR: Units don't match: money is being added to or compared with money·percent.
-     eqs: [i = p*r*t]  ask=t
-work1: RIGHT MEDIUM
-     eqs: [t/t_A + t/t_B = 1]  ask=t
+interest1: RIGHT HIGH
+interest2: RIGHT HIGH
+interest3: RIGHT HIGH
+work1: RIGHT HIGH
 work2: RIGHT HIGH
 work3: RIGHT HIGH
 age1: FLAGGED (no confident answer; got null)
-     - NOTE: Treated s as the unknown being asked for.
-     - WARNING: The 3 in the problem is used for more than one thing (t, a number in an equation).
+     - WARNING: The 3 in the problem is used for more than one thing (s_R, a number in an equation).
      - WARNING: The 12 in the problem is used for more than one thing (a number in an equation).
-     eqs: [t = 3*s, t + 12 = 2*(s + 12)]  ask=s
-age2: RIGHT MEDIUM
-     eqs: [j + (j + 6) = 40]  ask=j
+     eqs: [s_Sara = 3*s_son, s_Sara + t_future = 2*(s_son + t_future)]  ask=s_son
+age2: FLAGGED (no confident answer; got null)
+     - NOTE: Treated t_j as the unknown being asked for.
+     - ERROR: t_t = 0 (Tom's age) doesn't appear in the problem.
+     eqs: [t_t + t_j = 40, t_t = t_j + 6]  ask=t_j
 age3: RIGHT HIGH
 num1: RIGHT HIGH
 num2: RIGHT HIGH
-num3: RIGHT MEDIUM
-     - NOTE: Treated x as the unknown being asked for.
-     eqs: [x/4 - 3 = 5]  ask=x
+num3: RIGHT HIGH
 num4: FLAGGED (no confident answer; got null)
      - WARNING: The letter x wasn't explained, so it's treated as an extra unknown.
      - ERROR: No equation involves x_large, the quantity being asked for.
      eqs: [x*(x+2) = 168]  ask=x_large
 num5: RIGHT HIGH
 mix1: FLAGGED (no confident answer; got null)
-     - ERROR: The quantity being asked for (x) was treated as already known.
-     eqs: [(x/100)*x + (y/100)*50 = (x+y)/100 * z]  ask=x
+     - ERROR: The quantity being asked for (x_sol) was treated as already known.
+     eqs: [(x_sol*x_sol/100) + (x_sol2*x_sol2/100) = (x_sol3*x_sol3/100)]  ask=x_sol
 mix2: RIGHT MEDIUM
      - WARNING: The 10 in the problem is used for more than one thing (amount_peanuts, a number in an equation).
      eqs: [(amount_peanuts * price_peanuts) + (x * price_cashews) = (10 + x) * target_price]  ask=x
@@ -58,44 +54,40 @@ money2: RIGHT HIGH
 money3: RIGHT HIGH
 money4: RIGHT MEDIUM
      - WARNING: The $900 in the problem wasn't used. Check that's right.
-     eqs: [earnings_L = rate_L*hours_L]  ask=earnings_L
+     eqs: [earn_L = rate_L*t_L]  ask=earn_L
 geo1: FLAGGED (no confident answer; got null)
-     - WARNING: The letter l wasn't explained, so it's treated as an extra unknown.
+     - WARNING: The 3 in the problem is used for more than one thing (l, a number in an equation).
      - ERROR: Units don't match: no unit is being added to or compared with length.
      eqs: [l = 3*w, 2*(l + w) = p]  ask=w
 geo2: RIGHT HIGH
 geo3: RIGHT HIGH
-geo4: RIGHT HIGH
+geo4: RIGHT MEDIUM
+     eqs: [A = pi * r^2]  ask=A
 geo5: RIGHT HIGH
 geo6: RIGHT HIGH
-geo7: RIGHT MEDIUM
-     eqs: [A = d^2/2]  ask=A
-rate1: RIGHT LOW
+geo7: RIGHT HIGH
+rate1: RIGHT HIGH
+rate2: WRONG got [11700.0] want 13.0 (MEDIUM)
+     eqs: [g_old/d_old = 1/g_new * d_new]  ask=g_new
+rate3: RIGHT LOW
      - WARNING: Different readings of the problem gave different answers. Check the setup below.
-     eqs: [f_c/c_c = f_60/60]  ask=f_60
-rate2: FLAGGED (no confident answer; got null)
-     - WARNING: The 390 in the problem wasn't used. Check that's right.
-     - ERROR: Units don't match: length^2 is being added to or compared with length^-3.
-     eqs: [g_old/d_old = 1/g_new]  ask=g_new
-rate3: RIGHT HIGH
-unit1: RIGHT HIGH
-unit2: RIGHT MEDIUM
-     eqs: [v_avg = d/t_converted]  ask=v_avg
+     eqs: [total_mL = drip_rate_mL * (60/5) * 60]  ask=total_mL
+unit1: RIGHT LOW
+     - NOTE: Converted “1 hour and 30 minutes” to 1.5 h.
+     - WARNING: Different readings of the problem gave different answers. Check the setup below.
+     eqs: [d = v_walk*t_walk]  ask=d
+unit2: RIGHT HIGH
 elec1: RIGHT HIGH
 elec2: RIGHT HIGH
-elec3: RIGHT MEDIUM
-     eqs: [1/r_total = 1/r_1 + 1/r_2]  ask=r_total
+elec3: RIGHT HIGH
 under1: RIGHT (said not enough info)
-     - WARNING: The letter l wasn't explained, so it's treated as an extra unknown.
-     - WARNING: The letter w wasn't explained, so it's treated as an extra unknown.
-     - WARNING: The 30 in the problem is used for more than one thing (a number in an equation).
-     - ERROR: Units don't match: length^2 is being added to or compared with no unit.
-     eqs: [2*(l + w) = 30, a = l*w, l + w = 30/2]  ask=a
+     - NOTE: The problem doesn't give enough information to find A.
+     eqs: [2*(a+b) = 30, A = a*b]  ask=A
 under2: FLAGGED (answered [2.142857142857143] but unsure)
      - WARNING: The 70 in the problem is used for more than one thing (v_A, a number in an equation).
      eqs: [v_A*t + 70*t = d]  ask=t
 under3: RIGHT (said not enough info)
      - ERROR: price = 100 (original price of the shirt) doesn't appear in the problem.
-     eqs: [save = price*off/100]  ask=save
+     eqs: [save = price*(25/100)]  ask=save
 
-41 right, 9 flagged as unsure, 0 wrong out of 50. Wrong but marked HIGH confidence: []
+41 right, 8 flagged as unsure, 1 wrong out of 50. Wrong but marked HIGH confidence: []

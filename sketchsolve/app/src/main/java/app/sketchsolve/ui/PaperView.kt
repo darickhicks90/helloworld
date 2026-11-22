@@ -231,6 +231,8 @@ class PaperView(ctx: Context, private val showPad: Boolean = true) : View(ctx) {
     fun redo() { if (redoStack.isEmpty()) return; undoStack.addLast(strokes.toList()); strokes = redoStack.removeLast().toMutableList(); changed() }
     fun clear() { if (strokes.isEmpty()) return; snapshot(); strokes = ArrayList(); changed() }
     fun removeStrokes(ids: Collection<Int>) { snapshot(); strokes = strokes.filter { it.id !in ids }.toMutableList(); changed() }
+    /** Replace everything, as one step that Undo can take back. */
+    fun setStrokesUndoable(list: List<Stroke>) { snapshot(); strokes = list.toMutableList(); for (s in list) bumpId(s.id); changed() }
     fun replaceStrokes(list: List<Stroke>) { strokes = list.toMutableList(); for (s in list) bumpId(s.id); changed() }
     /** Change strokes without recording undo (e.g. dropping an old circle). */
     fun mutate(f: (MutableList<Stroke>) -> Unit) { f(strokes) }

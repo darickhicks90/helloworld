@@ -3,6 +3,7 @@ package app.sketchsolve.ui.modes
 import android.app.AlertDialog
 import android.view.View
 import android.widget.CheckBox
+import android.widget.ProgressBar
 import android.widget.ScrollView
 import app.sketchsolve.MainActivity
 import app.sketchsolve.llm.*
@@ -30,8 +31,6 @@ class AskMode(app: MainActivity) : Mode(app) {
     private var current: WorkingView.Page = WorkingView.Page.Empty
     private var listening = false
     private var wifiOnly = true
-    private val downloads = HashMap<String, String>()   // model id → progress text
-    @Volatile private var cancelDownload = false
 
     override fun onTool(tool: String) {
         when (tool) {
@@ -129,21 +128,34 @@ class AskMode(app: MainActivity) : Mode(app) {
         }
         pad.heading("On-device models")
         val mm = app.models
+        var active = false
         for (m in mm.wanted()) {
-            val st = downloads[m.id]
-            when {
-                mm.isReady(m) -> pad.text("✓ ${m.title} — ${m.purpose}")
-                st != null -> { pad.text("⇣ ${m.title}: $st"); pad.button("Cancel") { cancelDownload = true } }
-                else -> pad.muted("• ${m.title} — ${m.purpose} (${size(m.bytes)})")
+            val p = mm.progress(m)
+            when (p.state) {
+                ModelManager.State.READY -> pad.text("✓ ${m.title} — ${m.purpose}")
+                ModelManager.State.NONE -> pad.muted("• ${m.title} — ${m.purpose} (${size(m.bytes)})")
+                ModelManager.State.FAILED -> { pad.warn("${m.title}: ${p.message}"); pad.button("Try again") { mm.clearFailure(m); startDownload(listOf(m)) } }
+                else -> {
+                    active = true
+                    val pct = if (p.total > 0) (100 * p.done / p.total).toInt() else 0
+                    pad.text("⇣ ${m.title}: ${if (p.state == ModelManager.State.VERIFYING) p.message else "$pct% — ${size(p.done)} of ${size(p.total)}"}")
+                    if (p.state != ModelManager.State.RUNNING && p.message.isNotEmpty() && p.state != ModelManager.State.VERIFYING) pad.muted(p.message)
+                    pad.add(ProgressBar(app, null, android.R.attr.progressBarStyleHorizontal).apply { max = 1000; progress = if (p.total > 0) (1000 * p.done / p.total).toInt() else 0; isIndeterminate = p.state == ModelManager.State.VERIFYING })
+                    if (p.state != ModelManager.State.VERIFYING) pad.button("Cancel") { mm.cancel(m); refresh() }
+                }
             }
+        }
+        if (active) {
+            pad.muted("The download carries on if you leave the app or the screen turns off. Progress is also in the notification bar.")
+            watchDownloads()
         }
         val d = mm.device()
         pad.muted("This device: ${d.name} · ${if (d.ramGb > 0.5) "%.0f GB memory · ".format(d.ramGb) else ""}${"%.0f".format(d.freeGb)} GB free")
         pad.button("Choose models…") { app.showModelSetup() }
-        val missing = mm.wanted().filter { !mm.isReady(it) && downloads[it.id] == null }
+        val missing = mm.wanted().filter { mm.progress(it).state == ModelManager.State.NONE }
         if (missing.isNotEmpty()) {
-            pad.add(CheckBox(app).apply { text = "Only download on Wi-Fi"; isChecked = wifiOnly; setOnCheckedChangeListener { _, v -> wifiOnly = v } })
-            pad.button("⇣ Download (${size(missing.sumOf { it.bytes })})") { download(missing) }
+            pad.add(CheckBox(app).apply { text = "Only download on Wi-Fi"; isChecked = wifiOnly; setOnCheckedChangeListener { _, v -> wifiOnly = v; app.scheduleSave() } })
+            pad.button("⇣ Download (${size(missing.sumOf { it.bytes })})") { startDownload(missing) }
             pad.muted("A one-time download. After this the app works with no internet connection.")
         }
         pad.heading("My formula library")
@@ -160,24 +172,31 @@ class AskMode(app: MainActivity) : Mode(app) {
 
     private fun size(b: Long) = if (b > 1e9) "%.1f GB".format(b / 1e9) else "%d MB".format(b / 1_000_000)
 
-    fun startDownload(list: List<ModelSpec>) { if (list.isNotEmpty()) download(list) }
-
-    private fun download(list: List<ModelSpec>) {
+    fun startDownload(list: List<ModelSpec>) {
         val mm = app.models
-        if (wifiOnly && !mm.onWifi()) { app.toast("Connect to Wi-Fi, or untick “Only download on Wi-Fi”."); return }
-        cancelDownload = false
-        Thread {
-            for (m in list) {
-                try {
-                    mm.download(m, { done, total -> app.main.post { downloads[m.id] = "${(100 * done / total)}% of ${size(total)}"; refresh() } }, { cancelDownload })
-                    app.main.post { downloads.remove(m.id); refresh() }
-                } catch (e: Exception) {
-                    app.main.post { downloads.remove(m.id); if (e !is ModelManager.Cancelled) app.toast(e.message ?: "Download failed"); refresh() }
-                    return@Thread
-                }
+        for (m in list) {
+            val err = mm.enqueue(m, wifiOnly)
+            if (err != null) { app.toast(err); break }
+        }
+        if (wifiOnly && !mm.onWifi()) app.toast("It will start when you're on Wi-Fi (or untick “Only download on Wi-Fi”).")
+        refresh()
+    }
+
+    private var watching = false
+    /** While a download runs: refresh the notepad every second and check finished files. */
+    private fun watchDownloads() {
+        if (watching) return
+        watching = true
+        app.main.postDelayed(object : Runnable {
+            override fun run() {
+                val mm = app.models
+                val pending = mm.wanted().filter { mm.progress(it).state in setOf(ModelManager.State.QUEUED, ModelManager.State.RUNNING, ModelManager.State.PAUSED, ModelManager.State.VERIFYING) }
+                for (m in pending) if (mm.progress(m).state == ModelManager.State.VERIFYING) Thread { if (mm.finishIfDone(m)) app.main.post { app.modelsChanged(); app.toast("${m.title} is ready."); refresh() } }.start()
+                refresh()
+                if (pending.isEmpty()) { watching = false; return }
+                app.main.postDelayed(this, 1000)
             }
-            app.main.post { app.modelsChanged(); refresh() }
-        }.start()
+        }, 1000)
     }
 
     private fun editEquations(c: WorkingView.Page.Word) {

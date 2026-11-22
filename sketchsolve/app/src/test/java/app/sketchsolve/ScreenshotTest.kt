@@ -82,6 +82,14 @@ class ScreenshotTest {
         a.select(a.modes.first { it is FormulasMode }); settle(a); shot(a, "$prefix-4-formulas")
         a.select(a.modes.first { it is TeachMode }); settle(a); shot(a, "$prefix-5-teach")
 
+        // downloads queued, and a triangle swapped for a cube
+        a.models.deviceOverride = app.sketchsolve.llm.ModelManager.DeviceInfo("Google Pixel 9", "Google Tensor G4", 7.6, 41.0, 8, "16")
+        a.select(ask); ask.startDownload(a.models.wanted()); settle(a); shot(a, "$prefix-8-downloading")
+        val shp = a.modes.first { it is ShapesMode } as ShapesMode
+        shp.paper.replaceStrokes(app.sketchsolve.ui.SampleInk.triangle()); a.select(shp); settle(a)
+        shp.chooseType("cube"); settle(a); shot(a, "$prefix-9-cube")
+        a.models.deviceOverride = null
+
         // tutorial pages
         for (page in listOf("welcome", "ask", "circuit", "lib")) {
             app.sketchsolve.ui.Tutorial(a, page).show(); settle(a)

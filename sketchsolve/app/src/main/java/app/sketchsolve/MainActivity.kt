@@ -308,6 +308,14 @@ class MainActivity : Activity() {
 
     override fun onPause() { super.onPause(); saveState() }
 
+    override fun onResume() {
+        super.onResume()
+        // a download may have finished while the app was closed: check it and put it in place
+        Thread {
+            for (m in models.LANGUAGE + models.SPEECH) if (models.finishIfDone(m)) main.post { modelsChanged(); toast("${m.title} is ready."); mode?.refresh() }
+        }.start()
+    }
+
     companion object {
         fun strokesToJson(list: List<Stroke>): JSONArray {
             val arr = JSONArray()

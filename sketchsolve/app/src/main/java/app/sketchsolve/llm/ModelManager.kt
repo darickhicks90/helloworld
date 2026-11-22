@@ -119,53 +119,107 @@ class ModelManager(private val ctx: Context) {
         return !cm.isActiveNetworkMetered || caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
     }
 
-    class Cancelled : Exception("cancelled")
+    /* ---------------- downloading with Android's DownloadManager ----------------
+     * The system download manager keeps going when the screen is off or the
+     * app is closed, resumes after the network drops, shows progress in the
+     * notification bar, and honours "Wi-Fi only". The app then checks the
+     * file's size and SHA-256 before using it. */
+
+    enum class State { NONE, QUEUED, RUNNING, PAUSED, VERIFYING, FAILED, READY }
+    data class Progress(val state: State, val done: Long, val total: Long, val message: String = "")
+
+    private val dm get() = ctx.getSystemService(Context.DOWNLOAD_SERVICE) as android.app.DownloadManager
+    private fun idKey(m: ModelSpec) = "dl_${m.id}"
+    private fun tempName(m: ModelSpec) = "models/${m.fileName}.download"
+    private fun tempFile(m: ModelSpec) = File(ctx.getExternalFilesDir(null) ?: ctx.filesDir, tempName(m))
+    private val verifying = java.util.Collections.synchronizedSet(HashSet<String>())
+    private val failures = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    /** Start (or keep) a download. Returns an error message, or null if it was queued. */
+    fun enqueue(m: ModelSpec, wifiOnly: Boolean): String? {
+        if (isReady(m)) return null
+        if (prefs.getLong(idKey(m), -1L) >= 0 && progress(m).state in setOf(State.QUEUED, State.RUNNING, State.PAUSED)) return null
+        val need = m.bytes + 300_000_000L
+        if (freeBytes() < need) return "Not enough free space for ${m.title}: it needs ${"%.1f".format(need / 1e9)} GB."
+        failures.remove(m.id)
+        tempFile(m).delete()
+        val req = android.app.DownloadManager.Request(android.net.Uri.parse(m.url))
+            .setTitle("SketchSolve: ${m.title}")
+            .setDescription(m.purpose)
+            .setNotificationVisibility(android.app.DownloadManager.Request.VISIBILITY_VISIBLE)
+            .setDestinationInExternalFilesDir(ctx, null, tempName(m))
+            .setAllowedOverMetered(!wifiOnly)
+            .setAllowedOverRoaming(false)
+        return try { prefs.edit().putLong(idKey(m), dm.enqueue(req)).apply(); null }
+        catch (e: Exception) { "Couldn't start the download: ${e.message}" }
+    }
+
+    fun progress(m: ModelSpec): Progress {
+        if (isReady(m)) return Progress(State.READY, m.bytes, m.bytes)
+        if (m.id in verifying) return Progress(State.VERIFYING, m.bytes, m.bytes, "Checking the file…")
+        failures[m.id]?.let { return Progress(State.FAILED, 0, m.bytes, it) }
+        val id = prefs.getLong(idKey(m), -1L)
+        if (id < 0) return Progress(State.NONE, 0, m.bytes)
+        dm.query(android.app.DownloadManager.Query().setFilterById(id))?.use { c ->
+            if (!c.moveToFirst()) { prefs.edit().remove(idKey(m)).apply(); return Progress(State.NONE, 0, m.bytes) }
+            val status = c.getInt(c.getColumnIndexOrThrow(android.app.DownloadManager.COLUMN_STATUS))
+            val done = c.getLong(c.getColumnIndexOrThrow(android.app.DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR))
+            val total = c.getLong(c.getColumnIndexOrThrow(android.app.DownloadManager.COLUMN_TOTAL_SIZE_BYTES)).takeIf { it > 0 } ?: m.bytes
+            val reason = c.getInt(c.getColumnIndexOrThrow(android.app.DownloadManager.COLUMN_REASON))
+            return when (status) {
+                android.app.DownloadManager.STATUS_PENDING -> Progress(State.QUEUED, done, total, "Waiting to start…")
+                android.app.DownloadManager.STATUS_RUNNING -> Progress(State.RUNNING, done, total)
+                android.app.DownloadManager.STATUS_PAUSED -> Progress(State.PAUSED, done, total, pausedReason(reason))
+                android.app.DownloadManager.STATUS_SUCCESSFUL -> Progress(State.VERIFYING, total, total, "Checking the file…")
+                android.app.DownloadManager.STATUS_FAILED -> Progress(State.FAILED, done, total, failedReason(reason))
+                else -> Progress(State.QUEUED, done, total, "Waiting to start…")
+            }
+        }
+        return Progress(State.NONE, 0, m.bytes)
+    }
+
+    private fun pausedReason(r: Int) = when (r) {
+        android.app.DownloadManager.PAUSED_QUEUED_FOR_WIFI -> "Waiting for Wi-Fi."
+        android.app.DownloadManager.PAUSED_WAITING_FOR_NETWORK -> "Waiting for a connection."
+        android.app.DownloadManager.PAUSED_WAITING_TO_RETRY -> "Connection dropped; it will retry."
+        else -> "Paused."
+    }
+
+    private fun failedReason(r: Int) = when (r) {
+        android.app.DownloadManager.ERROR_INSUFFICIENT_SPACE -> "Not enough free space."
+        android.app.DownloadManager.ERROR_HTTP_DATA_ERROR, android.app.DownloadManager.ERROR_UNHANDLED_HTTP_CODE -> "The server didn't send the file. Try again later."
+        android.app.DownloadManager.ERROR_CANNOT_RESUME -> "The download couldn't resume. Try again."
+        android.app.DownloadManager.ERROR_DEVICE_NOT_FOUND -> "Storage isn't available."
+        else -> "The download failed (code $r). Try again."
+    }
 
     /**
-     * Download (or resume) a model. [progress] gets (bytesDone, bytesTotal).
-     * Blocks; call from a background thread. Throws on failure.
+     * If a download has finished, check it and move it into place. Call from a
+     * background thread. Returns true when the model became ready.
      */
-    fun download(m: ModelSpec, progress: (Long, Long) -> Unit, cancelled: () -> Boolean) {
-        val target = file(m)
-        if (isReady(m)) { progress(m.bytes, m.bytes); return }
-        val part = File(dir, m.fileName + ".part")
-        if (freeBytes() < m.bytes - part.length() + 200_000_000L) throw IllegalStateException("Not enough free space: ${m.title} needs ${"%.1f".format(m.bytes / 1e9)} GB.")
-        var url = URL(m.url)
-        var conn: HttpURLConnection
-        var redirects = 0
-        while (true) {
-            conn = url.openConnection() as HttpURLConnection
-            conn.instanceFollowRedirects = false
-            conn.connectTimeout = 20_000; conn.readTimeout = 60_000
-            if (part.length() > 0) conn.setRequestProperty("Range", "bytes=${part.length()}-")
-            val code = conn.responseCode
-            if (code in 300..399 && redirects++ < 8) { url = URL(url, conn.getHeaderField("Location")); conn.disconnect(); continue }
-            if (code != 200 && code != 206) throw IllegalStateException("Download failed (HTTP $code).")
-            if (code == 200 && part.length() > 0) part.delete()   // server ignored the resume request
-            break
-        }
-        RandomAccessFile(part, "rw").use { out ->
-            out.seek(part.length())
-            var done = part.length()
-            val buf = ByteArray(1 shl 16)
-            conn.inputStream.use { input ->
-                var last = 0L
-                while (true) {
-                    if (cancelled()) throw Cancelled()
-                    val n = input.read(buf)
-                    if (n < 0) break
-                    out.write(buf, 0, n)
-                    done += n
-                    if (done - last > 2_000_000) { progress(done, m.bytes); last = done }
-                }
-            }
-            progress(done, m.bytes)
-        }
-        conn.disconnect()
-        if (part.length() != m.bytes) throw IllegalStateException("The download was incomplete. Try again to resume it.")
-        if (sha256(part) != m.sha256) { part.delete(); throw IllegalStateException("The downloaded file was damaged and has been removed. Please try again.") }
-        if (!part.renameTo(target)) throw IllegalStateException("Couldn't save ${m.fileName}.")
+    fun finishIfDone(m: ModelSpec): Boolean {
+        if (isReady(m)) return false
+        if (progress(m).state != State.VERIFYING || !verifying.add(m.id)) return false
+        try {
+            val tmp = tempFile(m)
+            val ok = tmp.exists() && tmp.length() == m.bytes && sha256(tmp) == m.sha256
+            prefs.edit().remove(idKey(m)).apply()
+            if (!ok) { tmp.delete(); failures[m.id] = "The downloaded file was damaged and has been removed. Please try again."; return false }
+            file(m).delete()
+            if (!tmp.renameTo(file(m))) { failures[m.id] = "Couldn't save ${m.fileName}."; return false }
+            return true
+        } finally { verifying.remove(m.id) }
     }
+
+    fun cancel(m: ModelSpec) {
+        val id = prefs.getLong(idKey(m), -1L)
+        if (id >= 0) runCatching { dm.remove(id) }
+        prefs.edit().remove(idKey(m)).apply()
+        failures.remove(m.id)
+        tempFile(m).delete()
+    }
+
+    fun clearFailure(m: ModelSpec) { failures.remove(m.id) }
 
     private fun sha256(f: File): String {
         val md = MessageDigest.getInstance("SHA-256")
@@ -173,5 +227,5 @@ class ModelManager(private val ctx: Context) {
         return md.digest().joinToString("") { "%02x".format(it) }
     }
 
-    fun delete(m: ModelSpec) { file(m).delete(); File(dir, m.fileName + ".part").delete() }
+    fun delete(m: ModelSpec) { cancel(m); file(m).delete() }
 }

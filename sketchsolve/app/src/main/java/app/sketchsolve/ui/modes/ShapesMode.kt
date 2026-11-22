@@ -3,6 +3,7 @@ package app.sketchsolve.ui.modes
 import android.app.AlertDialog
 import android.graphics.*
 import app.sketchsolve.MainActivity
+import app.sketchsolve.ink.Box
 import app.sketchsolve.ink.Geom
 import app.sketchsolve.ink.Pt
 import app.sketchsolve.ink.Stroke
@@ -272,10 +273,57 @@ class ShapesMode(app: MainActivity) : DrawingMode(app) {
     private fun pickType() {
         val names = listOf("Auto: recognise my drawing") + Shapes.TYPES.map { Shapes.DEFS.getValue(it).name }
         AlertDialog.Builder(app).setTitle("Which shape is it?").setItems(names.toTypedArray()) { _, i ->
-            typeOverride = if (i == 0) null else Shapes.TYPES[i - 1]
-            manualTarget = null
-            app.scheduleSave(); refresh()
+            chooseType(if (i == 0) null else Shapes.TYPES[i - 1])
         }.show()
+    }
+
+    /** Pick a shape type (null = recognise automatically). A different shape replaces the drawing. */
+    fun chooseType(type: String?) {
+        manualTarget = null
+        typeOverride = type
+        if (type != null && A?.rec?.type != type) redrawAs(type)
+        app.scheduleSave(); refresh()
+    }
+
+    /**
+     * Swap the drawing for a clean version of the chosen shape, in the same
+     * place and size (or centred on the page if nothing was drawn). Brackets,
+     * numbers and circles belonged to the old shape, so they go too.
+     * One tap of Undo brings the old drawing back.
+     */
+    private fun redrawAs(type: String) {
+        val old = paper.strokes.filter { it.kind == "shape" }.flatMap { it.pts }
+        val box = if (old.size > 2) Geom.bbox(old).let { b ->
+            // keep sensible proportions for shapes that need them
+            if (b.w < 60 || b.h < 60) Box(b.cx - 120, b.cy - 90, b.cx + 120, b.cy + 90) else b
+        } else {
+            val w = paper.widthDp.toDouble(); val h = paper.heightDp.toDouble()
+            Box(w / 2 - 150, h / 2 - 110, w / 2 + 150, h / 2 + 110)
+        }
+        val model = Shapes.buildModel(type, null, box)
+        val strokes = ArrayList<Stroke>()
+        var id = (paper.strokes.maxOfOrNull { it.id } ?: 0) + 1
+        // points every few dp along straight edges, so smoothing keeps them straight
+        fun add(pts: List<Pt>) {
+            val dense = ArrayList<Pt>()
+            for (k in 1 until pts.size) {
+                val a = pts[k - 1]; val b = pts[k]
+                val n = maxOf(1, (a.dist(b) / 4).toInt())
+                for (j in 0 until n) dense += a + (b - a) * (j.toDouble() / n)
+            }
+            dense += pts.last()
+            strokes += Stroke(id++, "shape", dense)
+        }
+        for (o in model.outline) when (o) {
+            is Outline.Poly -> add(o.pts + o.pts.first())
+            is Outline.Line -> if (!o.dash) add(listOf(o.a, o.b))     // hidden edges stay as the dashed guide
+            is Outline.Ell -> {
+                val to = if (o.backDash) 180 else 360                    // only the front half of a hidden back edge
+                add((0..to step 6).map { a -> val r = Math.toRadians(a.toDouble()); Pt(o.c.x + o.rx * cos(r), o.c.y + o.ry * sin(r)) })
+            }
+        }
+        paper.setStrokesUndoable(strokes)
+        app.toast("Redrawn as a ${model.def.name.lowercase()}. Undo brings your drawing back.")
     }
 
     override fun onChanged(paper: PaperView) {

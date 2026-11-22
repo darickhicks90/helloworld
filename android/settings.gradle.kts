@@ -16,3 +16,6 @@ rootProject.name = "FoxBox"
 include(":app")
 include(":shared")
 include(":builder")
+include(":kit")
+include(":game")
+include(":pocket")

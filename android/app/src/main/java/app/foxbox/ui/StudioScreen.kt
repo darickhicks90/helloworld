@@ -43,8 +43,6 @@ interface Host {
     fun renameItem(id: String)
     /** Choose which input an audio track records. */
     fun channelInput(ch: Int)
-    /** The great hall (poke the eye in Clibbins, then swipe it away). */
-    fun showHall()
     /** File, Audio and MIDI in one menu. */
     fun mainMenu()
     /** Dynamics and effects for audio track `ch` (0–2) or the master (3). */

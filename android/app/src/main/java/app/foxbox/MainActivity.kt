@@ -48,7 +48,7 @@ import app.foxbox.ui.SnesDialog
 /** One activity, three screens: projects → studio ⇄ Clibbins. */
 class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost {
     private lateinit var midi: MidiInput
-    private var screen = 0 // 0 projects, 1 studio, 2 Clibbins, 3 the great hall
+    private var screen = 0 // 0 projects, 1 studio, 2 Clibbins
     private var studio: StudioScreen? = null
     private var pickFor: String? = null
     private var mic: AudioFiles.Mic? = null
@@ -71,6 +71,8 @@ class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost {
         Studio.init(this)
         app.foxbox.notes.Notes.init(this)
         app.foxbox.radio.Radio.init(this)
+        app.foxbox.kit.Export.init(this)
+        app.foxbox.kit.Export.handler = { kind, name, mime, bytes -> ProjectStore.export(null, kind, name, mime, bytes) }
         app.foxbox.jam.Jam.init(this)
         Studio.onMessage = { Toast.makeText(this, it, Toast.LENGTH_SHORT).show() }
         Studio.needMic = { then -> withMic(then) }
@@ -98,7 +100,7 @@ class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost {
 
     private fun goBack() {
         if (closeNotebook()) return
-        when (screen) { 3 -> leaveHall(); 2 -> showStudio(); 1 -> showProjects(); else -> finish() }
+        when (screen) { 2 -> showStudio(); 1 -> showProjects(); else -> finish() }
     }
 
     override fun onStart() { super.onStart(); Audio.start(); immersive() }
@@ -128,7 +130,7 @@ class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost {
     override fun showProjects() {
         if (projectOpen) { Studio.save(true); Audio.post { Audio.transport.stop() } }
         screen = 0; studio = null
-        setContentView(ProjectScreen(this, ::openProject, ::newProject, ::manageProject, if (hallFound) ({ showHall() }) else null))
+        setContentView(ProjectScreen(this, ::openProject, ::newProject, ::manageProject))
         addTopKeys()
     }
 
@@ -152,26 +154,8 @@ class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost {
         addTopKeys()
     }
 
-    override fun showHall() {
-        // everything stops, without a word: the music, every recording, the mic
-        mic?.let { m -> mic = null; micFor = null; Thread { runCatching { m.stop() } }.start() }
-        if (screen != 0) Studio.hush()   // (from the title screen there's nothing playing, and no project open)
-        // found it: from now on the title screen has a way straight in
-        hallFound = true
-        val from = screen
-        screen = 3; hallFrom = from
-        // the game has no radio or notebook keys
-        topKeys = null
-        setContentView(app.foxbox.ui.HallScreen(this).apply { onExit = { leaveHall() }; onRadio = { app.foxbox.radio.RadioPanel.show(this@MainActivity, this@MainActivity) } })
-    }
-    private var hallFrom = 2
-    /** A project is open everywhere but the title screen (and the hall when it was entered from there). */
-    private val projectOpen get() = !(screen == 0 || (screen == 3 && hallFrom == 0))
-    private fun leaveHall() { if (hallFrom == 0) showProjects() else showClibbins() }
-    private val prefs by lazy { getSharedPreferences("5iy", MODE_PRIVATE) }
-    private var hallFound: Boolean
-        get() = prefs.getBoolean("hallFound", false)
-        set(v) { prefs.edit().putBoolean("hallFound", v).apply() }
+    /** A project is open everywhere but the title screen. */
+    private val projectOpen get() = screen != 0
 
     // ------------------------------------------------------------------ the notebook (every screen but the game)
 
@@ -705,7 +689,7 @@ class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost {
         if (Audio.active.any { it.id == "pickup" }) out += "pad${Studio.selectedPad}" to "Load onto Pickup pad ${Studio.selectedPad + 1}"
         return out
     }
-    override fun deliverSample(target: String, data: FloatArray, name: String) = deliver(target, data, name)
+    override fun deliverSample(target: String, data: FloatArray, rate: Int, name: String) = deliver(target, AudioFiles.resample(data, rate), name)
 
     private fun deliver(target: String, data: FloatArray, name: String) {
         when {

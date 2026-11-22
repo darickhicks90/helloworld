@@ -16,7 +16,7 @@ import java.util.Date
 
 /** First screen: pick a project or start a new one. */
 @SuppressLint("ViewConstructor")
-class ProjectScreen(c: Context, private val onOpen: (Project) -> Unit, private val onNew: () -> Unit, private val onManage: (Project) -> Unit, onHall: (() -> Unit)? = null) : FrameLayout(c) {
+class ProjectScreen(c: Context, private val onOpen: (Project) -> Unit, private val onNew: () -> Unit, private val onManage: (Project) -> Unit) : FrameLayout(c) {
     private val titleP = Px.text(26f, Pal.ORANGE, headFont = true)
     private val tagP = Px.text(14f, Pal.AQUA_D)
 
@@ -30,138 +30,79 @@ class ProjectScreen(c: Context, private val onOpen: (Project) -> Unit, private v
         // The cards sit over the meadow on the left; the yeti stands on the right.
         addView(scroll, LayoutParams(MATCH, CARD_H + Px.dp(8), android.view.Gravity.BOTTOM or android.view.Gravity.START).apply { bottomMargin = Px.dp(24) })
         post { (scroll.layoutParams as LayoutParams).width = (width * 0.62f).toInt(); scroll.requestLayout() }
-        // once the great hall has been found, a way straight back in
-        if (onHall != null) addView(Btn(c, "Great hall", Snes.PURPLE, 120).apply { on = true; onClick = onHall },
-            LayoutParams(LayoutParams.WRAP_CONTENT, Px.dp(44), android.view.Gravity.TOP or android.view.Gravity.END).apply { topMargin = Px.dp(14); rightMargin = (TopKeys.WIDTH + Px.dp(16f)).toInt() })
     }
 
     private val headP = Px.text(34f, Pal.ORANGE, headFont = true)
-    private val shine = intArrayOf(0xFFFFF4D6.toInt(), 0xFFFFD27A.toInt(), 0xFFF4A259.toInt(), 0xFFE8742C.toInt(), 0xFFB8521B.toInt())
 
-    // ---- the title scene: a starlit clearing where the yeti goes about his own business. He swipes at a
-    //      firefly and misses twice, catches it, turns around, kneels, buries it, pats it down, gets up and
-    //      turns back as another drifts in. Pixel art played back from title_story.json (12 steps a second).
+    // ---- the title scene: the little guy from the icon standing in a field at night, mountains behind
+    //      him and the sky full of stars (no moon). Clean mint lines on night greens, drawn by
+    //      art/title/title_scene.py; here he breathes, the bright stars twinkle and now and then one falls.
     private fun img(name: String) = context.assets.open("images/$name").use { android.graphics.BitmapFactory.decodeStream(it) }
-    private val bg = img("title_bg.png")
-    private val fg = img("title_fg.png")
-    private val sheet = img("yeti_frames.png")
-    private val story = org.json.JSONObject(context.assets.open("images/title_story.json").use { String(it.readBytes()) })
-    private val fps = story.getInt("fps")
-    private val frameRects = story.getJSONArray("frames").let { a -> Array(a.length()) { i -> a.getJSONArray(i).let { r -> IntArray(6) { r.getInt(it) } } } }
-    private val steps = story.getJSONArray("steps").let { a -> IntArray(a.length()) { a.getInt(it) } }
-    /** The firefly he chases, per step: x, y, brightness, state (0 free, 1 in his hands, 2 hidden in his hands, 3 in the ground, 4 a new one arriving). */
-    private val fly = story.getJSONArray("fly").let { a -> Array(a.length()) { i -> a.getJSONArray(i).let { r -> floatArrayOf(r.getDouble(0).toFloat(), r.getDouble(1).toFloat(), r.getDouble(2).toFloat(), r.optDouble(3, 0.0).toFloat()) } } }
-    private val digs = story.optJSONArray("digs")?.let { a -> FloatArray(a.length()) { a.getDouble(it).toFloat() } } ?: FloatArray(0)
-    private val hole = story.getJSONArray("hole").let { floatArrayOf(it.getDouble(0).toFloat(), it.getDouble(1).toFloat()) }
-    private val tPlace = story.getDouble("place").toFloat()
-    private val scoops = story.getJSONArray("scoops").let { a -> FloatArray(a.length()) { a.getDouble(it).toFloat() } }
-    private val duration = story.getDouble("duration").toFloat()
-    /** How much slower than the original timing the story plays (the dirt flies at the same pace). */
-    private val slow = story.optDouble("slow", 1.0).toFloat()
-    private val pixel = Paint().apply { isFilterBitmap = false; isAntiAlias = false }
-    private val dot = Paint()
+    private val scene = img("title_scene.webp")
+    private val yeti = img("title_yeti.png")
+    private val meta = org.json.JSONObject(context.assets.open("images/title_scene.json").use { String(it.readBytes()) })
+    private val yetiX = meta.getDouble("yetiX").toFloat()
+    private val yetiFeet = meta.getDouble("yetiFeet").toFloat()
+    private val twinkles = meta.getJSONArray("twinkles").let { a -> Array(a.length()) { i -> a.getJSONArray(i).let { r -> floatArrayOf(r.getDouble(0).toFloat(), r.getDouble(1).toFloat(), r.getDouble(2).toFloat()) } } }
+    private val smooth = Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)
+    private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND; color = MINT }
+    private val glow = Paint(Paint.ANTI_ALIAS_FLAG)
     private val src = android.graphics.Rect(); private val dst = android.graphics.RectF()
     private val t0 = System.nanoTime()
-    /** Other fireflies: centre, orbit radii, speed and phase, in scene pixels. */
-    private val bugs = arrayOf(
-        floatArrayOf(250f, 150f, 30f, 12f, 0.45f, 2.1f), floatArrayOf(180f, 110f, 40f, 14f, 0.5f, 0.4f), floatArrayOf(90f, 140f, 30f, 18f, 0.7f, 3.0f),
-        floatArrayOf(460f, 150f, 14f, 20f, 0.55f, 4.2f), floatArrayOf(40f, 175f, 26f, 10f, 0.6f, 5.1f), floatArrayOf(440f, 70f, 18f, 12f, 0.4f, 2.7f),
-    )
-    private val DIRT = intArrayOf(0xFF3E2816.toInt(), 0xFF5A3A20.toInt(), 0xFF7A5230.toInt(), 0xFF4F8436.toInt())
-    private fun hash(n: Int): Float { var x = n * 374761393 + 668265263; x = (x xor (x ushr 13)) * 1274126177; return ((x xor (x ushr 16)) and 0xFFFF) / 65535f }
 
     override fun onDraw(c: Canvas) {
         val w = width.toFloat(); val h = height.toFloat()
-        val clock = (System.nanoTime() - t0) / 1e9f
-        val t = clock % duration
-        val step = (t * fps).toInt().coerceIn(0, steps.size - 1)
-        // Fill the screen; keep the right edge (where the yeti is) and crop from the left or top.
-        val k = maxOf(w / bg.width, h / bg.height)
-        val sw = (w / k).toInt().coerceAtMost(bg.width); val sh = (h / k).toInt().coerceAtMost(bg.height)
-        val left = bg.width - sw; val top = (bg.height - sh) / 2
+        val t = (System.nanoTime() - t0) / 1e9f
+        // Fill the screen; keep the right edge (where he stands) and crop from the left, and evenly top and bottom.
+        val k = maxOf(w / scene.width, h / scene.height)
+        val sw = (w / k).toInt().coerceAtMost(scene.width); val sh = (h / k).toInt().coerceAtMost(scene.height)
+        val left = scene.width - sw; val top = (scene.height - sh) / 2
         src.set(left, top, left + sw, top + sh); dst.set(0f, 0f, w, h)
-        c.drawBitmap(bg, src, dst, pixel)
+        c.drawBitmap(scene, src, dst, smooth)
         fun sx(x: Float) = (x - left) * k
         fun sy(y: Float) = (y - top) * k
-        fun px(x: Int, y: Int, col: Int, size: Int = 1) { dot.color = col; c.drawRect(sx(x.toFloat()), sy(y.toFloat()), sx((x + size).toFloat()), sy((y + size).toFloat()), dot) }
-        // the little grave: a hole once he starts scratching, then a mound that grows with each scoop
-        if (digs.isNotEmpty() && t >= digs[0] && t < tPlace) {
-            val hx = hole[0].toInt(); val hy = hole[1].toInt(); val n = digs.count { t >= it }
-            for (x in -2 - n..2 + n) px(hx + x, hy, DIRT[0]); for (x in -1 - n..1 + n) px(hx + x, hy - 1, DIRT[1])
+        // the bright stars twinkle, each in its own time
+        for ((i, s) in twinkles.withIndex()) {
+            val p = 0.5f + 0.5f * kotlin.math.sin(t * (0.9f + 0.23f * (i % 5)) + i * 2.1f)
+            if (p < 0.55f) continue
+            val a = (p - 0.55f) / 0.45f
+            val x = sx(s[0]); val y = sy(s[1]); val r = s[2] * k * (1.2f + 0.9f * a)
+            glow.shader = android.graphics.RadialGradient(x, y, r * 1.4f, Pal.alpha(MINT, 0.35f * a), 0, android.graphics.Shader.TileMode.CLAMP)
+            c.drawCircle(x, y, r * 1.4f, glow)
+            line.strokeWidth = maxOf(1f, s[2] * k * 0.14f); line.alpha = (200 * a).toInt()
+            c.drawLine(x, y - r, x, y + r, line); c.drawLine(x - r * 0.8f, y, x + r * 0.8f, y, line)
         }
-        if (t >= tPlace) {
-            val hx = hole[0].toInt(); val hy = hole[1].toInt()
-            val filled = scoops.count { t >= it }
-            if (filled == 0) { for (x in -3..3) px(hx + x, hy, DIRT[0]); for (x in -2..2) px(hx + x, hy - 1, DIRT[0]) }
-            else for (row in 0 until 1 + filled) { val half = 5 - row; for (x in -half..half) px(hx + x, hy - row, DIRT[if ((x + row) % 3 == 0) 2 else 1]) }
-            val glow = if (fly[step][3] == 3f) fly[step][2] else 0f
-            if (glow > 0.02f) { dot.color = Pal.alpha(0xFFE8FF8A.toInt(), 0.45f * glow); c.drawRect(sx(hx - 2f), sy(hy - 2f - filled), sx(hx + 3f), sy(hy + 1f), dot) }
+        glow.shader = null
+        // now and then a star falls: a thin line that thickens and fades
+        val period = 11f; val ph = t % period; val n = (t / period).toInt()
+        if (ph < 0.9f) {
+            val f = ph / 0.9f
+            val x0 = 300f + (n * 733 % 1500); val y0 = 60f + (n * 211 % 200)
+            val hx = x0 + 420f * f; val hy = y0 + 150f * f
+            val tx = x0 + 420f * maxOf(0f, f - 0.3f); val ty = y0 + 150f * maxOf(0f, f - 0.3f)
+            line.strokeWidth = 2.2f * k; line.alpha = (230 * (1f - f)).toInt()
+            c.drawLine(sx(tx), sy(ty), sx(hx), sy(hy), line)
         }
-        // the yeti
-        val fr = frameRects[steps[step]]
-        src.set(fr[0], fr[1], fr[0] + fr[2], fr[1] + fr[3])
-        dst.set(sx(fr[4].toFloat()), sy(fr[5].toFloat()), sx((fr[4] + fr[2]).toFloat()), sy((fr[5] + fr[3]).toFloat()))
-        c.drawBitmap(sheet, src, dst, pixel)
-        // earth scratched out of the hole flies back behind him
-        for ((di, d0) in digs.withIndex()) {
-            val age = (t - d0) / slow
-            if (age < 0f || age > 0.55f) continue
-            for (j in 0 until 5) {
-                val r1 = hash(di * 91 + j); val r2 = hash(di * 37 + j * 5)
-                val x = hole[0] - (20f + 26f * r1) * age / 0.55f
-                val y = hole[1] - 2f - (16f + 12f * r2) * kotlin.math.sin(Math.PI.toFloat() * age / 0.55f)
-                px(x.toInt(), y.toInt(), DIRT[(r2 * 3.99f).toInt()], if (j % 2 == 0) 2 else 1)
-            }
-        }
-        // earth he pulls over it, flying in little arcs
-        for ((si, s0) in scoops.withIndex()) {
-            val age = (t - s0) / slow + 0.35f
-            if (age < 0f || age > 0.6f) continue
-            for (j in 0 until 6) {
-                val r1 = hash(si * 31 + j); val r2 = hash(si * 57 + j * 7)
-                val x = hole[0] + 16f + 10f * r1 - (24f + 14f * r2) * age / 0.6f
-                val y = hole[1] - 2f - 18f * r2 * kotlin.math.sin(Math.PI.toFloat() * age / 0.6f)
-                px(x.toInt(), y.toInt(), DIRT[(r1 * 3.99f).toInt()], if (j % 3 == 0) 2 else 1)
-            }
-        }
-        // the firefly he's after (in his hand once caught)
-        val f = fly[step]
-        if (f[3] != 2f && f[3] != 3f && f[2] > 0.02f) {   // (state 2: hidden in his hands while he turns his back)
-            val pulse = 0.6f + 0.4f * kotlin.math.sin(clock * 6f)
-            dot.color = Pal.alpha(0xFFE8FF8A.toInt(), 0.4f * pulse * f[2]); c.drawRect(sx(f[0] - 1), sy(f[1] - 1), sx(f[0] + 2), sy(f[1] + 2), dot)
-            dot.color = Pal.alpha(0xFFF6FF9A.toInt(), f[2]); c.drawRect(sx(f[0].toInt().toFloat()), sy(f[1].toInt().toFloat()), sx(f[0].toInt() + 1f), sy(f[1].toInt() + 1f), dot)
-        }
-        // tall grass in front
-        src.set(left, top, left + sw, top + sh); dst.set(0f, 0f, w, h); c.drawBitmap(fg, src, dst, pixel)
-        // the other fireflies drifting around the clearing
-        for (b in bugs) {
-            val x = b[0] + b[2] * kotlin.math.sin(clock * b[4] + b[5]); val y = b[1] + b[3] * kotlin.math.sin(clock * b[4] * 1.7f + b[5] * 2f)
-            val pulse = 0.55f + 0.45f * kotlin.math.sin(clock * 3.1f + b[5] * 5f)
-            val qx = sx(x.toInt().toFloat()); val qy = sy(y.toInt().toFloat())
-            dot.color = Pal.alpha(0xFFE8FF8A.toInt(), 0.35f * pulse); c.drawRect(qx - k, qy - k, qx + 2 * k, qy + 2 * k, dot)
-            dot.color = Pal.alpha(0xFFF6FF9A.toInt(), 0.6f + 0.4f * pulse); c.drawRect(qx, qy, qx + k, qy + k, dot)
-        }
-        headP.textAlign = Paint.Align.LEFT
-        snesTitle(c, "5 EYE YETI", Px.dp(28f), Px.dp(64f))
-        postInvalidateDelayed(40)
+        line.alpha = 255
+        // the yeti, breathing slowly (his feet stay put)
+        val breathe = 1f + 0.014f * kotlin.math.sin(t * 1.7f)
+        val yw = yeti.width * k * (2f - breathe); val yh = yeti.height * k * breathe
+        val fx = sx(yetiX); val fy = sy(yetiFeet)
+        dst.set(fx - yw / 2, fy - yh, fx + yw / 2, fy)
+        c.drawBitmap(yeti, null, dst, smooth)
+        title(c, "5 EYE YETI", Px.dp(28f), Px.dp(64f))
+        postInvalidateDelayed(33)
     }
 
-    /** Super Nintendo-style title: banded metallic fill, thick ink outline and a drop shadow. */
-    private fun snesTitle(c: Canvas, text: String, cx: Float, base: Float) {
+    /** The name in mint, with a soft dark shadow (to match the scene's lines). */
+    private fun title(c: Canvas, text: String, x: Float, base: Float) {
         val p = headP
-        p.shader = null; p.style = Paint.Style.FILL
-        p.color = 0xFF120C0A.toInt()
-        val o = Px.dp(3f)
-        for (dx in -1..1) for (dy in -1..2) c.drawText(text, cx + dx * o, base + dy * o + Px.dp(3f), p)
-        p.color = Pal.BROWN_D
-        for (dx in -1..1) for (dy in -1..1) if (dx != 0 || dy != 0) c.drawText(text, cx + dx * o * 0.6f, base + dy * o * 0.6f, p)
-        val top = base + p.ascent(); val bottom = base + p.descent() * 0.2f
-        val n = shine.size
-        val stops = FloatArray(n * 2); val cols = IntArray(n * 2)
-        for (i in 0 until n) { stops[i * 2] = i / n.toFloat(); stops[i * 2 + 1] = (i + 1) / n.toFloat() - 0.001f; cols[i * 2] = shine[i]; cols[i * 2 + 1] = shine[i] }
-        p.shader = android.graphics.LinearGradient(0f, top, 0f, bottom, cols, stops, android.graphics.Shader.TileMode.CLAMP)
-        c.drawText(text, cx, base, p)
-        p.shader = null
+        p.textAlign = Paint.Align.LEFT; p.shader = null; p.style = Paint.Style.FILL
+        p.color = 0xCC0C1610.toInt()
+        val o = Px.dp(2f)
+        for (dx in -1..1) for (dy in -1..2) c.drawText(text, x + dx * o, base + dy * o + o, p)
+        p.color = MINT
+        c.drawText(text, x, base, p)
     }
 
     @SuppressLint("ViewConstructor")
@@ -209,5 +150,6 @@ class ProjectScreen(c: Context, private val onOpen: (Project) -> Unit, private v
     }
 }
 
+private const val MINT = 0xFFDEF2D4.toInt()
 private val CARD_W = Px.dp(150)
 private val CARD_H = Px.dp(128)

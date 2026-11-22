@@ -694,12 +694,7 @@ class ClibbinsScreen(c: Context, private val host: Host) : PixelView(c) {
                 removeCallbacks(longPress)
                 if (eyeTouch) {
                     eyeTouch = false
-                    val dx = x - downX; val dy = y - downY
-                    when {
-                        // swiped away to the right: everything stops, and off you go to answer for it
-                        dx > Px.dp(60f) && abs(dy) < dx * 0.8f -> { eyeUntil = 0L; eyeSore = false; host.showHall() }
-                        hypot(dx, dy) < Px.dp(14f) -> pokeEye()
-                    }
+                    if (hypot(x - downX, y - downY) < Px.dp(14f)) pokeEye()
                     return true
                 }
                 val b = burying

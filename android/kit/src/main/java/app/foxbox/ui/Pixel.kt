@@ -66,8 +66,16 @@ object Px {
     lateinit var head: Typeface; private set
     lateinit var body: Typeface; private set
 
+    /** How much bigger than on a phone everything is drawn (1 on phones, up to 1.4 on big tablets). */
+    var scale = 1f; private set
+
     fun init(c: Context) {
-        density = c.resources.displayMetrics.density
+        // The interface is laid out for a phone held sideways (about 360 to 430 dp tall). On a tablet
+        // the whole thing grows as one piece, so it fills the screen instead of floating in it.
+        val dm = c.resources.displayMetrics
+        val shortDp = minOf(dm.widthPixels, dm.heightPixels) / dm.density
+        scale = (shortDp / 430f).coerceIn(1f, 1.4f)
+        density = dm.density * scale
         u = (3 * density).coerceAtLeast(2f)
         head = runCatching { Typeface.createFromAsset(c.assets, "fonts/5IY-Head.ttf") }.getOrDefault(Typeface.MONOSPACE)
         body = runCatching { Typeface.createFromAsset(c.assets, "fonts/5IY-Body.ttf") }.getOrDefault(Typeface.MONOSPACE)

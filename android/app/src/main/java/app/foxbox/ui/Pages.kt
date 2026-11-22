@@ -23,7 +23,7 @@ class SquareBox(c: Context, child: View) : FrameLayout(c) {
     override fun onMeasure(w: Int, h: Int) {
         // a little smaller on narrow phones, leaving the strum pad room to play
         val wpx = resources.displayMetrics.widthPixels
-        val share = if (wpx / resources.displayMetrics.density < 760f) 0.36f else 0.42f
+        val share = if (wpx / Px.density < 760f) 0.36f else 0.42f
         val size = minOf(MeasureSpec.getSize(h), (wpx * share).toInt())
         super.onMeasure(MeasureSpec.makeMeasureSpec(size, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(size, MeasureSpec.EXACTLY))
     }

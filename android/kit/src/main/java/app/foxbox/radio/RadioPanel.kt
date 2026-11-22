@@ -75,8 +75,12 @@ class RadioView(private val a: Activity, private val host: RadioHost, private va
 
     init { isClickable = true }
 
+    /** One "dp" of the radio, scaled with the panel: on a narrow (upright) phone everything shrinks
+     *  together, so the labels keep their places instead of running into each other. */
+    private val unit get() = Px.dp(1f) * (width / Px.dp(640f)).coerceIn(0.5f, 1f)
+
     override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) {
-        val d = Px.dp(1f)
+        val d = unit
         box.set(4 * d, h * 0.13f, w - 4 * d, h - 4 * d)
         val bh = box.height()
         dial.set(box.left + bh * 0.08f, box.top + bh * 0.14f, box.right - bh * 0.08f, box.top + bh * 0.46f)
@@ -92,7 +96,7 @@ class RadioView(private val a: Activity, private val host: RadioHost, private va
     private fun stationX(i: Int): Float { val n = Radio.stations.size.coerceAtLeast(1); return (i + 0.5f) / n }
 
     override fun onDraw(c: Canvas) {
-        val d = Px.dp(1f); val t = SystemClock.uptimeMillis() / 1000f
+        val d = unit; val t = SystemClock.uptimeMillis() / 1000f
         // recording stopped on its own (the 60 second limit, or the station dropped out)
         if (wasRecording && !Radio.recording) { wasRecording = false; post { finishRecording() } }
         wasRecording = Radio.recording
@@ -140,7 +144,7 @@ class RadioView(private val a: Activity, private val host: RadioHost, private va
     }
 
     private fun lamp(c: Canvas, x: Float, y: Float, label: String, col: Int) {
-        val d = Px.dp(1f)
+        val d = unit
         p.color = CHARCOAL_D; c.drawCircle(x + 5 * d, y + 5 * d, 4.5f * d, p)
         p.color = col; c.drawCircle(x + 5 * d, y + 5 * d, 3.2f * d, p)
         head.textSize = 7 * d; head.color = SILVER; head.textAlign = Paint.Align.LEFT
@@ -148,7 +152,7 @@ class RadioView(private val a: Activity, private val host: RadioHost, private va
     }
 
     private fun drawDial(c: Canvas, t: Float) {
-        val d = Px.dp(1f)
+        val d = unit
         p.color = CHARCOAL_D; c.drawRoundRect(dial.left - 2 * d, dial.top - 2 * d, dial.right + 2 * d, dial.bottom + 2 * d, 6 * d, 6 * d, p)
         p.shader = LinearGradient(0f, dial.top, 0f, dial.bottom, 0xFF1C2630.toInt(), GLASS, Shader.TileMode.CLAMP)
         c.drawRoundRect(dial, 5 * d, 5 * d, p); p.shader = null
@@ -198,7 +202,7 @@ class RadioView(private val a: Activity, private val host: RadioHost, private va
     private fun fit(s: String, w: Float): String { var t = s; while (t.length > 3 && body.measureText(t) > w) t = t.dropLast(2) + "…"; return t }
 
     private fun drawGrille(c: Canvas) {
-        val d = Px.dp(1f)
+        val d = unit
         p.color = CHARCOAL_D; c.drawRoundRect(grille, 8 * d, 8 * d, p)
         // rows of punched holes
         val step = 6 * d
@@ -221,7 +225,7 @@ class RadioView(private val a: Activity, private val host: RadioHost, private va
     }
 
     private fun drawKnob(c: Canvas) {
-        val d = Px.dp(1f)
+        val d = unit
         val cx = knob.centerX(); val cy = knob.centerY() + knob.height() * 0.06f; val r = minOf(knob.width(), knob.height()) * 0.38f
         p.color = CHARCOAL_D; c.drawCircle(cx + 2 * d, cy + 3 * d, r + 2 * d, p)
         p.shader = RadialGradient(cx - r * 0.3f, cy - r * 0.3f, r * 1.4f, CHROME, SILVER_D, Shader.TileMode.CLAMP)
@@ -236,7 +240,7 @@ class RadioView(private val a: Activity, private val host: RadioHost, private va
     }
 
     private fun drawWheel(c: Canvas) {
-        val d = Px.dp(1f)
+        val d = unit
         p.color = CHARCOAL_D; c.drawRoundRect(wheel, 4 * d, 4 * d, p)
         p.color = 0xFF3E3D45.toInt(); c.drawRoundRect(wheel.left + 2 * d, wheel.top + 2 * d, wheel.right - 2 * d, wheel.bottom - 2 * d, 3 * d, 3 * d, p)
         // ridges that move as the volume turns

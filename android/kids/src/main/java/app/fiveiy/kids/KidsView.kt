@@ -64,12 +64,13 @@ class KidsView(c: Context, private val host: Host) : View(c) {
 
     private fun layoutAll(w: Float, h: Float) {
         val pad = 10 * d
-        val topH = 62 * d
-        for (i in 0 until 3) tabs[i].set(pad + i * 84 * d, pad, pad + i * 84 * d + 76 * d, pad + topH)
+        val topH = (h * 0.16f).coerceIn(48 * d, 62 * d)
+        val tw = topH * 1.22f
+        for (i in 0 until 3) tabs[i].set(pad + i * (tw + 8 * d), pad, pad + i * (tw + 8 * d) + tw, pad + topH)
         rootUp.set(w - pad - 56 * d, pad, w - pad, pad + topH)
         rootBox.set(rootUp.left - 6 * d - 78 * d, pad, rootUp.left - 6 * d, pad + topH)
         rootDown.set(rootBox.left - 6 * d - 56 * d, pad, rootBox.left - 6 * d, pad + topH)
-        val keysH = (h * 0.3f).coerceIn(88 * d, 150 * d)
+        val keysH = (h * 0.27f).coerceIn(80 * d, 150 * d)
         keysR.set(pad, h - pad - keysH, w - pad, h - pad)
         val kw = (keysR.width() - 7 * 6 * d) / 8
         for (i in 0 until 8) keys[i].set(keysR.left + i * (kw + 6 * d), keysR.top, keysR.left + i * (kw + 6 * d) + kw, keysR.bottom)
@@ -79,11 +80,14 @@ class KidsView(c: Context, private val host: Host) : View(c) {
         panel.set(xy.right + pad, midT, w - pad, midB)
         val ph = panel.height(); val inner = 8 * d
         // the filter column (all three pages): sun at the top, cloud at the bottom, envelope button underneath
+        // a slider column: the slider runs the full height (sun at the top, cloud at the bottom);
+        // the filter's envelope button sits beside it, so the slider stays long even on small phones
         fun column(col: RectF, track: RectF, left: Float, withEnv: Boolean) {
-            col.set(left, panel.top + inner, left + 66 * d, panel.bottom - inner)
-            val btnH = if (withEnv) min(50 * d, col.height() * 0.3f) else 0f
-            track.set(col.centerX() - 13 * d, col.top + 26 * d, col.centerX() + 13 * d, col.bottom - btnH - (if (withEnv) 30 * d else 26 * d))
-            envBtn.set(col.left + 4 * d, col.bottom - btnH, col.right - 4 * d, col.bottom)
+            val sw = 50 * d
+            col.set(left, panel.top + inner, left + sw + (if (withEnv) 58 * d else 0f), panel.bottom - inner)
+            val cx = col.left + sw / 2
+            track.set(cx - 13 * d, col.top + 26 * d, cx + 13 * d, col.bottom - 26 * d)
+            if (withEnv) { val bh = min(56 * d, col.height()); envBtn.set(col.left + sw + 4 * d, col.centerY() - bh / 2, col.right, col.centerY() + bh / 2) }
         }
         when (page) {
             0 -> {
@@ -186,8 +190,8 @@ class KidsView(c: Context, private val host: Host) : View(c) {
 
     private fun filterColumn(c: Canvas) {
         val col = filterCol; val t = filterTrack
-        sun(c, col.centerX(), col.top + 12 * d, 9 * d, Snes.YELLOW)
-        cloud(c, col.centerX(), t.bottom + 15 * d, 8 * d, Snes.SHADE)
+        sun(c, t.centerX(), t.top - 13 * d, 9 * d, Snes.YELLOW)
+        cloud(c, t.centerX(), t.bottom + 14 * d, 8 * d, Snes.SHADE)
         slider(c, t, inst.filter, Pal.AQUA)
         val on = inst.filterEnv
         plateOf(c, envBtn.left, envBtn.top, envBtn.right, envBtn.bottom, if (on) Snes.GREEN else Snes.HI)
@@ -197,8 +201,8 @@ class KidsView(c: Context, private val host: Host) : View(c) {
     private fun pitchColumn(c: Canvas) {
         val col = pitchCol; val t = pitchTrack
         // small and high at the top, big and low at the bottom
-        paint.color = Snes.PURPLE; c.drawCircle(col.centerX(), col.top + 12 * d, 5 * d, paint)
-        c.drawCircle(col.centerX(), t.bottom + 14 * d, 10 * d, paint)
+        paint.color = Snes.PURPLE; c.drawCircle(t.centerX(), t.top - 13 * d, 5 * d, paint)
+        c.drawCircle(t.centerX(), t.bottom + 14 * d, 9 * d, paint)
         slider(c, t, Sound.drums.pitch, Snes.PURPLE)
     }
 

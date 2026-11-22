@@ -138,8 +138,8 @@ class StudioScreen(c: Context, private val host: Host) : FrameLayout(c) {
     private fun topBar(c: Context): View {
         val t = Audio.transport
         nameBtn = Btn(c, Studio.project.name, Pal.BROWN).apply { onClick = { Studio.save(true); host.showProjects() } }
-        playBtn = Btn(c, "▶", Pal.AQUA, 44).apply { onClick = { Studio.play() } }
-        val stopBtn = Btn(c, "■", Pal.BROWN_L, 44).apply { onClick = { Studio.stop() } }
+        playBtn = Btn(c, "▶", Pal.AQUA, 40).apply { onClick = { Studio.play() } }
+        val stopBtn = Btn(c, "■", Pal.BROWN_L, 40).apply { onClick = { Studio.stop() } }
         val bpm = Stepper(c, "BPM", 92, { Studio.project.bpm.toInt().toString() }) { Studio.setBpm(Studio.project.bpm + it) }
         bpm.onMiddle = { host.bpmDialog() }
         metroBtn = Btn(c, "Click", Pal.AQUA).apply { onClick = { Studio.setMetronome(!t.metronome) } }
@@ -161,7 +161,7 @@ class StudioScreen(c: Context, private val host: Host) : FrameLayout(c) {
     private inner class Position(c: Context) : PixelView(c) {
         private val p = Px.text(13f, Pal.CREAM)
         init { animated = true }
-        override fun onMeasure(w: Int, h: Int) = setMeasuredDimension(Px.dp(96), Px.dp(44))
+        override fun onMeasure(w: Int, h: Int) = setMeasuredDimension(Px.dp(80), Px.dp(44))
         override fun paint(c: Canvas) {
             val t = Audio.transport
             val counting = (t.rec == Transport.Rec.ARMED && t.tick < t.recStart) || t.audioRec == Transport.Rec.ARMED || (t.sampRec == Transport.Rec.ARMED && t.tick < 0)

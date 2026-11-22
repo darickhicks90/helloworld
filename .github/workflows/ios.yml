@@ -75,6 +75,17 @@ jobs:
             xcrun simctl shutdown "$UDID"
           done < devices.txt
 
+      - name: Screenshots and problems in the log
+        if: always()
+        run: |
+          cat devices.txt || true
+          for f in shots/*.txt; do echo "===== $f"; cat "$f"; done
+          for f in shots/*.png; do
+            n=$(basename "$f" .png)
+            sips -Z 900 "$f" --out "/tmp/$n.jpg" -s format jpeg -s formatOptions 55 >/dev/null
+            echo "=====BEGIN $n====="; base64 -i "/tmp/$n.jpg" | tr -d '\n'; echo; echo "=====END $n====="
+          done
+
       - name: Package
         run: |
           cd build/Build/Products/Debug-iphonesimulator && zip -qr "$GITHUB_WORKSPACE/5IY-ios-simulator.zip" FiveEyeYeti.app

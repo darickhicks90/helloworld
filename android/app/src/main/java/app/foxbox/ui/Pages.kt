@@ -21,7 +21,10 @@ import app.foxbox.seq.Theory
 class SquareBox(c: Context, child: View) : FrameLayout(c) {
     init { addView(child, LayoutParams(MATCH, MATCH)) }
     override fun onMeasure(w: Int, h: Int) {
-        val size = minOf(MeasureSpec.getSize(h), (resources.displayMetrics.widthPixels * 0.42f).toInt())
+        // a little smaller on narrow phones, leaving the strum pad room to play
+        val wpx = resources.displayMetrics.widthPixels
+        val share = if (wpx / resources.displayMetrics.density < 760f) 0.36f else 0.42f
+        val size = minOf(MeasureSpec.getSize(h), (wpx * share).toInt())
         super.onMeasure(MeasureSpec.makeMeasureSpec(size, MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(size, MeasureSpec.EXACTLY))
     }
 }
@@ -57,8 +60,11 @@ class InstrumentPage(c: Context, id: String, host: Host) : LinearLayout(c) {
             latchBtn.onClick = { seq.latch.set(if (seq.latch.on) 0f else 1f); Studio.save(); refresh() }
             chords.footer(seqBtn, latchBtn, viewBtn)
         }
-        // a little narrower than before, so the strum pad gets the room
-        addView(col, lp(Px.dp(226), MATCH).apply { leftMargin = Px.dp(6) })
+        // the chord buttons scale with the screen (narrower on small phones) so the strum pad
+        // beside them always keeps a good, playable width
+        val screenDp = resources.displayMetrics.widthPixels / Px.density
+        val colW = (screenDp * 0.25f).coerceIn(190f, 226f)
+        addView(col, lp(Px.dp(colW).toInt(), MATCH).apply { leftMargin = Px.dp(6) })
         val right = FrameLayout(c)
         strum = StrumPad(c, chords.chords).apply { this.accent = accent }
         right.addView(strum, FrameLayout.LayoutParams(MATCH, MATCH))

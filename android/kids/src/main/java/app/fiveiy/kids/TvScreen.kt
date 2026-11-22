@@ -87,7 +87,7 @@ class TvScreen(private val kind: Int, private val inst: () -> Instrument) {
             2 -> c.spriteCentered(Sprites.drop, x, y, u * 1.6f)
             else -> {
                 val g = u; val r = g * 4
-                for ((sx, sy) in listOf(-1f to -1f, 1f to -1f, -1f to 1f, 1f to 1f)) {
+                for (q in 0 until 4) { val sx = if (q and 1 == 0) -1f else 1f; val sy = if (q < 2) -1f else 1f
                     val cx = x + sx * r; val cy = y + sy * r
                     c.fill(minOf(cx, cx - sx * g * 2), cy - g / 2, maxOf(cx, cx - sx * g * 2), cy + g / 2, Pal.CREAM)
                     c.fill(cx - g / 2, minOf(cy, cy - sy * g * 2), cx + g / 2, maxOf(cy, cy - sy * g * 2), Pal.CREAM)

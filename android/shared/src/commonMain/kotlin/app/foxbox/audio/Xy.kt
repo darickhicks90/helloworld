@@ -47,19 +47,34 @@ class XyState(private val params: Params, defaultX: String, defaultY: String) {
     val xParam get() = targets[xTarget.index.coerceIn(0, targets.size - 1)]
     val yParam get() = targets[yTarget.index.coerceIn(0, targets.size - 1)]
 
+    // What the sound actually follows: the pad position, smoothed. A finger (or a touch screen
+    // reporting every 8 ms or so) moves in jumps; stepping a filter or a pitch by those jumps once
+    // per block is heard as zipper noise and clicks. A short glide (about 15 ms) is inaudible as
+    // lag but removes the steps.
+    private var sx = 0.5f; private var sy = 0.5f
+
     /** Call once at the start of each audio block. */
-    fun begin() { live = touching || automated; automated = false }
+    fun begin() {
+        live = touching || automated; automated = false
+        if (!live) { sx = xParam.norm; sy = yParam.norm }   // rest where the parameters are, so a touch glides from there
+        else { sx += (x - sx) * GLIDE; sy += (y - sy) * GLIDE }
+    }
     val isLive get() = live
 
     /** Effective value of a parameter, including the XY override. */
     fun v(p: Param): Float {
         if (!live) return p.value
-        if (p === xParam) return p.valueAt(x)
-        if (p === yParam) return p.valueAt(y)
+        if (p === xParam) return p.valueAt(sx)
+        if (p === yParam) return p.valueAt(sy)
         return p.value
     }
 
     /** Where the dot sits when nobody is touching the pad. */
     fun restX() = xParam.norm
     fun restY() = yParam.norm
+
+    private companion object {
+        /** Per block (about 4 ms): reaches the finger in about 15 ms. */
+        const val GLIDE = 0.25f
+    }
 }

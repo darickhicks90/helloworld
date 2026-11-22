@@ -19,6 +19,7 @@ import app.foxbox.audio.setSampleRate
 import app.foxbox.engines.DrumKits
 import java.util.concurrent.ConcurrentLinkedQueue
 import kotlin.math.abs
+import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
@@ -376,7 +377,11 @@ class SillyFx {
     /** The pitch the instrument should play at (pitch mode), smoothed. */
     var pitch = 1f; private set
 
+    // Clean by design: every effect runs all the time (so none ever starts from stale state), and
+    // each one's amount glides sample by sample (about 12 ms) and crossfades dry to wet, so moving
+    // the dot, or the dot springing home, never clicks or steps.
     private var sx = 0f; private var sy = 0f
+    private val glide = 1f - exp(-1f / (0.012f * SRF))
     private val wah = Svf(); private val wahR = Svf()
     private val vib = DelayLine(4096); private val vibR = DelayLine(4096)
     private val echo = DelayLine(SR); private val echoR = DelayLine(SR)
@@ -384,44 +389,43 @@ class SillyFx {
     private var holdL = 0f; private var holdR = 0f; private var holdN = 0
 
     fun process(l: FloatArray, r: FloatArray, n: Int) {
-        // glide towards the finger (and back home) so nothing clicks
-        sx += (x - sx) * 0.25f; sy += (y - sy) * 0.25f
-        if (abs(sx) < 0.002f) sx = 0f; if (abs(sy) < 0.002f) sy = 0f
-        val left = max(0f, -sx); val right = max(0f, sx); val up = max(0f, sy); val down = max(0f, -sy)
-        pitch = if (pitchMode) 2f.pow(sx) else 1f   // an octave either way
-        if (!pitchMode && left > 0f) {
-            val rate = 1.2f + left * 2.5f
-            for (i in 0 until n) {
-                lfo += rate / SRF; if (lfo >= 1f) lfo -= 1f
-                if (i and 15 == 0) { val hz = 350f + 1400f * (0.5f + 0.5f * sin(TAU * lfo)); wah.set(hz, 0.55f + 0.3f * left); wahR.set(hz * 1.05f, 0.55f + 0.3f * left) }
-                val a = wah.process(l[i]); val b = wahR.process(r[i])
-                l[i] += (a * 1.3f - l[i]) * left; r[i] += (b * 1.3f - r[i]) * left
-            }
-        }
-        if (!pitchMode && right > 0f) {
-            val rate = 4.5f + right * 4f; val depth = right * SRF * 0.004f
-            for (i in 0 until n) {
-                lfo2 += rate / SRF; if (lfo2 >= 1f) lfo2 -= 1f
-                vib.write(l[i]); vibR.write(r[i])
-                val d = SRF * 0.005f + depth * (1f + sin(TAU * lfo2))
-                l[i] = vib.read(d); r[i] = vibR.read(d)
-            }
-        }
-        if (down > 0f) {
-            val every = 1 + (down * 10f).toInt(); val q = 2f.pow(10f - down * 6f)
-            for (i in 0 until n) {
-                if (holdN <= 0) { holdL = (l[i] * q).toInt() / q; holdR = (r[i] * q).toInt() / q; holdN = every }
-                holdN--
-                l[i] += (holdL - l[i]) * min(1f, down * 1.4f); r[i] += (holdR - r[i]) * min(1f, down * 1.4f)
-            }
-        }
-        // the echo always runs (so its tail rings out after the finger lets go)
-        val time = SRF * 0.33f; val fb = 0.25f + up * 0.4f; val mix = up * 0.7f
+        val tx = x; val ty = y; val pm = pitchMode
+        val time = SRF * 0.33f; val base = SRF * 0.005f
         for (i in 0 until n) {
-            val a = echo.read(time); val b = echoR.read(time * 1.07f)
-            echo.write(l[i] * mix + b * fb); echoR.write(r[i] * mix + a * fb)
-            l[i] += a; r[i] += b
+            sx += (tx - sx) * glide; sy += (ty - sy) * glide
+            val left = if (pm) 0f else max(0f, -sx); val right = if (pm) 0f else max(0f, sx)
+            val up = max(0f, sy); val down = max(0f, -sy)
+            var a = l[i]; var b = r[i]
+            // underwater: a slow resonant wah, crossfaded in (its filters always run)
+            lfo += (1.2f + left * 2.5f) / SRF; if (lfo >= 1f) lfo -= 1f
+            if (i and 15 == 0) { val hz = 350f + 1400f * (0.5f + 0.5f * sin(TAU * lfo)); val q = 0.55f + 0.3f * left; wah.set(hz, q); wahR.set(hz * 1.05f, q) }
+            val wa = wah.process(a) * 1.2f; val wb = wahR.process(b) * 1.2f
+            a += (wa - a) * left; b += (wb - b) * left
+            // wobble: a vibrato from a modulated delay, always written, its depth and wet mix gliding
+            lfo2 += (4.5f + right * 4f) / SRF; if (lfo2 >= 1f) lfo2 -= 1f
+            vib.write(a); vibR.write(b)
+            if (right > 0.0005f) {
+                val dly = base + right * SRF * 0.004f * (1f + sin(TAU * lfo2))
+                val wet = min(1f, right * 4f)
+                a += (vib.read(dly) - a) * wet; b += (vibR.read(dly) - b) * wet
+            }
+            // robot: sample-and-hold crush, always tracking, mixed in by amount
+            if (holdN <= 0) {
+                // crunchy, not harsh: at most 6x fewer samples and no fewer than 6 bits
+                val q = 2f.pow(10f - down * 4f)
+                holdL = (a * q).toInt() / q; holdR = (b * q).toInt() / q; holdN = 1 + (down * 5f).toInt()
+            }
+            holdN--
+            val cm = min(1f, down * 1.4f)
+            a += (holdL - a) * cm; b += (holdR - b) * cm
+            // space echo: always running, so its tail rings out after the finger lets go
+            val ea = echo.read(time); val eb = echoR.read(time * 1.07f)
+            val fb = 0.25f + up * 0.4f; val mix = up * 0.7f
+            echo.write(a * mix + eb * fb); echoR.write(b * mix + ea * fb)
+            l[i] = a + ea; r[i] = b + eb
         }
+        if (abs(sx) < 1e-5f) sx = 0f; if (abs(sy) < 1e-5f) sy = 0f
+        pitch = if (pm) 2f.pow(sx) else 1f   // an octave either way
     }
 }
 

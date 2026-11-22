@@ -146,7 +146,7 @@ class XyPad(c: Context, private val themeId: String, private val pickAxis: (XySt
         /** An on-screen-display cursor: four corner brackets round an orange dot. */
         open fun marker(c: Canvas, x: Float, y: Float, t: Float) {
             val g = Px.u; val r = g * 4
-            for ((sx, sy) in listOf(-1f to -1f, 1f to -1f, -1f to 1f, 1f to 1f)) {
+            for (q in 0 until 4) { val sx = if (q and 1 == 0) -1f else 1f; val sy = if (q < 2) -1f else 1f
                 val cx = x + sx * r; val cy = y + sy * r
                 c.fill(minOf(cx, cx - sx * g * 2), cy - g / 2, maxOf(cx, cx - sx * g * 2), cy + g / 2, Pal.CREAM)
                 c.fill(cx - g / 2, minOf(cy, cy - sy * g * 2), cx + g / 2, maxOf(cy, cy - sy * g * 2), Pal.CREAM)

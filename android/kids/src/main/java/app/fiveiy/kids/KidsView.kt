@@ -242,13 +242,14 @@ class KidsView(c: Context, private val host: Host) : View(c) {
         hold = xs
     }
     private var hold = 0f
+    private val fillPath = Path()
     private fun drawAdsr(c: Canvas) {
         val g = adsr
         c.fill(g.left, g.top, g.right, g.bottom, Tv.BEZEL)
         adsrPoints()
         val m = 18 * d; val x0 = g.left + m; val bot = g.bottom - m
         path.reset(); path.moveTo(x0, bot); path.lineTo(handle[0], handle[1]); path.lineTo(handle[2], handle[3]); path.lineTo(hold, handle[3]); path.lineTo(handle[4], bot)
-        val fillPath = Path(path); fillPath.lineTo(x0, bot); fillPath.close()
+        fillPath.set(path); fillPath.lineTo(x0, bot); fillPath.close()
         paint.color = Pal.alpha(Pal.AQUA, 0.3f); c.drawPath(fillPath, paint)
         stroke.color = Pal.AQUA_L; stroke.strokeWidth = 4 * d; c.drawPath(path, stroke)
         val cols = intArrayOf(Pal.ORANGE, Pal.HONEY, Pal.GREEN_L)

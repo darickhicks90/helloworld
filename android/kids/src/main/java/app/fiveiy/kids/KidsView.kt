@@ -64,7 +64,7 @@ class KidsView(c: Context, private val host: Host) : View(c) {
 
     private fun layoutAll(w: Float, h: Float) {
         val pad = 10 * d
-        val topH = (h * 0.16f).coerceIn(48 * d, 62 * d)
+        val topH = (h * 0.14f).coerceIn(48 * d, 78 * d)
         val tw = topH * 1.22f
         for (i in 0 until 3) tabs[i].set(pad + i * (tw + 8 * d), pad, pad + i * (tw + 8 * d) + tw, pad + topH)
         rootUp.set(w - pad - 56 * d, pad, w - pad, pad + topH)

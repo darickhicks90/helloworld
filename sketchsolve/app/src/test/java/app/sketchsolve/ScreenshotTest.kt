@@ -111,6 +111,21 @@ class ScreenshotTest {
         val bmp = Bitmap.createBitmap(v.width, v.height, Bitmap.Config.ARGB_8888)
         v.draw(Canvas(bmp))
         FileOutputStream(File(out, "$prefix-6-setup.png")).use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        dlg.dismiss(); settle(a)
+
+        // models in place: the notepad clears; models and library live under ⚙ Settings
+        val mm = a.models
+        val ready = listOf(mm.chosenLanguage, mm.chosenSpeech)
+        for (m in ready) java.io.RandomAccessFile(mm.file(m), "rw").use { it.setLength(m.bytes) }
+        val askMode = a.modes.first { it is AskMode } as AskMode
+        a.select(askMode); askMode.onTool("clearpage"); settle(a)
+        shot(a, "$prefix-10-ready")
+        a.showSettings("AI models & voice") { p -> askMode.renderModels(p) }; settle(a)
+        org.robolectric.shadows.ShadowDialog.getLatestDialog().window!!.decorView.let { d ->
+            val b = Bitmap.createBitmap(d.width, d.height, Bitmap.Config.ARGB_8888); d.draw(Canvas(b))
+            FileOutputStream(File(out, "$prefix-11-settings-models.png")).use { b.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        }
+        for (m in ready) mm.file(m).delete()
     }
 
     companion object {

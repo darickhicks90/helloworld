@@ -43,17 +43,36 @@ class AskMode(app: MainActivity) : Mode(app) {
     override fun onToolHold(tool: String, down: Boolean) {
         if (tool != "talk") return
         val speech = app.speech
-        if (speech == null) { if (down) needSpeechModel(); return }
+        if (speech == null) {
+            if (!down) return
+            when {
+                app.speechLoading -> app.toast("The speech model is still loading. Try again in a moment.")
+                app.models.speechReady() != null -> app.toast("Speech couldn't start on this phone. You can still type with ⌨.")
+                else -> needSpeechModel()
+            }
+            return
+        }
         if (down) {
+            try { speech.start() } catch (e: Exception) { app.toast("Couldn't use the microphone: ${e.message}"); return }
             listening = true
             show(WorkingView.Page.Busy("…", "Listening — let go when you've finished."))
-            speech.start()
         } else if (listening) {
             listening = false
+            val started = System.currentTimeMillis()
+            var done = false
             show(WorkingView.Page.Busy("…", "Writing down what you said…"))
+            // show it's working: count the seconds
+            app.main.postDelayed(object : Runnable {
+                override fun run() {
+                    if (done || current !is WorkingView.Page.Busy) return
+                    show(WorkingView.Page.Busy("…", "Writing down what you said… ${(System.currentTimeMillis() - started) / 1000}s"))
+                    app.main.postDelayed(this, 1000)
+                }
+            }, 1000)
             speech.stop { text ->
                 app.main.post {
-                    if (text.isBlank()) show(WorkingView.Page.Failed("(nothing heard)", "I didn't catch that. Hold the button and speak a little closer."))
+                    done = true
+                    if (text.isBlank()) show(WorkingView.Page.Failed("(nothing heard)", "I didn't catch that. Hold 🎤 the whole time you talk, and speak a little closer."))
                     else ask(text)
                 }
             }
@@ -107,6 +126,7 @@ class AskMode(app: MainActivity) : Mode(app) {
     }
 
     override fun refresh() {
+        app.settingsPanel?.invoke()
         if (app.mode !== this) return
         val pad = app.pad
         pad.clear()
@@ -126,7 +146,33 @@ class AskMode(app: MainActivity) : Mode(app) {
             }
             pad.button("✎ Edit the equations") { editEquations(c) }
         }
-        pad.heading("On-device models")
+        val mm = app.models
+        if (needsSetup()) {
+            // until the models are in place, the notepad is where they're set up
+            pad.heading("On-device models")
+            renderModels(pad)
+        } else if (c !is WorkingView.Page.Word) {
+            pad.heading("Ask anything")
+            pad.text("Hold 🎤 and say the problem, or tap ⌨ to type it.")
+            pad.muted("e.g. “A train leaves at 60 mph…”, “What is 15% of 80?”, “Solve x squared minus 4 equals 0”.")
+            pad.muted("Models and the formula library are under ⚙ Settings.")
+        }
+        if (history.isNotEmpty()) {
+            pad.heading("Earlier questions")
+            for (q in history.reversed().take(8)) pad.button(if (q.length > 60) q.take(57) + "…" else q) { ask(q) }
+        }
+    }
+
+
+    /** True while a model is missing or still downloading. */
+    fun needsSetup(): Boolean {
+        val mm = app.models
+        return mm.languageModel() == null || mm.speechReady() == null ||
+            mm.wanted().any { mm.progress(it).state !in setOf(ModelManager.State.NONE, ModelManager.State.READY) } || importing != null
+    }
+
+    /** The models' status, downloads and choices: on the notepad during setup, and in ⚙ Settings. */
+    fun renderModels(pad: app.sketchsolve.ui.Pad) {
         val mm = app.models
         var active = false
         for (m in mm.wanted()) {
@@ -155,7 +201,7 @@ class AskMode(app: MainActivity) : Mode(app) {
         }
         val d = mm.device()
         pad.muted("This device: ${d.name} · ${if (d.ramGb > 0.5) "%.0f GB memory · ".format(d.ramGb) else ""}${"%.0f".format(d.freeGb)} GB free")
-        pad.button("Choose models…") { app.showModelSetup() }
+        pad.button("Choose different models…") { app.showModelSetup() }
         networkProblem?.let { pad.warn(it) }
         importing?.let { pad.text("⇣ Importing: $it") }
         val missing = mm.wanted().filter { mm.progress(it).state == ModelManager.State.NONE }
@@ -168,16 +214,15 @@ class AskMode(app: MainActivity) : Mode(app) {
             pad.button("Downloaded the files yourself? Import…") { app.pickModelFile() }
             pad.button("How to download them yourself") { app.showTutorial("manual") }
         }
-        pad.heading("My formula library")
+    }
+
+    /** The formula library folder (in ⚙ Settings). */
+    fun renderLibrary(pad: app.sketchsolve.ui.Pad) {
         val lib = app.library
         pad.muted(if (app.libraryName == null) "Pick a folder of formula packs (plain .txt files) to teach the app new kinds of maths." else "Folder: ${app.libraryName} — ${lib.size} formulas from ${lib.map { it.pack }.distinct().size} packs.")
         app.libraryProblems.take(5).forEach { pad.warn("${it.file} line ${it.line}: ${it.message}") }
         pad.button(if (app.libraryName == null) "Choose a folder…" else "Change folder…") { app.pickLibraryFolder() }
         if (app.libraryName != null) pad.button("Reload the library") { app.loadLibrary() }
-        if (history.isNotEmpty()) {
-            pad.heading("Earlier questions")
-            for (q in history.reversed().take(8)) pad.button(if (q.length > 60) q.take(57) + "…" else q) { ask(q) }
-        }
     }
 
     private fun size(b: Long) = if (b > 1e9) "%.1f GB".format(b / 1e9) else "%d MB".format(b / 1_000_000)

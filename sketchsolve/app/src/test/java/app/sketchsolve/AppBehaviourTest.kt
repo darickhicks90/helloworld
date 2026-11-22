@@ -87,6 +87,38 @@ class AppBehaviourTest {
         assertEquals(ModelManager.State.NONE, a.models.progress(ModelManager.GEMMA_E2B).state)
     }
 
+    private fun padText(a: MainActivity): String {
+        val out = StringBuilder()
+        fun walk(v: android.view.View) { if (v is android.widget.TextView) out.append(v.text).append('\n'); if (v is android.view.ViewGroup) for (i in 0 until v.childCount) walk(v.getChildAt(i)) }
+        walk(a.pad.box); return out.toString()
+    }
+
+    @Test fun notepadClearsOnceTheModelsAreInPlaceAndSettingsHoldThem() {
+        val a = Robolectric.buildActivity(MainActivity::class.java).setup().get()
+        a.models.deviceOverride = ModelManager.DeviceInfo("Test phone", "chip", 8.0, 50.0, 8, "15")
+        val ask = a.modes.first { it is AskMode } as AskMode
+        a.select(ask); settle()
+        assertTrue("setup shown while models are missing", padText(a).contains("On-device models", ignoreCase = true))
+        // put (empty, right-sized) model files in place
+        for (m in listOf(ModelManager.GEMMA_E2B, ModelManager.WHISPER_BASE, ModelManager.WHISPER_SMALL))
+            java.io.RandomAccessFile(a.models.file(m), "rw").use { it.setLength(m.bytes) }
+        ask.refresh(); settle()
+        val t = padText(a)
+        assertFalse(t, t.contains("On-device models", ignoreCase = true))
+        assertFalse(t, t.contains("formula library", ignoreCase = true) && t.contains("Choose a folder"))
+        assertTrue(t, t.contains("Hold 🎤"))
+        // ⚙ Settings shows the models and the library
+        var shown = ""
+        a.showSettings("AI models & voice") { p -> ask.renderModels(p); shown = "models" }
+        settle()
+        assertEquals("models", shown)
+        assertNotNull(a.settingsPanel)
+        a.showSettings("Formula library") { p -> ask.renderLibrary(p); shown = "library" }
+        settle()
+        assertEquals("library", shown)
+        for (m in listOf(ModelManager.GEMMA_E2B, ModelManager.WHISPER_BASE, ModelManager.WHISPER_SMALL)) a.models.file(m).delete()
+    }
+
     @Test fun importingAModelFileChecksAndInstallsIt() {
         val a = Robolectric.buildActivity(MainActivity::class.java).setup().get()
         a.models.deviceOverride = ModelManager.DeviceInfo("Test phone", "chip", 8.0, 50.0, 8, "15")

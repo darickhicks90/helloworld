@@ -105,17 +105,27 @@ class MainActivity : Activity() {
         for (m in modes) if (m !== start) m.refresh()
     }
 
-    private fun immersive() {
-        window.setDecorFitsSystemWindowsCompat()
+    /**
+     * Full screen: hide the status bar and the navigation bar (Back / Home /
+     * Recents). Swiping in from the edge shows them for a moment. Re-applied
+     * whenever the app gets focus back, since dialogs and the keyboard bring them back.
+     */
+    fun immersive() {
+        if (android.os.Build.VERSION.SDK_INT >= 30) {
+            window.insetsController?.let {
+                it.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                it.hide(WindowInsets.Type.systemBars())
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_FULLSCREEN
+                or View.SYSTEM_UI_FLAG_LAYOUT_STABLE or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN)
+        }
     }
 
-    private fun android.view.Window.setDecorFitsSystemWindowsCompat() {
-        if (android.os.Build.VERSION.SDK_INT >= 30) {
-            insetsController?.let {
-                it.hide(WindowInsets.Type.statusBars())
-                it.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            }
-        }
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) immersive()
     }
 
     fun select(m: Mode) {
@@ -147,12 +157,57 @@ class MainActivity : Activity() {
         }
         // every tab has a "?" that opens its page of the tour
         tray.addView(ToolToken(this, "help", "?", "How to", 0xFF3E5C8A.toInt()).apply { setOnClickListener { showTutorial(m.tourPage) } })
+        tray.addView(ToolToken(this, "settings", "⚙", "Settings", 0xFF55606E.toInt()).apply { setOnClickListener { showSettingsMenu(this) } })
+    }
+
+    /* -------- ⚙ Settings: models and the formula library -------- */
+
+    /** Re-draws the open settings panel, if any (downloads update it live). */
+    var settingsPanel: (() -> Unit)? = null
+        private set
+
+    fun showSettingsMenu(anchor: View) {
+        val menu = PopupMenu(this, anchor)
+        menu.menu.add(0, 1, 0, "AI models & voice")
+        menu.menu.add(0, 2, 1, "Formula library folder")
+        menu.menu.add(0, 3, 2, "Angles: " + if (settings.deg) "degrees (tap for radians)" else "radians (tap for degrees)")
+        menu.setOnMenuItemClickListener {
+            when (it.itemId) {
+                1 -> showSettings("AI models & voice") { p -> ask().renderModels(p) }
+                2 -> showSettings("Formula library") { p -> ask().renderLibrary(p) }
+                3 -> { settings.deg = !settings.deg; scheduleSave(); modes.forEach { m -> m.refresh() }; toast(if (settings.deg) "Angles in degrees" else "Angles in radians") }
+            }
+            true
+        }
+        menu.setOnDismissListener { immersive() }
+        menu.show()
+    }
+
+    private fun ask() = modes.first { it is AskMode } as AskMode
+
+    /** A settings panel styled like the notepad, kept up to date while it's open. */
+    fun showSettings(title: String, render: (Pad) -> Unit) {
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(22), dp(8), dp(22), dp(16)) }
+        val pad = Pad(this, box)
+        val draw = { pad.clear(); render(pad) }
+        val dialog = android.app.AlertDialog.Builder(this)
+            .setTitle(title)
+            .setView(ScrollView(this).apply { addView(box); setBackgroundColor(0xFFFFF4C2.toInt()) })
+            .setPositiveButton("Done", null)
+            .create()
+        dialog.setOnDismissListener { if (settingsPanel === draw) settingsPanel = null; mode?.refresh(); immersive() }
+        settingsPanel = draw
+        draw()
+        dialog.show()
     }
 
     /* -------- on-device models -------- */
     val models by lazy { app.sketchsolve.llm.ModelManager(this) }
     private var gemmaModel: app.sketchsolve.llm.GemmaModel? = null
     var speech: app.sketchsolve.llm.SpeechInput? = null
+        private set
+    /** True while the speech model is being loaded. */
+    var speechLoading = false
         private set
 
     /** Gemma, if its file is downloaded (loaded lazily on first use). */
@@ -169,7 +224,14 @@ class MainActivity : Activity() {
     fun modelsChanged() {
         speech?.close(); speech = null
         gemmaModel?.close(); gemmaModel = null
-        models.speechReady()?.let { speech = app.sketchsolve.llm.WhisperSpeech.create(this, models.file(it)) }
+        // load the speech model in the background so the app opens straight away
+        models.speechReady()?.let { spec ->
+            speechLoading = true
+            Thread {
+                val sp = app.sketchsolve.llm.WhisperSpeech.create(this, models.file(spec))
+                main.post { speech?.close(); speech = sp; speechLoading = false; mode?.refresh() }
+            }.start()
+        }
     }
 
     /** First launch: offer the model download, with choices suited to this device. */
@@ -243,6 +305,7 @@ class MainActivity : Activity() {
             contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
             getSharedPreferences("sketchsolve", MODE_PRIVATE).edit().putString("libraryUri", uri.toString()).apply()
             loadLibrary()
+            settingsPanel?.invoke()
             mode?.refresh()
         }
     }

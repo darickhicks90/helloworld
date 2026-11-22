@@ -2,6 +2,11 @@
 cmake_minimum_required(VERSION 3.22)
 project(sketchsolve_speech C CXX)
 set(CMAKE_CXX_STANDARD 17)
+# Always build optimised, even in debug builds of the app: unoptimised ggml
+# is many times slower, which made push-to-talk take far too long to write
+# down what was said.
+add_compile_options(-O3)
+add_compile_definitions(NDEBUG)
 
 set(WHISPER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/whisper.cpp)
 set(GGML_NATIVE OFF CACHE BOOL "" FORCE)

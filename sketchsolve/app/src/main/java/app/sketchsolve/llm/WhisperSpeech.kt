@@ -62,12 +62,18 @@ class WhisperSpeech private constructor(private val handle: Long) : SpeechInput 
             thread?.join(1000)
             recorder?.let { runCatching { it.stop() }; it.release() }
             recorder = null
-            val bytes = synchronized(pcm) { pcm.toByteArray() }
-            if (bytes.size < rate / 2) { onText(""); return@Thread }   // under a quarter of a second
-            val samples = FloatArray(bytes.size / 2) { i -> ((bytes[2 * i].toInt() and 0xff) or (bytes[2 * i + 1].toInt() shl 8)).toShort() / 32768f }
-            val threads = Runtime.getRuntime().availableProcessors().coerceIn(2, 6)
-            val text = synchronized(this) { nativeTranscribe(handle, samples, VOCABULARY, threads) }
-            onText(clean(text))
+            val text = try {
+                val bytes = synchronized(pcm) { pcm.toByteArray() }
+                if (bytes.size < rate / 2) "" else {   // under a quarter of a second: nothing said
+                    val samples = FloatArray(bytes.size / 2) { i -> ((bytes[2 * i].toInt() and 0xff) or (bytes[2 * i + 1].toInt() shl 8)).toShort() / 32768f }
+                    val threads = Runtime.getRuntime().availableProcessors().coerceIn(2, 6)
+                    val t0 = System.currentTimeMillis()
+                    val raw = synchronized(this) { nativeTranscribe(handle, samples, VOCABULARY, threads) }
+                    Log.i("SketchSolve", "transcribed ${samples.size / rate}s of audio in ${System.currentTimeMillis() - t0} ms on $threads threads")
+                    clean(raw)
+                }
+            } catch (t: Throwable) { Log.e("SketchSolve", "transcription failed", t); "" }
+            onText(text)   // always answer, so the page never stays on "Writing down…"
         }.start()
     }
 

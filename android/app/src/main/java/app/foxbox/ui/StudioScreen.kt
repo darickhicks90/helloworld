@@ -227,10 +227,7 @@ class StudioScreen(c: Context, private val host: Host) : FrameLayout(c) {
         fun tool(v: View) = instr.addView(v, lp(WRAP, Px.dp(44)))
         soundBtn = Btn(c, "Sound", Pal.accent(e.id)).apply { onClick = { if (drawerOpen) closeDrawer() else openDrawer(e) } }.also { tool(it) }
         tool(Btn(c, "Presets", Pal.accent(e.id)).apply { onClick = { host.presetMenu(e.id) } })
-        if (e is SampleEngine) {
-            tool(Btn(c, "Load", Pal.AQUA).apply { onClick = { host.pickAudio(e.id) } })
-            micBtn = Btn(c, "Mic", Pal.ORANGE_D).apply { onClick = { host.toggleMic(e.id) } }.also { tool(it) }
-        }
+        // (samplers' Load and Mic live on the instrument page itself, above the chords, always in view)
         // the two ways of working: JAM (layer loops) or CLIPS (prepare clips for Clibbins)
         val jam = Studio.mode == Studio.Mode.JAM
         jamBtn = Btn(c, "JAM", Snes.GREEN, 62).apply { onClick = { if (Audio.transport.rec == Transport.Rec.OFF) Studio.setMode(Studio.Mode.JAM) } }.also { bar(it) }

@@ -43,6 +43,9 @@ class InstrumentPage(c: Context, id: String, host: Host) : LinearLayout(c) {
     private val seqBtn = Btn(c, "Seq", Pal.accent(id))
     private val viewBtn = Btn(c, "Steps", Pal.AQUA)
     private val latchBtn = Btn(c, "Latch", Pal.SUN)
+    private val host = host
+    /** Samplers (Reflections, Leaves): record and load right on the page, always in view. */
+    private val micBtn: Btn? = if (engine is app.foxbox.engines.SampleEngine) Btn(c, "● Mic", Pal.ORANGE_D) else null
 
     init {
         orientation = HORIZONTAL
@@ -53,6 +56,13 @@ class InstrumentPage(c: Context, id: String, host: Host) : LinearLayout(c) {
         // the block's level, on an old radio's edgewise meter
         addView(VuMeter(c, id), lp(Px.dp(30), MATCH).apply { leftMargin = Px.dp(4) })
         val col = LinearLayout(c).apply { orientation = VERTICAL }
+        micBtn?.let { mb ->
+            mb.onClick = { host.toggleMic(id) }
+            val load = Btn(c, "Load", Pal.AQUA).apply { onClick = { host.pickAudio(id) } }
+            val bar = LinearLayout(c).apply { orientation = HORIZONTAL }
+            bar.addView(mb, lp(0, MATCH, 1.3f)); bar.addView(load, lp(0, MATCH, 1f).apply { leftMargin = Px.dp(4) })
+            col.addView(bar, lp(MATCH, Px.dp(40)).apply { bottomMargin = Px.dp(4) })
+        }
         col.addView(chords, lp(MATCH, 0, 1f))
         if (seq != null) {
             seqBtn.onClick = { seq.enabled.set(if (seq.enabled.on) 0f else 1f); if (seq.enabled.on) showSteps(true); Studio.save(); refresh() }
@@ -82,6 +92,18 @@ class InstrumentPage(c: Context, id: String, host: Host) : LinearLayout(c) {
     }
 
     private fun refresh() {
+        micBtn?.let { b ->
+            val t = Audio.transport
+            val on = host.micTarget() == engine.id
+            b.on = on; b.blink = on && t.sampRec != app.foxbox.seq.Transport.Rec.RECORDING
+            b.text = when {
+                !on -> "● Mic"
+                t.sampRec == app.foxbox.seq.Transport.Rec.ARMED -> if (t.tick < 0) "count-in…" else "next bar…"
+                t.sampEnd >= 0 -> "ending…"
+                else -> "■ Stop"
+            }
+            b.invalidate()
+        }
         val s = seq ?: return
         seqBtn.on = s.enabled.on; seqBtn.text = "Seq"   // lit when on (fits the narrow footer)
         latchBtn.on = s.latch.on; latchBtn.invalidate()

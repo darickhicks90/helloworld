@@ -11,7 +11,7 @@ import android.view.MotionEvent
 import android.view.View
 import app.foxbox.ui.Pal
 import app.foxbox.ui.Px
-import app.foxbox.ui.Snes
+import app.foxbox.ui.pixelBox
 import app.foxbox.ui.Tv
 import app.foxbox.ui.fill
 import app.foxbox.ui.textCentered
@@ -44,8 +44,8 @@ class KidsView(c: Context, private val host: Host) : View(c) {
     private val d = Px.dp(1f)
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val stroke = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND }
-    private val noteP = Px.text(26f, Snes.INK, headFont = true)
-    private val bigP = Px.text(48f, 0xFFFFFFFF.toInt(), headFont = true)
+    private val noteP = Px.text(26f, Pal.BROWN_D, headFont = true)
+    private val bigP = Px.text(48f, Pal.CREAM, headFont = true)
     private val path = Path()
 
     // ---- layout
@@ -114,14 +114,19 @@ class KidsView(c: Context, private val host: Host) : View(c) {
         }
     }
 
-    private fun plateOf(c: Canvas, l: Float, t: Float, r: Float, b: Float, face: Int = Snes.FACE) = with(Snes) { c.plate(l, t, r, b, face) }
+    /** 5 Eye Yeti's cottage-style box: a cream (or lit) face with a dark brown pixel border. */
+    private fun plateOf(c: Canvas, l: Float, t: Float, r: Float, b: Float, face: Int = Pal.CREAM) = c.pixelBox(l, t, r, b, face)
+    private val INK = Pal.BROWN_D
+    private val tvs = arrayOf(TvScreen(0) { Sound.synth }, TvScreen(1) { Sound.drums }, TvScreen(2) { Sound.sampler })
+    private val t0 = System.nanoTime()
 
     private val inst get() = when (page) { 0 -> Sound.synth; 1 -> Sound.drums; else -> Sound.sampler }
     private val shape get() = if (page == 2) Sound.sampler.shape else Sound.synth.shape
 
     // ------------------------------------------------------------------ drawing
 
-    private val KEY_COLORS = intArrayOf(Snes.RED, Pal.ORANGE, Snes.YELLOW, Snes.GREEN, Pal.AQUA, 0xFF4A7FD8.toInt(), Snes.PURPLE, Snes.RED)
+    // the studio's warm, faded colours (not bright toy colours)
+    private val KEY_COLORS = intArrayOf(Pal.ROSE, Pal.ORANGE_L, Pal.HONEY, Pal.GREEN_L, Pal.AQUA_L, Pal.AQUA, 0xFFB08FA8.toInt(), Pal.ROSE)
     private val pressedKeys = BooleanArray(8)
     private val padFlash = FloatArray(8)
     private var dotX = 0f; private var dotY = 0f; private var dotHeld = false
@@ -133,19 +138,20 @@ class KidsView(c: Context, private val host: Host) : View(c) {
         // tabs: a wave (synth), a drum, a microphone (sampler)
         for (i in 0 until 3) {
             val r = tabs[i]; val on = page == i
-            plateOf(c, r.left, r.top, r.right, r.bottom, if (on) Snes.YELLOW else Snes.FACE)
-            when (i) { 0 -> waveIcon(c, r, 3, Snes.INK); 1 -> drumIcon(c, r, Snes.INK); else -> micIcon(c, r, Snes.INK) }
+            plateOf(c, r.left, r.top, r.right, r.bottom, if (on) Pal.ORANGE else Pal.CREAM)
+            val ic = if (on) Pal.CREAM else INK
+            when (i) { 0 -> waveIcon(c, r, 3, ic); 1 -> drumIcon(c, r, ic); else -> micIcon(c, r, ic) }
         }
         // the root note: ◀ C ▶ (always a major scale)
         plateOf(c, rootDown.left, rootDown.top, rootDown.right, rootDown.bottom); arrow(c, rootDown, -1)
         plateOf(c, rootUp.left, rootUp.top, rootUp.right, rootUp.bottom); arrow(c, rootUp, 1)
-        plateOf(c, rootBox.left, rootBox.top, rootBox.right, rootBox.bottom, 0xFFF7EFDC.toInt())
+        plateOf(c, rootBox.left, rootBox.top, rootBox.right, rootBox.bottom, Pal.PAPER)
         noteP.textSize = 24 * d
         c.textCentered(Sound.NOTE_NAMES[Sound.root], rootBox.centerX(), rootBox.centerY(), noteP)
         drawXy(c)
-        plateOf(c, panel.left, panel.top, panel.right, panel.bottom)
+        plateOf(c, panel.left, panel.top, panel.right, panel.bottom, Pal.PAPER)
         when (page) {
-            0 -> { for (i in 0 until 4) { val r = waves[i]; val on = Sound.synth.wave == i; plateOf(c, r.left, r.top, r.right, r.bottom, if (on) Pal.AQUA_L else Snes.HI); waveIcon(c, r, i, Snes.INK) }
+            0 -> { for (i in 0 until 4) { val r = waves[i]; val on = Sound.synth.wave == i; plateOf(c, r.left, r.top, r.right, r.bottom, if (on) Pal.AQUA else Pal.CREAM); waveIcon(c, r, i, if (on) Pal.CREAM else INK) }
                 filterColumn(c); drawAdsr(c) }
             1 -> { pitchColumn(c); filterColumn(c); drawBeats(c) }
             else -> { drawRec(c); filterColumn(c); drawAdsr(c) }
@@ -160,58 +166,56 @@ class KidsView(c: Context, private val host: Host) : View(c) {
     private fun arrow(c: Canvas, r: RectF, dir: Int) {
         path.reset(); val cx = r.centerX(); val cy = r.centerY(); val s = 11 * d
         path.moveTo(cx + dir * s, cy); path.lineTo(cx - dir * s * 0.7f, cy - s); path.lineTo(cx - dir * s * 0.7f, cy + s); path.close()
-        paint.color = Snes.INK; c.drawPath(path, paint)
+        paint.color = INK; c.drawPath(path, paint)
     }
 
     private fun drawXy(c: Canvas) {
         val r = xy
-        plateOf(c, r.left - 4 * d, r.top - 4 * d, r.right + 4 * d, r.bottom + 4 * d)
-        c.fill(r.left + 4 * d, r.top + 4 * d, r.right - 4 * d, r.bottom - 4 * d, Tv.BEZEL)
-        stroke.color = 0x30FFFFFF; stroke.strokeWidth = d
-        for (k in 1..3) { val x = r.left + r.width() * k / 4; val y = r.top + r.height() * k / 4; c.drawLine(x, r.top + 6 * d, x, r.bottom - 6 * d, stroke); c.drawLine(r.left + 6 * d, y, r.right - 6 * d, y, stroke) }
-        // the four effects, as pictures at the edges
         val pitch = page != 0
-        val ic = 0xFFB8E0D8.toInt(); val s = min(r.width(), r.height()) * 0.09f
-        // left
-        if (pitch) waveSym(c, r.left + s * 1.6f, r.centerY(), s * 1.2f, 1, ic) else bubbles(c, r.left + s * 1.5f, r.centerY(), s, ic)
-        // right
-        if (pitch) waveSym(c, r.right - s * 1.6f, r.centerY(), s * 1.2f, 4, ic) else waveSym(c, r.right - s * 1.6f, r.centerY(), s * 1.1f, 3, ic)
-        echoSym(c, r.centerX(), r.top + s * 1.4f, s, ic)
-        zigzag(c, r.centerX(), r.bottom - s * 1.4f, s, ic)
-        // the dot
+        val t = (System.nanoTime() - t0) / 1e9f
+        // where the dot shows on the screen, 0..1 (it can reach 16 dp from each edge)
+        val sx = 0.5f + dotX * (r.width() / 2 - 16 * d) / r.width(); val sy = 0.5f + dotY * (r.height() / 2 - 16 * d) / r.height()
+        tvs[page].draw(c, r, t, sx, sy, dotHeld) { cc, w, h ->
+            // the four effects, as pictures at the edges (cream, with a soft shadow so they read on any picture)
+            val s = min(w, h) * 0.09f
+            for (pass in 0..1) {
+                val col = if (pass == 0) Pal.alpha(INK, 0.45f) else Pal.alpha(Pal.CREAM, 0.95f)
+                val o = if (pass == 0) 1.5f * d else 0f
+                if (pitch) waveSym(cc, s * 1.6f + o, h / 2 + o, s * 1.2f, 1, col) else bubbles(cc, s * 1.5f + o, h / 2 + o, s, col)
+                if (pitch) waveSym(cc, w - s * 1.6f + o, h / 2 + o, s * 1.2f, 4, col) else waveSym(cc, w - s * 1.6f + o, h / 2 + o, s * 1.1f, 3, col)
+                echoSym(cc, w / 2 + o, s * 1.4f + o, s, col)
+                zigzag(cc, w / 2 + o, h - s * 1.4f + o, s, col)
+            }
+        }
         val fx = inst.fx
-        val px = r.centerX() + dotX * (r.width() / 2 - 16 * d); val py = r.centerY() - dotY * (r.height() / 2 - 16 * d)
-        paint.color = Pal.alpha(Snes.YELLOW, 0.35f); c.drawCircle(px, py, 22 * d, paint)
-        paint.color = Snes.YELLOW; c.drawCircle(px, py, 12 * d, paint)
-        paint.color = 0xFFFFFFFF.toInt(); c.drawCircle(px - 3 * d, py - 3 * d, 4 * d, paint)
         fx.x = if (dotHeld) dotX else 0f; fx.y = if (dotHeld) dotY else 0f
         fx.pitchMode = pitch
     }
 
     private fun filterColumn(c: Canvas) {
         val col = filterCol; val t = filterTrack
-        sun(c, t.centerX(), t.top - 13 * d, 9 * d, Snes.YELLOW)
-        cloud(c, t.centerX(), t.bottom + 14 * d, 8 * d, Snes.SHADE)
+        sun(c, t.centerX(), t.top - 13 * d, 9 * d, Pal.HONEY)
+        cloud(c, t.centerX(), t.bottom + 14 * d, 8 * d, Pal.BROWN_L)
         slider(c, t, inst.filter, Pal.AQUA)
         val on = inst.filterEnv
-        plateOf(c, envBtn.left, envBtn.top, envBtn.right, envBtn.bottom, if (on) Snes.GREEN else Snes.HI)
-        envIcon(c, envBtn, if (on) 0xFFFFFFFF.toInt() else Snes.INK)
+        plateOf(c, envBtn.left, envBtn.top, envBtn.right, envBtn.bottom, if (on) Pal.GREEN else Pal.CREAM)
+        envIcon(c, envBtn, if (on) Pal.CREAM else INK)
     }
 
     private fun pitchColumn(c: Canvas) {
         val col = pitchCol; val t = pitchTrack
         // small and high at the top, big and low at the bottom
-        paint.color = Snes.PURPLE; c.drawCircle(t.centerX(), t.top - 13 * d, 5 * d, paint)
+        paint.color = Pal.DUSK; c.drawCircle(t.centerX(), t.top - 13 * d, 5 * d, paint)
         c.drawCircle(t.centerX(), t.bottom + 14 * d, 9 * d, paint)
-        slider(c, t, Sound.drums.pitch, Snes.PURPLE)
+        slider(c, t, Sound.drums.pitch, Pal.DUSK)
     }
 
     private fun slider(c: Canvas, t: RectF, v: Float, color: Int) {
-        c.fill(t.left + 8 * d, t.top, t.right - 8 * d, t.bottom, Snes.INK)
+        c.fill(t.left + 8 * d, t.top, t.right - 8 * d, t.bottom, INK)
         val y = t.bottom - v * t.height()
         c.fill(t.left + 10 * d, y, t.right - 10 * d, t.bottom - 2 * d, color)
-        plateOf(c, t.left - 8 * d, y - 13 * d, t.right + 8 * d, y + 13 * d, Snes.HI)
-        c.fill(t.left - 2 * d, y - d, t.right + 2 * d, y + d, Snes.INK)
+        plateOf(c, t.left - 8 * d, y - 13 * d, t.right + 8 * d, y + 13 * d, Pal.CREAM)
+        c.fill(t.left - 2 * d, y - d, t.right + 2 * d, y + d, Pal.BROWN)
     }
 
     // the envelope graph: three big handles to drag (attack top, decay/sustain corner, release end)
@@ -240,10 +244,10 @@ class KidsView(c: Context, private val host: Host) : View(c) {
         val fillPath = Path(path); fillPath.lineTo(x0, bot); fillPath.close()
         paint.color = Pal.alpha(Pal.AQUA, 0.3f); c.drawPath(fillPath, paint)
         stroke.color = Pal.AQUA_L; stroke.strokeWidth = 4 * d; c.drawPath(path, stroke)
-        val cols = intArrayOf(Snes.RED, Snes.YELLOW, Snes.GREEN)
+        val cols = intArrayOf(Pal.ORANGE, Pal.HONEY, Pal.GREEN_L)
         for (k in 0 until 3) {
             val x = handle[k * 2]; val y = handle[k * 2 + 1]
-            paint.color = Snes.INK; c.drawCircle(x, y, 13 * d, paint)
+            paint.color = INK; c.drawCircle(x, y, 13 * d, paint)
             paint.color = cols[k]; c.drawCircle(x, y, 10 * d, paint)
             paint.color = 0x80FFFFFF.toInt(); c.drawCircle(x - 3 * d, y - 3 * d, 3 * d, paint)
         }
@@ -261,24 +265,25 @@ class KidsView(c: Context, private val host: Host) : View(c) {
         }
     }
 
+    private val REC = 0xFFC4513F.toInt()   // a faded tape-deck red
     private fun drawRec(c: Canvas) {
         val r = recBtn; val st = Recorder.state
         val cx = r.centerX(); val cy = r.centerY(); val rad = min(r.width(), r.height()) / 2
-        paint.color = Snes.INK; c.drawCircle(cx, cy, rad, paint)
+        paint.color = INK; c.drawCircle(cx, cy, rad, paint)
         val t = System.nanoTime() / 1e9f
-        val red = if (st == Recorder.State.RECORDING) Pal.alpha(Snes.RED, 0.75f + 0.25f * sin(t * 8f)) else Snes.RED
+        val red = if (st == Recorder.State.RECORDING) Pal.alpha(REC, 0.75f + 0.25f * sin(t * 8f)) else REC
         paint.color = red; c.drawCircle(cx, cy, rad - 5 * d, paint)
         paint.color = 0x40FFFFFF; c.drawCircle(cx - rad * 0.25f, cy - rad * 0.25f, rad * 0.3f, paint)
         when (st) {
             Recorder.State.COUNT_IN -> { bigP.textSize = rad * 0.9f; c.textCentered("${Recorder.beat}", cx, cy, bigP) }
             Recorder.State.RECORDING -> {
                 // how loud, and how long (the ring fills up to 10 seconds)
-                paint.color = 0xFFFFFFFF.toInt(); c.drawCircle(cx, cy, rad * (0.2f + 0.35f * Recorder.level), paint)
-                stroke.color = 0xFFFFFFFF.toInt(); stroke.strokeWidth = 6 * d
+                paint.color = Pal.CREAM; c.drawCircle(cx, cy, rad * (0.2f + 0.35f * Recorder.level), paint)
+                stroke.color = Pal.CREAM; stroke.strokeWidth = 6 * d
                 hits.set(cx - rad + 10 * d, cy - rad + 10 * d, cx + rad - 10 * d, cy + rad - 10 * d)
                 c.drawArc(hits, -90f, 360f * (Recorder.seconds / Recorder.MAX_SECONDS).coerceIn(0f, 1f), false, stroke)
             }
-            else -> { paint.color = 0xFFFFFFFF.toInt(); c.drawCircle(cx, cy, rad * 0.28f, paint) }
+            else -> { paint.color = Pal.CREAM; c.drawCircle(cx, cy, rad * 0.28f, paint) }
         }
         // the recording, as a little wave
         val s = sampleStrip
@@ -374,11 +379,11 @@ class KidsView(c: Context, private val host: Host) : View(c) {
     private fun star(c: Canvas, cx: Float, cy: Float, r: Float) {
         path.reset()
         for (k in 0 until 10) { val a = -PI / 2 + k * PI / 5; val rr = if (k % 2 == 0) r else r * 0.45f; val x = cx + (cos(a) * rr).toFloat(); val y = cy + (sin(a) * rr).toFloat(); if (k == 0) path.moveTo(x, y) else path.lineTo(x, y) }
-        path.close(); paint.color = 0xFFFFFFFF.toInt(); c.drawPath(path, paint)
+        path.close(); paint.color = Pal.CREAM; c.drawPath(path, paint)
     }
     /** Drum pad pictures: kick, snare, clap, closed hat, open hat, low tom, high tom, cowbell. */
     private fun padIcon(c: Canvas, i: Int, cx: Float, cy: Float, s: Float) {
-        val ink = Snes.INK
+        val ink = INK
         paint.color = ink; stroke.color = ink; stroke.strokeWidth = 3 * d
         when (i) {
             0 -> { c.drawCircle(cx, cy, s, paint); paint.color = 0x55FFFFFF; c.drawCircle(cx, cy, s * 0.45f, paint) }

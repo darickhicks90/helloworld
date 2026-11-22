@@ -138,6 +138,8 @@ abstract class Instrument {
     /** The envelope button next to the filter slider. */
     @Volatile var filterEnv = false
     open val reverbSend = 0.25f
+    /** Counts every note and hit (the XY screens react to it). */
+    @Volatile var hits = 0
     abstract fun render(l: FloatArray, r: FloatArray, n: Int)
 
     /** Filter slider → cutoff in Hz: 220 Hz (dark but still clearly there) up to about 9 kHz (bright). */
@@ -173,7 +175,8 @@ class Synth : Instrument() {
     private val voices = Array(8) { V() }
     private var clock = 0L
 
-    fun noteOn(key: Int, note: Int) = Sound.post {
+    fun noteOn(key: Int, note: Int) { hits++; on(key, note) }
+    private fun on(key: Int, note: Int) = Sound.post {
         val v = voices.firstOrNull { it.key == key && it.amp.active } ?: voices.firstOrNull { !it.amp.active } ?: voices.minBy { it.age }
         v.key = key; v.freq = mtof(note.toFloat()); v.age = ++clock
         shape.applyTo(v.amp); filterShape(v.fenv)
@@ -217,7 +220,8 @@ class Drums : Instrument() {
     private val voices = Array(8) { V() }
     init { filter = 1f }
 
-    fun hit(pad: Int, vel: Float = 1f) = Sound.post {
+    fun hit(pad: Int, vel: Float = 1f) { hits++; strike(pad, vel) }
+    private fun strike(pad: Int, vel: Float) = Sound.post {
         val v = voices[pad]; v.pos = 0.0; v.vel = vel; v.svf.reset()
         filterShape(v.fenv); v.fenv.decay = 0.18f; v.fenv.gateOn()
         if (pad == 3) voices[4].pos = -1.0   // the closed hat chokes the open one
@@ -266,7 +270,8 @@ class Sampler : Instrument() {
     private var clock = 0L
     private val grain get() = (SRF * 0.07f).toInt()
 
-    fun noteOn(key: Int, semitones: Int) = Sound.post {
+    fun noteOn(key: Int, semitones: Int) { hits++; on(key, semitones) }
+    private fun on(key: Int, semitones: Int) = Sound.post {
         val v = voices.firstOrNull { !it.on } ?: voices.minBy { it.age }
         v.on = true; v.key = key; v.head = 0.0; v.ratio = semis(semitones.toFloat()).toDouble(); v.age = ++clock
         v.g[0].on = false; v.g[1].on = false; v.next = 0; v.svf.reset()

@@ -68,7 +68,7 @@ jobs:
           echo "=====CRASHES====="; cat shots/crashes.txt 2>/dev/null; echo "=====ERRORS====="; tail -60 shots/errors.txt 2>/dev/null
           for f in shots/*.png; do
             n=$(basename "$f" .png)
-            convert "$f" -resize 900x900\> -quality 55 "/tmp/$n.jpg"
+            ffmpeg -loglevel error -y -i "$f" -vf "scale='min(900,iw)':-2" -q:v 7 "/tmp/$n.jpg"
             echo "=====BEGIN $n====="; base64 -w0 "/tmp/$n.jpg"; echo; echo "=====END $n====="
           done
 

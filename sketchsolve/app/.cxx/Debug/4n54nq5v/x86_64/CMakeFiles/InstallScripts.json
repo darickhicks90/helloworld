@@ -1,0 +1,10 @@
+{
+	"InstallScripts" : 
+	[
+		"/home/user/helloworld/sketchsolve/app/.cxx/Debug/4n54nq5v/x86_64/cmake_install.cmake",
+		"/home/user/helloworld/sketchsolve/app/.cxx/Debug/4n54nq5v/x86_64/ggml/cmake_install.cmake",
+		"/home/user/helloworld/sketchsolve/app/.cxx/Debug/4n54nq5v/x86_64/ggml/src/cmake_install.cmake",
+		"/home/user/helloworld/sketchsolve/app/.cxx/Debug/4n54nq5v/x86_64/ggml/src/ggml-cpu/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

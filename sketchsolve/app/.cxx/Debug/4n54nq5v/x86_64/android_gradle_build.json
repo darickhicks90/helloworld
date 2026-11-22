@@ -1,0 +1,63 @@
+{
+  "buildFiles": [
+    "/home/user/helloworld/sketchsolve/app/src/main/cpp/CMakeLists.txt",
+    "/home/user/helloworld/sketchsolve/app/src/main/cpp/whisper.cpp/ggml/CMakeLists.txt",
+    "/home/user/helloworld/sketchsolve/app/src/main/cpp/whisper.cpp/ggml/cmake/common.cmake",
+    "/home/user/helloworld/sketchsolve/app/src/main/cpp/whisper.cpp/ggml/cmake/ggml-config.cmake.in",
+    "/home/user/helloworld/sketchsolve/app/src/main/cpp/whisper.cpp/ggml/src/CMakeLists.txt",
+    "/home/user/helloworld/sketchsolve/app/src/main/cpp/whisper.cpp/ggml/src/ggml-cpu/CMakeLists.txt"
+  ],
+  "cleanCommandsComponents": [
+    [
+      "/opt/android-sdk/cmake/4.1.2/bin/ninja",
+      "-C",
+      "/home/user/helloworld/sketchsolve/app/.cxx/Debug/4n54nq5v/x86_64",
+      "clean"
+    ]
+  ],
+  "buildTargetsCommandComponents": [
+    "/opt/android-sdk/cmake/4.1.2/bin/ninja",
+    "-C",
+    "/home/user/helloworld/sketchsolve/app/.cxx/Debug/4n54nq5v/x86_64",
+    "{LIST_OF_TARGETS_TO_BUILD}"
+  ],
+  "libraries": {
+    "ggml::@64c2a4576bf370762041": {
+      "toolchain": "toolchain",
+      "abi": "x86_64",
+      "artifactName": "ggml",
+      "output": "/home/user/helloworld/sketchsolve/app/.cxx/Debug/4n54nq5v/x86_64/ggml/src/libggml.a"
+    },
+    "ggml-base::@64c2a4576bf370762041": {
+      "toolchain": "toolchain",
+      "abi": "x86_64",
+      "artifactName": "ggml-base",
+      "output": "/home/user/helloworld/sketchsolve/app/.cxx/Debug/4n54nq5v/x86_64/ggml/src/libggml-base.a"
+    },
+    "ggml-cpu::@64c2a4576bf370762041": {
+      "toolchain": "toolchain",
+      "abi": "x86_64",
+      "artifactName": "ggml-cpu",
+      "output": "/home/user/helloworld/sketchsolve/app/.cxx/Debug/4n54nq5v/x86_64/ggml/src/libggml-cpu.a"
+    },
+    "sketchsolve_whisper::@6890427a1f51a3e7e1df": {
+      "toolchain": "toolchain",
+      "abi": "x86_64",
+      "artifactName": "sketchsolve_whisper",
+      "output": "/home/user/helloworld/sketchsolve/app/build/intermediates/cxx/Debug/4n54nq5v/obj/x86_64/libsketchsolve_whisper.so",
+      "runtimeFiles": []
+    }
+  },
+  "toolchains": {
+    "toolchain": {
+      "cCompilerExecutable": "/opt/android-sdk/ndk/29.0.14206865/toolchains/llvm/prebuilt/linux-x86_64/bin/clang.lld",
+      "cppCompilerExecutable": "/opt/android-sdk/ndk/29.0.14206865/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++.lld"
+    }
+  },
+  "cFileExtensions": [
+    "c"
+  ],
+  "cppFileExtensions": [
+    "cpp"
+  ]
+}

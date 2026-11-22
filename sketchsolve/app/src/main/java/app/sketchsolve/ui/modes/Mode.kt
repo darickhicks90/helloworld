@@ -10,7 +10,7 @@ import app.sketchsolve.ink.Stroke
 import app.sketchsolve.ui.*
 import org.json.JSONObject
 
-data class ToolSpec(val id: String, val icon: String, val caption: String, val tint: Int)
+data class ToolSpec(val id: String, val icon: String, val caption: String, val tint: Int, val hold: Boolean = false)
 
 /** One tab of the app: what it shows on the paper and on the legal pad. */
 abstract class Mode(val app: MainActivity) {
@@ -22,6 +22,8 @@ abstract class Mode(val app: MainActivity) {
     abstract fun refresh()
     open fun isActiveTool(tool: String) = false
     open fun onTool(tool: String) {}
+    /** For press-and-hold tools (push to talk). */
+    open fun onToolHold(tool: String, down: Boolean) {}
     open fun save(): JSONObject = JSONObject()
     open fun load(o: JSONObject) {}
 

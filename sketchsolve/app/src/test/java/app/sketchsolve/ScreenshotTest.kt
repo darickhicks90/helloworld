@@ -40,6 +40,18 @@ class ScreenshotTest {
     private fun run(prefix: String) {
         val a = Robolectric.buildActivity(MainActivity::class.java).setup().get()
         settle(a)
+        // Ask: a word problem, with a stand-in for Gemma that returns a known setup
+        a.testModel = object : app.sketchsolve.llm.LanguageModel {
+            override val name = "test"
+            override fun generate(prompt: String, temperature: Float, seed: Int, maxTokens: Int) = TRAINS_SETUP
+        }
+        val ask = a.modes.first { it is AskMode } as AskMode
+        a.select(ask); settle(a)
+        ask.ask("Two trains leave stations 300 miles apart at the same time and head toward each other. One travels at 70 mph and the other at 50 mph. How many hours until they meet?")
+        settle(a); shot(a, "$prefix-0-ask")
+        ask.ask("What is fifteen percent of eighty?")
+        settle(a); shot(a, "$prefix-0-ask-simple")
+
         val eq = a.modes.first { it is EquationsMode } as EquationsMode
         val strokes = Draw.write("2x+3=11", 60.0, 110.0, 54.0) + Draw.write("y=x^2-1", 60.0, 230.0, 54.0)
         val ring = Draw.s(Draw.ell(138.0, 137.0, 36.0, 42.0, -90.0, 290.0), "select")
@@ -69,6 +81,10 @@ class ScreenshotTest {
 
         a.select(a.modes.first { it is FormulasMode }); settle(a); shot(a, "$prefix-4-formulas")
         a.select(a.modes.first { it is TeachMode }); settle(a); shot(a, "$prefix-5-teach")
+    }
+
+    companion object {
+        const val TRAINS_SETUP = """{"plan":"They close the gap at the sum of their speeds.","kind":"motion","givens":[{"name":"d","value":300,"unit":"mi","meaning":"distance between the stations","quote":"300 miles apart"},{"name":"v_A","value":70,"unit":"mi/h","meaning":"speed of the first train","quote":"70 mph"},{"name":"v_B","value":50,"unit":"mi/h","meaning":"speed of the second train","quote":"50 mph"}],"unknowns":[{"name":"t","unit":"h","meaning":"hours until the trains meet"}],"equations":["v_A*t + v_B*t = d"],"ask":"t","answer_unit":"h","diagram":{"type":"motion","movers":[{"label":"Train 1","speed":"v_A","direction":"right","from":"left"},{"label":"Train 2","speed":"v_B","direction":"left","from":"right"}],"gap":"d"}}"""
     }
 
     @Test @Config(sdk = [34], qualifiers = "w800dp-h360dp-land-hdpi") fun phone() = run("phone")

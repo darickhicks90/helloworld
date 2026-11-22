@@ -8,6 +8,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.*
 import app.sketchsolve.MainActivity
+import app.sketchsolve.data.Category
 import app.sketchsolve.data.Formula
 import app.sketchsolve.data.Formulas
 import app.sketchsolve.math.*
@@ -28,6 +29,9 @@ class FormulasMode(app: MainActivity) : Mode(app) {
     private val parsed = HashMap<String, Node.Eq>()
     private lateinit var list: LinearLayout
     private var root: View? = null
+
+    private fun allFormulas() = Formulas.LIST + app.library.map { it.formula }
+    private fun categories() = Formulas.CATEGORIES + if (app.library.isNotEmpty()) listOf(Category("lib", "My library", "📁")) else emptyList()
 
     private fun ast(f: Formula) = parsed.getOrPut(f.id) { Expr.parse(f.eq, true) as Node.Eq }
 
@@ -52,8 +56,8 @@ class FormulasMode(app: MainActivity) : Mode(app) {
         col.addView(search, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         val chipBox = LinearLayout(app).apply { orientation = LinearLayout.VERTICAL }
         col.addView(chipBox)
-        val catIds = listOf("all") + Formulas.CATEGORIES.map { it.id }
-        val catNames = listOf("All") + Formulas.CATEGORIES.map { "${it.icon} ${it.name}" }
+        val catIds = listOf("all") + categories().map { it.id }
+        val catNames = listOf("All") + categories().map { "${it.icon} ${it.name}" }
         fun chips() { chipBox.removeAllViews(); Pad(app, chipBox).chips(catNames, 0xFF2B4C7E.toInt(), { i -> cat = catIds[i]; chips(); renderList() }, catIds.indexOf(cat)) }
         chips()
         list = LinearLayout(app).apply { orientation = LinearLayout.VERTICAL }
@@ -68,9 +72,9 @@ class FormulasMode(app: MainActivity) : Mode(app) {
     private fun renderList() {
         if (!::list.isInitialized) return
         list.removeAllViews()
-        for (c in Formulas.CATEGORIES) {
+        for (c in categories()) {
             if (cat != "all" && cat != c.id) continue
-            val items = Formulas.LIST.filter { f -> f.cat == c.id && (query.isEmpty() || (f.name + " " + f.eq + " " + f.vars.joinToString(" ") { it.desc + " " + it.unit }).lowercase().contains(query)) }
+            val items = allFormulas().filter { f -> f.cat == c.id && (query.isEmpty() || (f.name + " " + f.eq + " " + f.vars.joinToString(" ") { it.desc + " " + it.unit }).lowercase().contains(query)) }
             if (items.isEmpty()) continue
             list.addView(TextView(app).apply {
                 text = "${c.icon}  ${c.name.uppercase()}"; setTextColor(0xFF3E5C8A.toInt()); setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)

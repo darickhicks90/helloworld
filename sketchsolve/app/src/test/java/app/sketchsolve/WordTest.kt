@@ -71,6 +71,15 @@ class WordTest {
         assertTrue(a.issues.any { it.message.contains("The 8") })
     }
 
+    @Test fun tautologyAndGivenAnswerAreCaught() {
+        val p = "After a 20% discount a lamp costs $36. What was the original price in dollars?"
+        val j = """{"givens":[{"name":"price","value":36,"unit":"$","quote":"costs $36"},{"name":"off","value":20,"unit":"%","quote":"20% discount"}],"unknowns":[],"equations":["price = price*(1 - off/100)/(1 - off/100)"],"ask":"price"}"""
+        val a = WordSolver.check(p, Setup.parse(j)!!)
+        assertFalse(a.ok)
+        assertTrue(a.issues.any { it.message.contains("already known") })
+        assertTrue(a.issues.any { it.message.contains("true for any value") })
+    }
+
     @Test fun notEnoughInformation() {
         val p = "A rectangle has a perimeter of 30 cm. What is its area?"
         val j = """{"givens":[{"name":"P","value":30,"unit":"cm","quote":"perimeter of 30 cm"}],"unknowns":[{"name":"w","unit":"cm"},{"name":"l","unit":"cm"},{"name":"A","unit":"cm^2"}],"equations":["P = 2*l + 2*w","A = l*w"],"ask":"A"}"""

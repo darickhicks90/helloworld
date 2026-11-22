@@ -1,0 +1,155 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"childIndexes" : 
+					[
+						1
+					],
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-.-Debug-f5ebdc15457944623624.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.10.0"
+					},
+					"projectIndex" : 0,
+					"source" : ".",
+					"targetIndexes" : 
+					[
+						3
+					]
+				},
+				{
+					"build" : "ggml",
+					"childIndexes" : 
+					[
+						2
+					],
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-ggml-Debug-488e537fda2a377bc790.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.14"
+					},
+					"parentIndex" : 0,
+					"projectIndex" : 1,
+					"source" : "whisper.cpp/ggml"
+				},
+				{
+					"build" : "ggml/src",
+					"childIndexes" : 
+					[
+						3
+					],
+					"hasInstallRule" : true,
+					"jsonFile" : "directory-ggml.src-Debug-55196dab8653a3e37d63.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.14"
+					},
+					"parentIndex" : 1,
+					"projectIndex" : 1,
+					"source" : "whisper.cpp/ggml/src",
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2
+					]
+				},
+				{
+					"build" : "ggml/src/ggml-cpu",
+					"jsonFile" : "directory-ggml.src.ggml-cpu-Debug-d474fff871df65936e4b.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.14"
+					},
+					"parentIndex" : 2,
+					"projectIndex" : 1,
+					"source" : "whisper.cpp/ggml/src/ggml-cpu"
+				}
+			],
+			"name" : "Debug",
+			"projects" : 
+			[
+				{
+					"childIndexes" : 
+					[
+						1
+					],
+					"directoryIndexes" : 
+					[
+						0
+					],
+					"name" : "sketchsolve_speech",
+					"targetIndexes" : 
+					[
+						3
+					]
+				},
+				{
+					"directoryIndexes" : 
+					[
+						1,
+						2,
+						3
+					],
+					"name" : "ggml",
+					"parentIndex" : 0,
+					"targetIndexes" : 
+					[
+						0,
+						1,
+						2
+					]
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 2,
+					"id" : "ggml::@64c2a4576bf370762041",
+					"jsonFile" : "target-ggml-Debug-bc298ebc108976a9e675.json",
+					"name" : "ggml",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 2,
+					"id" : "ggml-base::@64c2a4576bf370762041",
+					"jsonFile" : "target-ggml-base-Debug-99b169c3a88b061a89d4.json",
+					"name" : "ggml-base",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 2,
+					"id" : "ggml-cpu::@64c2a4576bf370762041",
+					"jsonFile" : "target-ggml-cpu-Debug-ba124f82adb1101fb14b.json",
+					"name" : "ggml-cpu",
+					"projectIndex" : 1
+				},
+				{
+					"directoryIndex" : 0,
+					"id" : "sketchsolve_whisper::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-sketchsolve_whisper-Debug-43ffcec929fc91470045.json",
+					"name" : "sketchsolve_whisper",
+					"projectIndex" : 0
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "/home/user/helloworld/sketchsolve/app/.cxx/Debug/4n54nq5v/x86_64",
+		"source" : "/home/user/helloworld/sketchsolve/app/src/main/cpp"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 8
+	}
+}

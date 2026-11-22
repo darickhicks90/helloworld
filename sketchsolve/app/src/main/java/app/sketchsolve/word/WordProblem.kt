@@ -155,6 +155,23 @@ object WordSolver {
         }
     }
 
+    private fun alwaysTrue(eq: Node.Eq): Boolean {
+        val vs = Expr.vars(eq).toList()
+        if (vs.isEmpty()) return false
+        val idx = vs.withIndex().associate { it.value to it.index }
+        val l = Expr.compile(eq.lhs, idx, true); val r = Expr.compile(eq.rhs, idx, true)
+        val rnd = java.util.Random(99)
+        var tried = 0
+        repeat(6) {
+            val env = DoubleArray(vs.size) { 0.5 + rnd.nextDouble() * 9 }
+            val a = l(env); val b = r(env)
+            if (!a.isFinite() || !b.isFinite()) return@repeat
+            tried++
+            if (abs(a - b) > 1e-9 * max(1.0, max(abs(a), abs(b)))) return false
+        }
+        return tried >= 3
+    }
+
     /** Check a setup against the problem and solve it. */
     fun check(problem: String, s: Setup, deg: Boolean = true): WordAnswer {
         val issues = ArrayList<Issue>()
@@ -174,6 +191,10 @@ object WordSolver {
         val names = s.all.map { it.name }.toSet()
         for (eq in parsed) for (v in Expr.vars(eq)) if (v !in names) err("The letter $v in ${Expr.show(eq)} was never explained.")
         if (s.ask.isNotEmpty() && s.ask !in names) err("The answer ${s.ask} isn't one of the quantities.")
+        if (s.givens.any { it.name == s.ask }) err("The quantity being asked for (${s.ask}) was treated as already known.")
+        if (s.ask.isNotEmpty() && parsed.none { s.ask in Expr.vars(it) }) err("No equation involves ${s.ask}, the quantity being asked for.")
+        // An equation that holds for every value (like p = p·0.8/0.8) says nothing.
+        for (eq in parsed) if (alwaysTrue(eq)) err("${Expr.show(eq)} is true for any value, so it doesn't pin anything down.")
 
         // Every given must come from the problem (or be a well-known constant).
         val mentions = numbersIn(problem)

@@ -1,0 +1,6 @@
+/home/user/helloworld/sketchsolve/app/src/main/cpp/CMakeLists.txt
+/home/user/helloworld/sketchsolve/app/src/main/cpp/whisper.cpp/ggml/CMakeLists.txt
+/home/user/helloworld/sketchsolve/app/src/main/cpp/whisper.cpp/ggml/cmake/common.cmake
+/home/user/helloworld/sketchsolve/app/src/main/cpp/whisper.cpp/ggml/cmake/ggml-config.cmake.in
+/home/user/helloworld/sketchsolve/app/src/main/cpp/whisper.cpp/ggml/src/CMakeLists.txt
+/home/user/helloworld/sketchsolve/app/src/main/cpp/whisper.cpp/ggml/src/ggml-cpu/CMakeLists.txt

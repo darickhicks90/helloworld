@@ -85,9 +85,11 @@ class MainActivity : Activity() {
         immersive()
 
         loadSamples()
-        modes = listOf(EquationsMode(this), ShapesMode(this), CircuitsMode(this), FormulasMode(this), TeachMode(this))
-        val colors = listOf(0xFFFFE27A.toInt(), 0xFFFFB3CC.toInt(), 0xFF9EE6D8.toInt(), 0xFFB3CEFF.toInt(), 0xFFFFC98A.toInt())
-        val tilts = listOf(-2f, 1.5f, -1f, 2f, -1.5f)
+        modelsChanged()
+        loadLibrary()
+        modes = listOf(AskMode(this), EquationsMode(this), ShapesMode(this), CircuitsMode(this), FormulasMode(this), TeachMode(this))
+        val colors = listOf(0xFFFF9F8A.toInt(), 0xFFFFE27A.toInt(), 0xFFFFB3CC.toInt(), 0xFF9EE6D8.toInt(), 0xFFB3CEFF.toInt(), 0xFFFFC98A.toInt())
+        val tilts = listOf(1.5f, -2f, 1.5f, -1f, 2f, -1.5f)
         modes.forEachIndexed { i, m ->
             val t = StickyTab(this, m.title, colors[i], tilts[i])
             t.setOnClickListener { select(m) }
@@ -131,9 +133,104 @@ class MainActivity : Activity() {
         for (spec in m.tools) {
             val tok = ToolToken(this, spec.id, spec.icon, spec.caption, spec.tint)
             tok.active = m.isActiveTool(spec.id)
-            tok.setOnClickListener { m.onTool(spec.id); buildTray(m) }
+            if (spec.hold) {
+                tok.setOnTouchListener { v, e ->
+                    when (e.actionMasked) {
+                        android.view.MotionEvent.ACTION_DOWN -> { tok.active = true; v.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY); requestMicThen { m.onToolHold(spec.id, true) } }
+                        android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> { tok.active = false; m.onToolHold(spec.id, false) }
+                    }
+                    true
+                }
+            } else tok.setOnClickListener { m.onTool(spec.id); buildTray(m) }
             tray.addView(tok)
         }
+    }
+
+    /* -------- on-device models -------- */
+    val models by lazy { app.sketchsolve.llm.ModelManager(this) }
+    private var gemmaModel: app.sketchsolve.llm.GemmaModel? = null
+    var speech: app.sketchsolve.llm.SpeechInput? = null
+        private set
+
+    /** Gemma, if its file is downloaded (loaded lazily on first use). */
+    /** Tests can put a stand-in model here. */
+    var testModel: app.sketchsolve.llm.LanguageModel? = null
+
+    fun gemma(): app.sketchsolve.llm.LanguageModel? {
+        testModel?.let { return it }
+        gemmaModel?.let { return it }
+        val spec = app.sketchsolve.llm.ModelManager.GEMMA_E2B
+        if (!models.isReady(spec)) return null
+        return app.sketchsolve.llm.GemmaModel(models.file(spec), cacheDir).also { gemmaModel = it }
+    }
+
+    fun modelsChanged() {
+        speech?.close(); speech = null
+        val ws = models.speechModel()
+        if (models.isReady(ws)) speech = app.sketchsolve.llm.WhisperSpeech.create(this, models.file(ws))
+    }
+
+    private var pendingMic: (() -> Unit)? = null
+    fun requestMicThen(action: () -> Unit) {
+        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == android.content.pm.PackageManager.PERMISSION_GRANTED) { action(); return }
+        pendingMic = action
+        requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 7)
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 7 && grantResults.firstOrNull() != android.content.pm.PackageManager.PERMISSION_GRANTED) toast("Push to talk needs the microphone.")
+        pendingMic = null   // the button was released while the dialog was up; press again to talk
+    }
+
+    /* -------- formula library folder -------- */
+    var library: List<app.sketchsolve.word.LibraryEntry> = emptyList()
+        private set
+    var libraryProblems: List<app.sketchsolve.word.PackProblem> = emptyList()
+        private set
+    var libraryName: String? = null
+        private set
+
+    fun pickLibraryFolder() {
+        try { startActivityForResult(android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT_TREE), 11) }
+        catch (e: Exception) { toast("This device can't pick folders.") }
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        val uri = data?.data
+        if (requestCode == 11 && resultCode == RESULT_OK && uri != null) {
+            contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            getSharedPreferences("sketchsolve", MODE_PRIVATE).edit().putString("libraryUri", uri.toString()).apply()
+            loadLibrary()
+            mode?.refresh()
+        }
+    }
+
+    /** Read every .txt / .sspack file in the chosen folder as a formula pack. */
+    fun loadLibrary() {
+        val s = getSharedPreferences("sketchsolve", MODE_PRIVATE).getString("libraryUri", null) ?: return
+        val tree = android.net.Uri.parse(s)
+        val entries = ArrayList<app.sketchsolve.word.LibraryEntry>()
+        val problems = ArrayList<app.sketchsolve.word.PackProblem>()
+        try {
+            val docId = android.provider.DocumentsContract.getTreeDocumentId(tree)
+            libraryName = docId.substringAfterLast(':').ifEmpty { docId }
+            val children = android.provider.DocumentsContract.buildChildDocumentsUriUsingTree(tree, docId)
+            contentResolver.query(children, arrayOf(android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID, android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null)?.use { c ->
+                while (c.moveToNext()) {
+                    val name = c.getString(1)
+                    if (!name.endsWith(".txt", true) && !name.endsWith(".sspack", true)) continue
+                    val fileUri = android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, c.getString(0))
+                    val text = contentResolver.openInputStream(fileUri)?.bufferedReader()?.use { it.readText() } ?: continue
+                    entries += app.sketchsolve.word.Library.parsePack(text, name, problems)
+                }
+            }
+        } catch (e: Exception) {
+            problems += app.sketchsolve.word.PackProblem(libraryName ?: "folder", 0, "Couldn't read the folder: ${e.message}")
+        }
+        library = entries; libraryProblems = problems
     }
 
     fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_LONG).show()

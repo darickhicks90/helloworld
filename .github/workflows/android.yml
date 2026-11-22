@@ -50,10 +50,17 @@ jobs:
           FOXBOX_UPLOAD_KEY_PASSWORD: ${{ secrets.FOXBOX_UPLOAD_KEY_PASSWORD }}
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon :app:assembleRelease :app:bundleRelease :builder:assembleRelease :game:assembleRelease :pocket:assembleRelease
+          ./gradlew --no-daemon :app:assembleRelease :builder:assembleRelease :game:assembleRelease :pocket:assembleRelease
           cp app/build/outputs/apk/release/app-release.apk ../5IY.apk
           cp builder/build/outputs/apk/release/builder-release.apk ../5IY-Builder.apk
-          cp app/build/outputs/bundle/release/app-release.aab ../5IY-release.aab
+          # The Play bundle is only built with the real upload key: a bundle signed with the public
+          # test key must never reach Google Play (Play would adopt it as the upload key).
+          if [ -n "$FOXBOX_UPLOAD_STORE_FILE" ]; then
+            ./gradlew --no-daemon :app:bundleRelease
+            cp app/build/outputs/bundle/release/app-release.aab ../5IY-release.aab
+          else
+            echo "No upload key: skipping the Play bundle"
+          fi
           cp game/build/outputs/apk/release/game-release.apk ../Wildwood-Hall.apk
           cp pocket/build/outputs/apk/release/pocket-release.apk ../5IY-Pocket.apk
 
@@ -70,6 +77,7 @@ jobs:
           path: 5IY-Builder.apk
 
       - name: Upload App Bundle
+        if: env.FOXBOX_UPLOAD_STORE_FILE != ''
         uses: actions/upload-artifact@v4
         with:
           name: 5IY-play-bundle

@@ -817,36 +817,6 @@ internal class HallRoomArt {
         }
         val sheet = Bushes.sheet
         if (sheet != null) { bushMats(ms, sheet); return }
-        if (sheet != null) {
-            // woven mats of bushes: each patch of ground one or two kinds, stamped close and overlapping,
-            // back rows first; small ones at the edges so nothing spills into the way
-            val fams = intArrayOf(0, 0, 0, 0, 1, 1, 1, 6, 6, 4, 4, 3, 3, 2, 2, 5)
-            val famStart = intArrayOf(0, 4, 7, 10, 13, 16, 18); val famLen = intArrayOf(4, 3, 3, 3, 3, 2, 2)
-            fun forestAt(x: Float, y: Float): Boolean { val gx = (x / 6f).toInt(); val gy = (y / 5f).toInt(); return at(gx, gy) == 1 }
-            var row = 0; var y = 2f
-            while (y < H + 6) {
-                var x = (if (row % 2 == 1) 5f else 0f)
-                while (x < W + 6) {
-                    val v = h(x.toInt(), y.toInt(), id + 41)
-                    val sx = x + (v % 5) - 2; val sy = y + ((v shr 4) % 3) - 1
-                    if (forestAt(sx, sy)) {
-                        val full = forestAt(sx - 8, sy) && forestAt(sx + 8, sy) && forestAt(sx, sy - 7) && forestAt(sx, sy + 4)
-                        val fam = fams[h((sx / 56).toInt(), (sy / 44).toInt(), id + 7) % fams.size].let { if (v % 9 == 0) fams[(v shr 6) % fams.size] else it }
-                        val idx = famStart[fam] + (v shr 3) % famLen[fam]
-                        val sc = if (full) 1f else 0.6f
-                        val bw = 32f * sc; val bh = 28f * sc
-                        bSrc.set(idx * 32, 0, idx * 32 + 32, 28)
-                        val flip = (v shr 9) % 2 == 0
-                        bDst.set(sx - bw / 2, sy + 4 - bh, sx + bw / 2, sy + 4)
-                        if (flip) { c.save(); c.scale(-1f, 1f, sx, 0f); c.drawBitmap(sheet, bSrc, bDst, p); c.restore() } else c.drawBitmap(sheet, bSrc, bDst, p)
-                    }
-                    x += 10f
-                }
-                y += 6f; row++
-            }
-            for (gy in 0 until 35) for (gx in 0 until 40) if (at(gx, gy) == 1 && at(gx, gy + 1) == 0) { box(gx * 6, gy * 5 + 5, gx * 6 + 6, gy * 5 + 7, 0x30000000); box(gx * 6, gy * 5 + 7, gx * 6 + 6, gy * 5 + 9, 0x14000000) }
-            return
-        }
         // trunks where the forest meets open ground below
         for (gy in 0 until 35) for (gx in 0 until 40) if (at(gx, gy) == 1 && at(gx, gy + 1) == 0 && h(gx, gy, id + 3) % 3 == 0) {
             val x = gx * 6 + 2; val y = gy * 5 + 2

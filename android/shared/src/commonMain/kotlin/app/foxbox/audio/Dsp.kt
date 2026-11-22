@@ -180,50 +180,118 @@ class Reverb {
 }
 
 /**
- * Master output guard: DC blocker, an optional speaker high-pass, and a peak
- * limiter with a soft-clip safety stage.
+ * Master output guard: DC blocker, an optional speaker high-pass, and a transparent look-ahead
+ * peak limiter that keeps everything under 0 dBFS without ever turning anything up.
  *
- * Phone speakers can't reproduce much below ~150 Hz, and their smart amps
- * protect the driver by turning the whole output down when it is pushed hard
- * for a long time (seen on a Galaxy S10+ as the volume sinking while playing).
- * So on the built-in speaker, sub-bass and DC are removed before the limiter
- * and the ceiling is a little lower; on headphones and interfaces only DC is
- * removed and the full range passes.
+ * The limiter only ever reduces gain (never above 1, no make-up gain, no saturation), so
+ * anything that already fits passes through bit-for-bit (apart from the DC blocker). When a
+ * peak would cross the ceiling, the gain eases down over the 1.5 ms look-ahead before the peak
+ * arrives (so it never clips and never clicks), holds, and recovers smoothly: quick after a
+ * lone transient, slower when the music sits against the ceiling, so it doesn't pump.
+ *
+ * Peaks are measured between samples too (a cheap 2x interpolation), so what reaches the
+ * speaker or the converter stays under the ceiling after reconstruction as well.
+ *
+ * Phone speakers can't reproduce much below ~150 Hz, and their smart amps protect the driver by
+ * turning the whole output down when it is pushed hard for a long time. So on the built-in
+ * speaker, sub-bass is removed before the limiter and the ceiling sits 1 dB lower.
  */
 class Limiter {
-    private var env = 0f
     // DC blocker state (one-pole high-pass at ~8 Hz)
     private var dxL = 0f; private var dyL = 0f; private var dxR = 0f; private var dyR = 0f
     // speaker high-pass: two cascaded biquads (Butterworth, 4th order)
     private val hpL1 = Biquad(); private val hpL2 = Biquad(); private val hpR1 = Biquad(); private val hpR2 = Biquad()
     private var hpHz = 0f
-    private var dcR = 0f; private var dcRate = 0
-    private var rel = 0f
+    private var dcR = 0f; private var rate = 0
+
+    // look-ahead: the signal waits LA samples while the gain gets ready for what's coming
+    private val dl = FloatArray(MAX_LA); private val dr = FloatArray(MAX_LA)
+    // the gain each sample needs, and a running minimum over the look-ahead (monotonic queue)
+    private val qVal = FloatArray(MAX_LA); private val qIdx = IntArray(MAX_LA)
+    private var qHead = 0; private var qLen = 0
+    // moving average of the released gain over the look-ahead (so the gain moves smoothly)
+    private val avg = FloatArray(MAX_LA); private var avgSum = 0.0
+    private var la = 64; private var pos = 0; private var count = 0
+    private var held = 1f
+    private var relFast = 0f; private var relSlow = 0f; private var slowEnv = 1f; private var slowK = 0f
+    // the last three samples of each side, for the between-samples estimate
+    private var a1 = 0f; private var a2 = 0f; private var a3 = 0f; private var b1 = 0f; private var b2 = 0f; private var b3 = 0f
 
     /** True while the sound comes out of the phone's own speaker. */
     @Volatile var speaker = false
+    /** How far the gain is turned down right now (1 = untouched), for meters. */
+    var reduction = 1f; private set
+
+    private fun setup() {
+        rate = SR
+        dcR = exp(-TAU * 8f / SRF)
+        la = (SRF * 0.0015f).toInt().coerceIn(16, MAX_LA - 1)
+        relFast = exp(-1f / (0.06f * SRF))     // after a lone peak: about 60 ms
+        relSlow = exp(-1f / (0.6f * SRF))      // when it keeps pushing: up to 600 ms
+        slowK = 1f - exp(-1f / (0.5f * SRF))
+        dl.fill(0f); dr.fill(0f); avg.fill(1f); avgSum = la.toDouble()
+        qHead = 0; qLen = 0; pos = 0; count = 0; held = 1f; slowEnv = 1f; a1 = 0f; a2 = 0f; a3 = 0f; b1 = 0f; b2 = 0f; b3 = 0f
+    }
 
     fun process(l: FloatArray, r: FloatArray, n: Int, gain: Float) {
-        if (dcRate != SR) { dcRate = SR; dcR = exp(-TAU * 8f / SRF); rel = exp(-1f / (0.12f * SRF)) }
+        if (rate != SR) setup()
         val spk = speaker
         if (spk && hpHz != SPEAKER_HP) { hpHz = SPEAKER_HP; hpL1.highPass(SPEAKER_HP); hpL2.highPass(SPEAKER_HP); hpR1.highPass(SPEAKER_HP); hpR2.highPass(SPEAKER_HP) }
-        val ceiling = if (spk) 0.8f else 0.89f
+        val ceiling = if (spk) CEILING_SPEAKER else CEILING
+        val g0 = gain.coerceIn(0f, 1f)   // the master fader only ever turns down
+        var minG = 1f
         for (i in 0 until n) {
             // DC blocker
-            var x = l[i]; var y = x - dxL + dcR * dyL; dxL = x; dyL = y; var a = y
-            x = r[i]; y = x - dxR + dcR * dyR; dxR = x; dyR = y; var b = y
+            var x = l[i]; var y = x - dxL + dcR * dyL; dxL = x; dyL = y; var a = y * g0
+            x = r[i]; y = x - dxR + dcR * dyR; dxR = x; dyR = y; var b = y * g0
             if (spk) { a = hpL2.process(hpL1.process(a)); b = hpR2.process(hpR1.process(b)) }
-            val pk = max(abs(a), abs(b)) * gain
-            // instant attack, ~120 ms release so the limiter doesn't pump
-            env = if (pk > env) pk else env * rel + pk * (1f - rel)
-            val g = if (env > ceiling) ceiling / env else 1f
-            l[i] = soft(a * gain * g); r[i] = soft(b * gain * g)
+            // the peak at this sample and just before it (between samples, by cubic interpolation)
+            val ma = (9f * (a2 + a1) - a3 - a) * 0.0625f; val mb = (9f * (b2 + b1) - b3 - b) * 0.0625f
+            a3 = a2; a2 = a1; a1 = a; b3 = b2; b2 = b1; b1 = b
+            val pk = max(max(abs(a), abs(b)), max(abs(ma), abs(mb)))
+            val need = if (pk > ceiling) ceiling / pk else 1f
+            // running minimum of what's needed over the look-ahead window
+            val idx = count
+            while (qLen > 0 && qVal[(qHead + qLen - 1) % MAX_LA] >= need) qLen--
+            val t = (qHead + qLen) % MAX_LA; qVal[t] = need; qIdx[t] = idx; qLen++
+            while (idx - qIdx[qHead] > la) { qHead = (qHead + 1) % MAX_LA; qLen-- }
+            val target = qVal[qHead]
+            // release: down at once, back up smoothly, slower when it keeps leaning on the ceiling
+            slowEnv += (target - slowEnv) * slowK
+            held = if (target < held) target else {
+                val k = if (slowEnv < 0.9f) relSlow else relFast
+                target + (held - target) * k
+            }
+            // smooth the gain over the look-ahead (this is what keeps peaks under the ceiling)
+            val ap = idx % la
+            avgSum += held - avg[ap]; avg[ap] = held
+            var g = (avgSum / la).toFloat()
+            if (g > 1f) g = 1f
+            if (g < minG) minG = g
+            // out comes the sample from the start of the window
+            val dp = pos
+            val oa = dl[dp] * g; val ob = dr[dp] * g
+            dl[dp] = a; dr[dp] = b
+            pos = if (pos + 1 >= la) 0 else pos + 1
+            count++
+            if (count >= 1 shl 30) { count -= 1 shl 29; for (j in 0 until qLen) qIdx[(qHead + j) % MAX_LA] -= 1 shl 29 }
+            // a last guard that never acts in practice (rounding)
+            l[i] = oa.coerceIn(-ceiling, ceiling); r[i] = ob.coerceIn(-ceiling, ceiling)
         }
+        // keep the running sum from drifting
+        if (count and 0xFFFF < n) { var s = 0.0; for (j in 0 until la) s += avg[j]; avgSum = s }
+        reduction = minG
         if (!spk && hpHz != 0f) { hpHz = 0f; hpL1.reset(); hpL2.reset(); hpR1.reset(); hpR2.reset() }
     }
-    private fun soft(x: Float) = if (x > 1f) 1f else if (x < -1f) -1f else x * (1.5f - 0.5f * x * x)
 
-    companion object { const val SPEAKER_HP = 110f }
+    companion object {
+        const val SPEAKER_HP = 110f
+        /** Just under 0 dBFS (−0.1 dB), measured between samples too. */
+        const val CEILING = 0.9886f
+        /** On the phone's own speaker, 1 dB lower (its amplifier is happier). */
+        const val CEILING_SPEAKER = 0.881f
+        private const val MAX_LA = 512
+    }
 }
 
 /** Direct-form-I biquad; only the high-pass design is needed so far. */

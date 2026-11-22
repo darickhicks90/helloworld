@@ -9,8 +9,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.9"
-    MARKETING_VERSION: "1.6.0"
-    CURRENT_PROJECT_VERSION: "17"
+    MARKETING_VERSION: "1.7.0"
+    CURRENT_PROJECT_VERSION: "18"
 targets:
   FiveEyeYeti:
     type: application
@@ -31,8 +31,10 @@ targets:
         UISupportedInterfaceOrientations: [UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         UIBackgroundModes: [audio]
-        NSMicrophoneUsageDescription: 5 Eye Yeti records from the microphone into its samplers and audio tracks.
         UIAppFonts: [PressStart2P-Regular.ttf, PixelifySans.ttf]
+        # no encryption beyond what iOS itself provides: no export-compliance questions on each upload
+        ITSAppUsesNonExemptEncryption: false
+        LSApplicationCategoryType: public.app-category.music
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.foxbox.fiveeyeyeti

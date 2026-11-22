@@ -96,7 +96,8 @@ object Audio {
     val liveInput = IntArray(3)
     private val inL = FloatArray(BLOCK); private val inR = FloatArray(BLOCK)
     private val liveL = FloatArray(BLOCK); private val liveR = FloatArray(BLOCK)
-    private fun softClip(x: Float) = if (x > 1f) 1f else if (x < -1f) -1f else x
+    /** The tape's own guard when live inputs are added after the master limiter. */
+    private val tapeLimiter = Limiter()
     /** Meter for each audio track (peak, linear). */
     val channelPeak = FloatArray(3)
     private val audioBusR = Array(3) { FloatArray(BLOCK) }
@@ -185,7 +186,8 @@ object Audio {
             }
             if (any) {
                 val mv = masterVolume
-                for (i in 0 until n) { liveL[i] = softClip(mixL[i] + liveL[i] * mv); liveR[i] = softClip(mixR[i] + liveR[i] * mv) }
+                for (i in 0 until n) { liveL[i] = mixL[i] + liveL[i] * mv; liveR[i] = mixR[i] + liveR[i] * mv }
+                tapeLimiter.process(liveL, liveR, n, 1f)
                 tp(liveL, liveR, n)
             } else tp(mixL, mixR, n)
         } else tp?.invoke(mixL, mixR, n)

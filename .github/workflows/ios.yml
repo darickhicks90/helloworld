@@ -47,26 +47,33 @@ jobs:
             -derivedDataPath build CODE_SIGNING_ALLOWED=NO build | tail -40
           test -d build/Build/Products/Debug-iphonesimulator/FiveEyeYeti.app
 
-      - name: Run it in a simulator and take screenshots
+      - name: Run it in simulators and take screenshots (beta check)
         run: |
-          UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next(x['udid'] for k,v in d.items() if 'iOS' in k for x in v if x['name'].startswith('iPhone')))")
-          xcrun simctl boot "$UDID"
-          xcrun simctl bootstatus "$UDID" -b
-          xcrun simctl install "$UDID" build/Build/Products/Debug-iphonesimulator/FiveEyeYeti.app
+          # a big phone, the smallest current phone and an iPad
+          python3 - > devices.txt <<'PY'
+          import json, subprocess
+          d = json.loads(subprocess.check_output(['xcrun', 'simctl', 'list', 'devices', 'available', '-j']))['devices']
+          devs = [x for k, v in d.items() if 'iOS' in k for x in v]
+          picks = []
+          for want in (('iPhone', 'Pro Max'), ('iPhone SE', ''), ('iPad', '')):
+              m = [x for x in devs if x['name'].startswith(want[0]) and want[1] in x['name']]
+              if m: picks.append(m[-1])
+          for x in picks: print(x['udid'], x['name'].replace(' ', '_').replace('(', '').replace(')', ''))
+          PY
+          cat devices.txt
           mkdir -p shots
-          xcrun simctl launch "$UDID" app.foxbox.fiveeyeyeti; sleep 8
-          xcrun simctl io "$UDID" screenshot shots/title.png
-          xcrun simctl terminate "$UDID" app.foxbox.fiveeyeyeti
-          xcrun simctl launch "$UDID" app.foxbox.fiveeyeyeti -studio; sleep 8
-          xcrun simctl io "$UDID" screenshot shots/studio.png
-          xcrun simctl spawn "$UDID" log show --last 2m --predicate 'process == "FiveEyeYeti"' --style compact | tail -60 > shots/log.txt || true
-
-      - name: Screenshot previews in the log
-        run: |
-          for f in title studio; do
-            sips -Z 640 shots/$f.png --out shots/$f-small.jpg -s format jpeg -s formatOptions 60 >/dev/null
-            echo "=====BEGIN $f====="; base64 -i shots/$f-small.jpg | tr -d '\n'; echo; echo "=====END $f====="
-          done
+          while read UDID NAME; do
+            xcrun simctl boot "$UDID"; xcrun simctl bootstatus "$UDID" -b
+            xcrun simctl install "$UDID" build/Build/Products/Debug-iphonesimulator/FiveEyeYeti.app
+            xcrun simctl launch "$UDID" app.foxbox.fiveeyeyeti; sleep 8
+            xcrun simctl io "$UDID" screenshot "shots/$NAME-title.png"
+            xcrun simctl terminate "$UDID" app.foxbox.fiveeyeyeti
+            xcrun simctl launch "$UDID" app.foxbox.fiveeyeyeti -studio; sleep 8
+            xcrun simctl io "$UDID" screenshot "shots/$NAME-studio.png"
+            xcrun simctl spawn "$UDID" log show --last 3m --predicate 'process == "FiveEyeYeti"' --style compact | grep -iE "error|fault|crash" | tail -60 > "shots/$NAME-errors.txt" || true
+            ls ~/Library/Logs/DiagnosticReports/ 2>/dev/null | grep -i FiveEyeYeti > "shots/$NAME-crashes.txt" || true
+            xcrun simctl shutdown "$UDID"
+          done < devices.txt
 
       - name: Package
         run: |
@@ -78,3 +85,69 @@ jobs:
           path: |
             5IY-ios-simulator.zip
             shots/
+
+  # Beta: a signed build uploaded to TestFlight. Runs only when started by hand (Actions → iOS app →
+  # Run workflow) and the App Store Connect secrets are set (see ios/README.md, "TestFlight beta").
+  testflight:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-15
+    env:
+      ASC_KEY_B64: ${{ secrets.APPSTORE_API_KEY_P8_BASE64 }}
+      ASC_KEY_ID: ${{ secrets.APPSTORE_API_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+      TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the App Store Connect secrets
+        id: keys
+        run: |
+          if [ -z "$ASC_KEY_B64" ] || [ -z "$ASC_KEY_ID" ] || [ -z "$ASC_ISSUER_ID" ] || [ -z "$TEAM_ID" ]; then
+            echo "App Store Connect secrets aren't set: nothing to upload (see ios/README.md)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            mkdir -p "$RUNNER_TEMP/keys"
+            echo "$ASC_KEY_B64" | base64 -d > "$RUNNER_TEMP/keys/AuthKey_$ASC_KEY_ID.p8"
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-java@v4
+        if: steps.keys.outputs.ready == 'true'
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+        if: steps.keys.outputs.ready == 'true'
+
+      - name: Build the shared sound core (release)
+        if: steps.keys.outputs.ready == 'true'
+        working-directory: android
+        run: |
+          ./gradlew --no-daemon :shared:assembleSharedReleaseXCFramework -Pkotlin.apple.xcodeCompatibility.nowarn=true
+          # the Xcode project links the framework from the debug folder; put the optimised one there
+          rm -rf shared/build/XCFrameworks/debug && cp -R shared/build/XCFrameworks/release shared/build/XCFrameworks/debug
+
+      - name: Archive and upload to TestFlight
+        if: steps.keys.outputs.ready == 'true'
+        run: |
+          brew install xcodegen
+          (cd ios && xcodegen generate)
+          AUTH="-allowProvisioningUpdates -authenticationKeyPath $RUNNER_TEMP/keys/AuthKey_$ASC_KEY_ID.p8 -authenticationKeyID $ASC_KEY_ID -authenticationKeyIssuerID $ASC_ISSUER_ID"
+          xcodebuild -project ios/FiveEyeYeti.xcodeproj -scheme FiveEyeYeti -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath build/FiveEyeYeti.xcarchive \
+            DEVELOPMENT_TEAM="$TEAM_ID" CODE_SIGN_STYLE=Automatic CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            $AUTH archive | tail -30
+          cat > build/export.plist <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>$TEAM_ID</string>
+            <key>signingStyle</key><string>automatic</string>
+          </dict></plist>
+          PLIST
+          xcodebuild -exportArchive -archivePath build/FiveEyeYeti.xcarchive -exportOptionsPlist build/export.plist \
+            -exportPath build/export $AUTH | tail -30
+          echo "Uploaded build ${{ github.run_number }} to App Store Connect: it appears in TestFlight once Apple has processed it."

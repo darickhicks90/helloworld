@@ -86,6 +86,10 @@ object Radio {
         val p = ExoPlayer.Builder(app, renderers)
             // the radio never pauses for (or ducks) the app's own instruments
             .setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MUSIC).build(), false)
+            // keep the stream (and the Wi-Fi) awake while the screen is off
+            .setWakeMode(C.WAKE_MODE_NETWORK)
+            // headphones pulled out: stop, rather than blast from the speaker
+            .setHandleAudioBecomingNoisy(true)
             .build()
         p.volume = volume
         p.addListener(object : Player.Listener {

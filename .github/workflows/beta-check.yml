@@ -1,0 +1,66 @@
+# Simulated beta: builds the apps, runs them on Android emulators (a phone, a small phone and a
+# tablet) and on iOS simulators (in ios.yml), opening every main screen and saving screenshots,
+# crashes and errors. Download "beta-shots-*" from the run's Artifacts.
+name: Beta check
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "android/app/**"
+      - "android/kit/**"
+      - "android/game/**"
+      - "android/pocket/**"
+      - "android/shared/**"
+      - ".github/beta/**"
+      - ".github/workflows/beta-check.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        device: [pixel_6, small_phone, pixel_tablet]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build the apps
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon :app:assembleRelease :game:assembleRelease :pocket:assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk ../5IY.apk
+          cp game/build/outputs/apk/release/game-release.apk ../Wildwood-Hall.apk
+          cp pocket/build/outputs/apk/release/pocket-release.apk ../5IY-Pocket.apk
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run on the emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: ${{ matrix.device }}
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -no-snapshot
+          script: bash .github/beta/android-shots.sh shots
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: beta-shots-android-${{ matrix.device }}
+          path: shots/

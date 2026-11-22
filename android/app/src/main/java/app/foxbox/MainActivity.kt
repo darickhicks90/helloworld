@@ -82,7 +82,26 @@ class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost {
             onBackInvokedDispatcher.registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT) { goBack() }
         }
         showProjects()
-        offerCrashReport()
+        if (!openForCheck()) offerCrashReport()
+    }
+
+    /**
+     * For automated screenshot runs (the beta check in CI): `am start ... --es screen studio|clibbins|notebook
+     * [--es page gusts|minds|...]` opens that screen on a project called "Beta check". Nothing else uses it.
+     */
+    private fun openForCheck(): Boolean {
+        val target = intent?.getStringExtra("screen") ?: return false
+        val p = ProjectStore.list().firstOrNull { it.name == "Beta check" } ?: ProjectStore.create("Beta check")
+        when (target) {
+            "studio", "clibbins" -> {
+                Studio.open(p)
+                intent.getStringExtra("page")?.let { pg -> runCatching { Studio.select(pg) } }
+                studio = StudioScreen(this, this); showStudio()
+                if (target == "clibbins") showClibbins()
+            }
+            "notebook" -> openNotebook()
+        }
+        return true
     }
 
     /** If FoxBox crashed last time, offer to share the details (nothing is sent automatically). */

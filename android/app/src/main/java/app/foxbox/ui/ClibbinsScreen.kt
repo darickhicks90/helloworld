@@ -37,6 +37,8 @@ class LaunchModel(
     val masterPeak: Float = 0f,
     val masterArmed: Boolean = false,
     val taping: Boolean = false,
+    /** The metronome (the studio's Click). */
+    val click: Boolean = false,
 ) {
     /** A clip box. `wave` is set for audio takes: the box is drawn in the shape of its waveform. */
     class Box(val id: String, val name: String, val block: String, val accent: Int, val queued: Boolean, val playing: Boolean, val muted: Boolean, val volume: Float,
@@ -54,7 +56,7 @@ class LaunchModel(
 object ClipField {
     const val K_CLIP = 0; const val K_TAKE = 1; const val K_FLOWER = 2; const val K_ARM = 3
     const val K_PLAY = 4; const val K_STOP = 5; const val K_REC = 6; const val K_BACK = 7; const val K_INPUT = 8
-    const val K_SHUFFLE = 9; const val K_POEM = 10; const val K_MASTER = 11; const val K_MASTER_ARM = 12; const val K_PEAK = 13; const val K_MON = 14; const val K_FX = 15; const val K_FADER = 16
+    const val K_SHUFFLE = 9; const val K_POEM = 10; const val K_MASTER = 11; const val K_MASTER_ARM = 12; const val K_PEAK = 13; const val K_MON = 14; const val K_FX = 15; const val K_FADER = 16; const val K_CLICK = 17
     const val POEM_ID = "poem-stone"
     /** Daisy-chain tracer colours: red, yellow, blue. */
     val CHAIN = intArrayOf(0xFFE0533F.toInt(), 0xFFF0C23B.toInt(), 0xFF4A8FD8.toInt())
@@ -164,7 +166,10 @@ object ClipField {
         // ---- top bar
         val topH = Px.dp(40f)
         var x = pad
-        fun top(id: String, kind: Int, text: String, wd: Float, color: Int, lit: Boolean = false) {
+        // on narrow screens the buttons shrink together so they never run under the radio/notebook keys
+        val fit = minOf(1f, (w - pad * 2 - TopKeys.WIDTH) / Px.dp(540f))
+        fun top(id: String, kind: Int, text: String, wd0: Float, color: Int, lit: Boolean = false) {
+            val wd = wd0 * fit
             box(c, x, pad, x + wd, pad + topH, 1f, if (lit) color else EDGE)
             label(c, text, x + wd / 2, pad + topH / 2, big, if (lit) color else WHITE, wd - Px.dp(10f))
             hits += Hit(id, kind, x, pad, x + wd, pad + topH)
@@ -173,6 +178,8 @@ object ClipField {
         top("back", K_BACK, "◀", Px.dp(44f), WHITE)
         top("play", K_PLAY, "▶ Play", Px.dp(92f), QUEUED, m.playing || (m.sceneQueued && blink))
         top("stop", K_STOP, "■ Stop", Px.dp(92f), WHITE)
+        // the metronome, next to the transport as in the studio's top bar
+        top("click", K_CLICK, "Click", Px.dp(72f), QUEUED, m.click)
         val recLit = m.audioRec == Transport.Rec.RECORDING || ((m.audioRec == Transport.Rec.ARMED || m.armedAny) && blink)
         top("rec", K_REC, if (m.audioRec == Transport.Rec.ARMED) "● ${m.beat}" else "● Rec", Px.dp(92f), REC, recLit)
         top("shuffle", K_SHUFFLE, "⤨ Shuffle", Px.dp(106f), WHITE)
@@ -475,7 +482,7 @@ class ClibbinsScreen(c: Context, private val host: Host) : PixelView(c) {
         }
         val q = poem.takeIf { System.currentTimeMillis() - poemAt < 20_000 }
         return LaunchModel(boxes, strips, flowers, chains, chainPath.toList(), t.playing, Studio.sceneQueued, Studio.armed.any { it }, t.audioRec, (t.beat + 1).toInt(),
-            status, p.layoutSeed, q, p.audioMaster, Audio.peak, Studio.masterArmed, Studio.taping)
+            status, p.layoutSeed, q, p.audioMaster, Audio.peak, Studio.masterArmed, Studio.taping, t.metronome)
     }
 
     override fun paint(c: Canvas) {
@@ -736,6 +743,7 @@ class ClibbinsScreen(c: Context, private val host: Host) : PixelView(c) {
             ClipField.K_BACK -> { Studio.save(); backToStudio?.invoke() }
             ClipField.K_PLAY -> Studio.playScene()
             ClipField.K_STOP -> Studio.stopScene()
+            ClipField.K_CLICK -> Studio.setMetronome(!Audio.transport.metronome)
             ClipField.K_REC -> Studio.recordAudio()
             ClipField.K_SHUFFLE -> { selected = null; Studio.shuffleLayout() }
             ClipField.K_POEM -> { poem = Poems.random(); poemAt = System.currentTimeMillis() }

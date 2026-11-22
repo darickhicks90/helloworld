@@ -83,7 +83,7 @@ class InstrumentPage(c: Context, id: String, host: Host) : LinearLayout(c) {
 
     private fun refresh() {
         val s = seq ?: return
-        seqBtn.on = s.enabled.on; seqBtn.text = if (s.enabled.on) "Seq ON" else "Seq OFF"
+        seqBtn.on = s.enabled.on; seqBtn.text = "Seq"   // lit when on (fits the narrow footer)
         latchBtn.on = s.latch.on; latchBtn.invalidate()
         viewBtn.text = if (steps?.visibility == VISIBLE) "Strum" else "Steps"
         seqBtn.requestLayout(); viewBtn.requestLayout(); seqBtn.invalidate(); viewBtn.invalidate()

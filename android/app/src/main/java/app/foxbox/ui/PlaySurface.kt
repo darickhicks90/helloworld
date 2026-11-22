@@ -160,8 +160,14 @@ class StrumPad(c: Context, private val chords: ChordButtons) : PixelView(c) {
             val l = col * tw; val t = r * th
             c.pixelBox(l + u, t + u, l + tw - u, t + th - u, bg)
             tileText.color = if (note in held) Pal.CREAM else Pal.BROWN_D
-            c.textCentered(Theory.noteName(note), l + tw / 2, t + th / 2 - Px.dp(4f), tileText)
-            c.textCentered(if (original) "original" else (note / 12 - 1).toString(), l + tw / 2, t + th / 2 + Px.dp(12f), small)
+            // narrow tiles (a small phone): the names shrink to fit, and the octave hides if it can't fit
+            val name = Theory.noteName(note); val size0 = tileText.textSize
+            val fit = tw * 0.8f / maxOf(1f, tileText.measureText(name))
+            if (fit < 1f) tileText.textSize = size0 * maxOf(fit, 0.55f)
+            c.textCentered(name, l + tw / 2, t + th / 2 - Px.dp(4f), tileText)
+            tileText.textSize = size0
+            val sub = if (original) "original" else (note / 12 - 1).toString()
+            if (small.measureText(sub) < tw - Px.dp(4f)) c.textCentered(sub, l + tw / 2, t + th / 2 + Px.dp(12f), small)
         }
     }
 

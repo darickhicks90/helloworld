@@ -17,7 +17,7 @@ import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
-/** Little Yeti: a first synth, drum machine and sampler for 5 to 10 year olds. */
+/** Little Eye Yeti: a first synth, drum machine and sampler for 5 to 10 year olds. */
 class KidsActivity : Activity(), KidsView.Host {
     private lateinit var view: KidsView
     private val prefs by lazy { getSharedPreferences("little_yeti", MODE_PRIVATE) }

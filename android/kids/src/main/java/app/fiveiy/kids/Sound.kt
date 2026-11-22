@@ -26,12 +26,12 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * Little Yeti's sound: a synth, eight drum pads and a sampler. Everything a child can change is
+ * Little Eye Yeti's sound: a synth, eight drum pads and a sampler. Everything a child can change is
  * kept inside ranges that always sound musical, and the output goes through the same transparent
  * limiter as 5 Eye Yeti, so nothing is ever too loud (it never turns anything up either).
  */
 object Sound {
-    /** The major scale: the only scale Little Yeti plays. Eight keys, root to root. */
+    /** The major scale: the only scale Little Eye Yeti plays. Eight keys, root to root. */
     val MAJOR = intArrayOf(0, 2, 4, 5, 7, 9, 11, 12)
     val NOTE_NAMES = arrayOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
 
@@ -78,7 +78,7 @@ object Sound {
     fun start() {
         if (running) return
         running = true
-        thread = Thread({ loop() }, "LittleYetiAudio").apply { priority = Thread.MAX_PRIORITY; start() }
+        thread = Thread({ loop() }, "LittleEyeYetiAudio").apply { priority = Thread.MAX_PRIORITY; start() }
     }
 
     fun stop() {

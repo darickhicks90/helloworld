@@ -3,7 +3,7 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-// Little Yeti: a first synth, drum machine and sampler for 5 to 10 year olds, built on 5 Eye Yeti's sound core.
+// Little Eye Yeti: a first synth, drum machine and sampler for 5 to 10 year olds, built on 5 Eye Yeti's sound core.
 fun secret(name: String): String? = System.getenv(name) ?: (project.findProperty(name) as String?)
 val uploadStore = secret("FOXBOX_UPLOAD_STORE_FILE")?.let { file(it) }?.takeIf { it.exists() }
 

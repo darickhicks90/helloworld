@@ -40,7 +40,7 @@ jobs:
           ./gradlew --no-daemon :app:assembleRelease :pocket:assembleRelease :kids:assembleRelease
           cp app/build/outputs/apk/release/app-release.apk ../5IY.apk
           cp pocket/build/outputs/apk/release/pocket-release.apk ../5IY-Pocket.apk
-          cp kids/build/outputs/apk/release/kids-release.apk ../Little-Yeti.apk
+          cp kids/build/outputs/apk/release/kids-release.apk ../Little-Eye-Yeti.apk
 
       - name: Enable KVM
         run: |

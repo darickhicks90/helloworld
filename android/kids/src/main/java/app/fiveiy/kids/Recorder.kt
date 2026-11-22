@@ -51,7 +51,7 @@ object Recorder {
             } catch (_: Throwable) { result = null }
             state = State.IDLE; beat = 0; level = 0f
             done(result)
-        }, "LittleYetiMic").start()
+        }, "LittleEyeYetiMic").start()
     }
 
     @SuppressLint("MissingPermission")

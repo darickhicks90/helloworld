@@ -25,7 +25,7 @@ import kotlin.math.min
 import kotlin.math.sin
 
 /**
- * Little Yeti's one screen. Three instruments on the tabs (synth, drums, sampler), each with:
+ * Little Eye Yeti's one screen. Three instruments on the tabs (synth, drums, sampler), each with:
  * the silly-effects XY pad on the left (it always springs back home), its few controls in the
  * middle, and eight big keys (or drum pads) along the bottom. No words: everything is a symbol.
  */

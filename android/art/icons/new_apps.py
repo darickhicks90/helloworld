@@ -98,7 +98,7 @@ def pocket_mono(size):
 write('pocket', pocket_fg, pocket_bg, pocket_mono)
 print('ok')
 
-# ---- Little Yeti (kids): the icon yeti, a size smaller, on a warm sunny background with a star
+# ---- Little Eye Yeti (kids): the icon yeti, a size smaller, on a warm sunny background with a star
 def kids_fig(size):
     f = ts.yeti(int(size * 4 * 0.55))
     im = Image.new('RGBA', (size * 4, size * 4), (0, 0, 0, 0))

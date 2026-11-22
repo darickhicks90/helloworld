@@ -247,6 +247,11 @@ object WordSolver {
             // the value must be a number in the problem, or a number inside a quote that really is in the problem
             val inText = mentions.any { matches(it.value) } ||
                 (g.quote != null && problem.contains(g.quote, ignoreCase = true) && numbersIn(g.quote).any { matches(it.value) })
+            if (!inText && g.quote != null && problem.contains(g.quote.trim(), ignoreCase = true)) {
+                // a conversion of what was quoted, e.g. "1 hour and 30 minutes" → 1.5 h
+                val parts = Regex("(\\d+(?:\\.\\d+)?)\\s*([A-Za-z]+)").findAll(g.quote).mapNotNull { m -> Units.convert(m.groupValues[1].toDouble(), m.groupValues[2], g.unit) }.toList()
+                if (parts.isNotEmpty() && near(parts.sum(), v)) { issues += Issue(Issue.Severity.NOTE, "Converted “${g.quote}” to ${Expr.fmt(v)} ${g.unit}."); continue }
+            }
             if (!inText) err("${g.name} = ${Expr.fmt(v)} (${g.meaning}) doesn't appear in the problem.")
         }
         // Every number in the problem should be used somewhere.

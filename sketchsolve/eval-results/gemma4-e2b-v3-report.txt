@@ -1,0 +1,101 @@
+motion1: RIGHT HIGH
+motion2: RIGHT HIGH
+motion3: RIGHT HIGH
+motion4: RIGHT HIGH
+motion5: FLAGGED (no confident answer; got null)
+     - WARNING: The 1200 in the problem is used for more than one thing (d_out, d_in).
+     eqs: [d_out = v_w*t_out, d_in = (v_w - v_w)*t_in (Wait, the problem implies the plane flies at a constant speed relative to the air, let's re-read. The problem states 'A plane flies 1200 km with the wind in 2 hours and returns against the wind in 3 hours'. This implies the plane's speed relative to the air is constant, let's call it v_p. The wind speed is v_w. Then d_out = v_p + v_w*t_out and d_in = v_p - v_w*t_in. Since the problem asks for the wind speed, we need to solve for v_w. Let's assume the plane's speed relative to the air is constant, v_p.]  ask=v_w
+motion6: RIGHT MEDIUM
+     - WARNING: v_J = 4 (Jake's walking speed) was written down but never used.
+     - WARNING: v_S = 12 (Sister's biking speed) was written down but never used.
+     eqs: [d_J*(t_J + t) = d_S*t]  ask=t
+percent1: RIGHT HIGH
+percent2: RIGHT HIGH
+percent3: RIGHT HIGH
+percent4: RIGHT MEDIUM
+     eqs: [price = price * (1 - off/100) / (1 - off/100)]  ask=price
+percent5: RIGHT MEDIUM
+     eqs: [total = meal + (meal*tax/100) + (meal*tip/100)]  ask=total
+percent6: RIGHT HIGH
+interest1: FLAGGED (no confident answer; got null)
+     - ERROR: Units don't match: money is being added to or compared with money·percent.
+     eqs: [i = p*r*t]  ask=i
+interest2: RIGHT MEDIUM
+     eqs: [A = p*(1 + r/100)^t]  ask=A
+interest3: FLAGGED (no confident answer; got null)
+     - ERROR: Units don't match: money is being added to or compared with money·percent.
+     eqs: [i = p*r*t]  ask=t
+work1: RIGHT MEDIUM
+     eqs: [t/t_A + t/t_B = 1]  ask=t
+work2: RIGHT HIGH
+work3: RIGHT HIGH
+age1: FLAGGED (no confident answer; got null)
+     - NOTE: Treated s as the unknown being asked for.
+     - WARNING: The 3 in the problem is used for more than one thing (t, a number in an equation).
+     - WARNING: The 12 in the problem is used for more than one thing (a number in an equation).
+     eqs: [t = 3*s, t + 12 = 2*(s + 12)]  ask=s
+age2: RIGHT MEDIUM
+     eqs: [j + (j + 6) = 40]  ask=j
+age3: RIGHT HIGH
+num1: RIGHT HIGH
+num2: RIGHT HIGH
+num3: RIGHT MEDIUM
+     - NOTE: Treated x as the unknown being asked for.
+     eqs: [x/4 - 3 = 5]  ask=x
+num4: FLAGGED (no confident answer; got null)
+     - WARNING: The letter x wasn't explained, so it's treated as an extra unknown.
+     - ERROR: No equation involves x_large, the quantity being asked for.
+     eqs: [x*(x+2) = 168]  ask=x_large
+num5: RIGHT HIGH
+mix1: FLAGGED (no confident answer; got null)
+     - ERROR: The quantity being asked for (x) was treated as already known.
+     eqs: [(x/100)*x + (y/100)*50 = (x+y)/100 * z]  ask=x
+mix2: RIGHT MEDIUM
+     - WARNING: The 10 in the problem is used for more than one thing (amount_peanuts, a number in an equation).
+     eqs: [(amount_peanuts * price_peanuts) + (x * price_cashews) = (10 + x) * target_price]  ask=x
+money1: RIGHT HIGH
+money2: RIGHT HIGH
+money3: RIGHT HIGH
+money4: RIGHT MEDIUM
+     - WARNING: The $900 in the problem wasn't used. Check that's right.
+     eqs: [earnings_L = rate_L*hours_L]  ask=earnings_L
+geo1: FLAGGED (no confident answer; got null)
+     - WARNING: The letter l wasn't explained, so it's treated as an extra unknown.
+     - ERROR: Units don't match: no unit is being added to or compared with length.
+     eqs: [l = 3*w, 2*(l + w) = p]  ask=w
+geo2: RIGHT HIGH
+geo3: RIGHT HIGH
+geo4: RIGHT HIGH
+geo5: RIGHT HIGH
+geo6: RIGHT HIGH
+geo7: RIGHT MEDIUM
+     eqs: [A = d^2/2]  ask=A
+rate1: RIGHT LOW
+     - WARNING: Different readings of the problem gave different answers. Check the setup below.
+     eqs: [f_c/c_c = f_60/60]  ask=f_60
+rate2: FLAGGED (no confident answer; got null)
+     - WARNING: The 390 in the problem wasn't used. Check that's right.
+     - ERROR: Units don't match: length^2 is being added to or compared with length^-3.
+     eqs: [g_old/d_old = 1/g_new]  ask=g_new
+rate3: RIGHT HIGH
+unit1: RIGHT HIGH
+unit2: RIGHT MEDIUM
+     eqs: [v_avg = d/t_converted]  ask=v_avg
+elec1: RIGHT HIGH
+elec2: RIGHT HIGH
+elec3: RIGHT MEDIUM
+     eqs: [1/r_total = 1/r_1 + 1/r_2]  ask=r_total
+under1: RIGHT (said not enough info)
+     - WARNING: The letter l wasn't explained, so it's treated as an extra unknown.
+     - WARNING: The letter w wasn't explained, so it's treated as an extra unknown.
+     - WARNING: The 30 in the problem is used for more than one thing (a number in an equation).
+     - ERROR: Units don't match: length^2 is being added to or compared with no unit.
+     eqs: [2*(l + w) = 30, a = l*w, l + w = 30/2]  ask=a
+under2: FLAGGED (answered [2.142857142857143] but unsure)
+     - WARNING: The 70 in the problem is used for more than one thing (v_A, a number in an equation).
+     eqs: [v_A*t + 70*t = d]  ask=t
+under3: RIGHT (said not enough info)
+     - ERROR: price = 100 (original price of the shirt) doesn't appear in the problem.
+     eqs: [save = price*off/100]  ask=save
+
+41 right, 9 flagged as unsure, 0 wrong out of 50. Wrong but marked HIGH confidence: []

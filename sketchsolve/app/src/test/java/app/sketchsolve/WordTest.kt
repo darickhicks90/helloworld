@@ -63,6 +63,16 @@ class WordTest {
         assertEquals(Confidence.MEDIUM, a.confidence)
     }
 
+    @Test fun conversionsAndReciprocals() {
+        val p = "Sam walks for 1 hour and 30 minutes at 4 miles per hour. How many miles does he walk?"
+        val j = """{"givens":[{"name":"t","value":1.5,"unit":"h","meaning":"time","quote":"1 hour and 30 minutes"},{"name":"v","value":4,"unit":"mi/h","quote":"4 miles per hour"}],"unknowns":[{"name":"d","unit":"mi"}],"equations":["d = v*t"],"ask":"d"}"""
+        val a = WordSolver.check(p, Setup.parse(j)!!)
+        assertTrue(a.issues.toString(), a.ok); assertEquals(6.0, a.result!!.value, 1e-9)
+        val p2 = "A car uses 8 gallons of gas to go 240 miles. How many gallons does it need to go 390 miles?"
+        val j2 = """{"givens":[{"name":"g","value":8,"unit":"gallons","quote":"8 gallons"},{"name":"d","value":240,"unit":"miles","quote":"240 miles"},{"name":"d2","value":390,"unit":"miles","quote":"390 miles"}],"unknowns":[{"name":"g2","unit":"gallons"}],"equations":["g/d = 1/g2 * d2"],"ask":"g2"}"""
+        assertTrue(WordSolver.check(p2, Setup.parse(j2)!!).issues.any { it.message.startsWith("Units don't match") })
+    }
+
     @Test fun unusedNumberWarns() {
         val p = "A jacket costs $80 and is 15% off. Sales tax is 8%. What is the sale price before tax?"
         val j = """{"givens":[{"name":"price","value":80,"unit":"$","quote":"$80"},{"name":"off","value":15,"unit":"%","quote":"15% off"}],"unknowns":[{"name":"sale","unit":"$"}],"equations":["sale = price*(1 - off/100)"],"ask":"sale"}"""

@@ -82,6 +82,20 @@ object Units {
         this["mpg"] = UnitInfo(L / L.pow(3), "mi/gal")
     }
 
+    /** Size of each basic unit in a common base, for checking conversions like 1 h 30 min = 1.5 h. */
+    private val FACTOR = mapOf("s" to 1.0, "min" to 60.0, "h" to 3600.0, "day" to 86400.0, "week" to 604800.0,
+        "mm" to 0.001, "cm" to 0.01, "m" to 1.0, "km" to 1000.0, "in" to 0.0254, "ft" to 0.3048, "yd" to 0.9144, "mi" to 1609.344,
+        "g" to 0.001, "kg" to 1.0, "oz" to 0.028349523125, "lb" to 0.45359237, "mL" to 0.001, "L" to 1.0, "gal" to 3.785411784, "cup" to 0.2365882365,
+        "cent" to 0.01, "$" to 1.0)
+
+    /** Convert [v] from one simple unit to another of the same kind, or null. */
+    fun convert(v: Double, from: String, to: String): Double? {
+        val a = parse(from) ?: return null; val b = parse(to) ?: return null
+        if (a.dim != b.dim) return null
+        val fa = FACTOR[a.family] ?: return null; val fb = FACTOR[b.family] ?: return null
+        return v * fa / fb
+    }
+
     /** Parse a unit like "mi/h", "miles per hour", "m^2", "$ per pound", "dollars/hour". Null = unknown. */
     fun parse(unit: String?): UnitInfo? {
         if (unit == null) return null
@@ -135,6 +149,7 @@ object Units {
                     val a = of(n.a)
                     val bNum = (n.b as? Node.Num)?.v
                     if (bNum == 100.0 && a != null && (a.dim.e["percent"] ?: 0) > 0) UnitInfo(a.dim / PERCENT, "")   // 15% / 100 = 0.15
+                    else if (n.a is Node.Num) of(n.b)?.let { UnitInfo(it.dim.pow(-1), "") }            // 1/x has the opposite units to x
                     else { val b = of(n.b); if (a == null || b == null) null else UnitInfo(a.dim / b.dim, "") }
                 }
                 else -> { val a = of(n.a); val k = (n.b as? Node.Num)?.v; if (a != null && k != null && k == Math.floor(k)) UnitInfo(a.dim.pow(k.toInt()), "") else if (a?.dim?.isNone == true) a else null }

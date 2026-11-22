@@ -63,6 +63,7 @@ class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost {
         CrashLog.install(this)
         DeviceAudio.configure(this) // before anything creates the engines
         Px.init(this)
+        app.foxbox.kit.AudioBoost.init(this)
         ProjectStore.init(this)
         Presets.init(this)
         app.foxbox.data.Banks.init(this)
@@ -121,6 +122,10 @@ class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost {
         if (closeNotebook()) return
         when (screen) { 2 -> showStudio(); 1 -> showProjects(); else -> finish() }
     }
+
+    // a steady processor while the app is in front (where the phone supports it), so the audio never glitches as it throttles
+    override fun onResume() { super.onResume(); app.foxbox.kit.AudioBoost.sustained(this, true) }
+    override fun onPause() { app.foxbox.kit.AudioBoost.sustained(this, false); super.onPause() }
 
     override fun onStart() { super.onStart(); Audio.start(); immersive() }
     override fun onStop() {

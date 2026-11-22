@@ -76,15 +76,71 @@ object Sound {
 
     fun tick(accent: Boolean) = post { tickEnv = 1f; tickHz = if (accent) 1500f else 1000f; tickPh = 0f; tickAmp = 0.35f }
 
+    /** True while the AAudio stream (rather than the AudioTrack fallback) is playing. */
+    @Volatile var nativeOut = false; private set
+    private var watcher: Thread? = null
+    private val renderer = app.foxbox.audio.NativeAudio.Renderer { buf, frames -> renderInterleaved(buf, frames) }
+
     fun start() {
         if (running) return
         running = true
+        // the fast path: 5 Eye Yeti's AAudio stream (exclusive / MMAP where the phone allows)
+        val na = app.foxbox.audio.NativeAudio
+        if (na.available) {
+            na.renderer = renderer
+            if (runCatching { na.nOpen(SR, 0, 0) }.getOrDefault(-1) > 0) {
+                nativeOut = true
+                watcher = Thread({ watch() }, "LittleEyeYetiWatch").apply { start() }
+                return
+            }
+            na.renderer = null
+        }
+        // otherwise the AudioTrack path
         thread = Thread({ loop() }, "LittleEyeYetiAudio").apply { priority = Thread.MAX_PRIORITY; start() }
     }
 
     fun stop() {
         running = false
+        if (nativeOut) {
+            watcher?.interrupt(); watcher?.join(500); watcher = null
+            runCatching { app.foxbox.audio.NativeAudio.nClose() }
+            app.foxbox.audio.NativeAudio.renderer = null
+            nativeOut = false
+        }
         thread?.join(500); thread = null
+    }
+
+    /** Called on the AAudio real-time thread: render in blocks and interleave. */
+    private fun renderInterleaved(buf: FloatArray, frames: Int) {
+        var off = 0
+        while (off < frames) {
+            val n = minOf(BLOCK, frames - off)
+            render(n)
+            for (i in 0 until n) { buf[(off + i) * 2] = l[i]; buf[(off + i) * 2 + 1] = r[i] }
+            off += n
+        }
+    }
+
+    /**
+     * Watches the stream: grows the buffer one burst at a time only if this phone reports
+     * dropouts (starting from the least latency), and reopens it if the output changes
+     * (headphones in or out).
+     */
+    private fun watch() {
+        val na = app.foxbox.audio.NativeAudio
+        var xr = runCatching { na.nXRuns() }.getOrDefault(0)
+        while (running) {
+            try { Thread.sleep(250) } catch (_: InterruptedException) { return }
+            runCatching {
+                if (na.nDisconnected()) { na.nClose(); na.nOpen(SR, 0, 0); xr = na.nXRuns() }
+                val now = na.nXRuns()
+                if (now > xr) {
+                    xr = now
+                    val size = na.nBufferSize(); val cap = na.nCapacity(); val b = na.nBurst()
+                    if (size + b <= cap) na.nSetBufferSize(size + b)
+                }
+            }
+        }
     }
 
     private fun loop() {
@@ -108,7 +164,9 @@ object Sound {
         var size = runCatching { track.setBufferSizeInFrames(n * 2) }.getOrDefault(n * 2)
         var underruns = runCatching { track.underrunCount }.getOrDefault(0)
         while (running) {
+            val t0 = System.nanoTime()
             render(n)
+            app.foxbox.kit.AudioBoost.onRender(System.nanoTime() - t0, n, SR)
             for (i in 0 until n) { out[i * 2] = l[i]; out[i * 2 + 1] = r[i] }
             if (track.write(out, 0, n * 2, AudioTrack.WRITE_BLOCKING) < 0) break
             val u = track.underrunCount

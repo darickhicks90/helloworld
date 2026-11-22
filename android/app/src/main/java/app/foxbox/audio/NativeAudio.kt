@@ -27,5 +27,6 @@ object NativeAudio {
         val d = System.nanoTime() - t
         lastRenderNs = d; lastFrames = frames
         if (d > maxRenderNs) maxRenderNs = d
+        app.foxbox.kit.AudioBoost.onRender(d, frames, SR)
     }
 }

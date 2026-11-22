@@ -28,6 +28,7 @@ class KidsActivity : Activity(), KidsView.Host {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         volumeControlStream = AudioManager.STREAM_MUSIC
         Px.init(this)
+        app.foxbox.kit.AudioBoost.init(this)
         val am = getSystemService(AUDIO_SERVICE) as AudioManager
         val rate = am.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)?.toIntOrNull() ?: 48000
         val burst = am.getProperty(AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER)?.toIntOrNull() ?: 192
@@ -37,6 +38,10 @@ class KidsActivity : Activity(), KidsView.Host {
         view = KidsView(this, this).apply { page = intent?.getIntExtra("page", -1)?.takeIf { it in 0..2 } ?: prefs.getInt("page", 0) }
         setContentView(view)
     }
+
+    // a steady processor while the app is in front (where the phone supports it), so the audio never glitches as it throttles
+    override fun onResume() { super.onResume(); app.foxbox.kit.AudioBoost.sustained(this, true) }
+    override fun onPause() { app.foxbox.kit.AudioBoost.sustained(this, false); super.onPause() }
 
     override fun onStart() {
         super.onStart(); immersive()

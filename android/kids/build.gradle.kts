@@ -17,6 +17,7 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
+        externalNativeBuild { cmake { arguments += listOf("-DANDROID_STL=none") } }
     }
 
     signingConfigs {
@@ -41,6 +42,14 @@ android {
             isMinifyEnabled = false
             signingConfig = signingConfigs.findByName("upload") ?: signingConfigs.getByName("debug")
         }
+    }
+
+    // the same low-latency AAudio output as 5 Eye Yeti (one C file, shared)
+    externalNativeBuild {
+        cmake { path = file("../app/src/main/cpp/CMakeLists.txt") }
+    }
+    packaging {
+        jniLibs { useLegacyPackaging = false }
     }
 
     compileOptions {

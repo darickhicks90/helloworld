@@ -9,6 +9,9 @@ SketchSolve includes or downloads the following open-source components.
 | [whisper.cpp / ggml](https://github.com/ggml-org/whisper.cpp) by the ggml authors | Push-to-talk speech recognition (bundled in `app/src/main/cpp/whisper.cpp`) | MIT License |
 | [Whisper](https://github.com/openai/whisper) models by OpenAI | Speech model weights (downloaded on first use) | MIT License |
 | Gson, kotlinx-coroutines (via LiteRT-LM) | Runtime libraries | Apache License 2.0 |
+| Gemma 4 E4B by Google | The more accurate word-problem model for phones with 12 GB of memory | Apache License 2.0 |
+| [Play AI Delivery library](https://developer.android.com/google/play/on-device-ai) by Google | Downloads the models from Google Play | [Play Core Software Development Kit Terms of Service](https://developer.android.com/guide/playcore#license) |
+| AndroidX Activity / Core | Google Play's download prompts | Apache License 2.0 |
 
 The full MIT license for whisper.cpp is in `app/src/main/cpp/whisper.cpp/LICENSE`.
 The Apache License 2.0 text is at https://www.apache.org/licenses/LICENSE-2.0.

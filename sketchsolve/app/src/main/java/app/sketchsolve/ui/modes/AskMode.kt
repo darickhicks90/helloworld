@@ -140,13 +140,17 @@ class AskMode(app: MainActivity) : Mode(app) {
                     val pct = if (p.total > 0) (100 * p.done / p.total).toInt() else 0
                     pad.text("⇣ ${m.title}: ${if (p.state == ModelManager.State.VERIFYING) p.message else "$pct% — ${size(p.done)} of ${size(p.total)}"}")
                     if (p.state != ModelManager.State.RUNNING && p.message.isNotEmpty() && p.state != ModelManager.State.VERIFYING) pad.muted(p.message)
+                    if (p.needsOk) {
+                        pad.button("Allow the download…") { mm.play.askToContinue(app) }
+                        if (asked.add(m.id)) mm.play.askToContinue(app)
+                    }
                     pad.add(ProgressBar(app, null, android.R.attr.progressBarStyleHorizontal).apply { max = 1000; progress = if (p.total > 0) (1000 * p.done / p.total).toInt() else 0; isIndeterminate = p.state == ModelManager.State.VERIFYING })
                     if (p.state != ModelManager.State.VERIFYING) pad.button("Cancel") { mm.cancel(m); refresh() }
                 }
             }
         }
         if (active) {
-            pad.muted("The download carries on if you leave the app or the screen turns off. Progress is also in the notification bar.")
+            pad.muted(if (mm.wanted().any { mm.viaPlay(it) }) "Downloading from Google Play. It carries on if you leave the app." else "The download carries on if you leave the app or the screen turns off. Progress is also in the notification bar.")
             watchDownloads()
         }
         val d = mm.device()
@@ -179,21 +183,27 @@ class AskMode(app: MainActivity) : Mode(app) {
     private fun size(b: Long) = if (b > 1e9) "%.1f GB".format(b / 1e9) else "%d MB".format(b / 1_000_000)
 
     private var networkProblem: String? = null
+    /** Models we've already shown Google Play's "allow download?" prompt for. */
+    private val asked = HashSet<String>()
     private var importing: String? = null
 
     fun startDownload(list: List<ModelSpec>) {
         val mm = app.models
         // check the phone can find the download site first, so a blocked network is explained, not silent
         Thread {
-            val problem = mm.canReachDownloadSite()
+            // installed from Google Play: Play delivers the models it carries for this phone
+            val fromPlay = list.filter { mm.play.offers(it) }
+            val fromWeb = list - fromPlay.toSet()
+            val problem = if (fromWeb.isEmpty()) null else mm.canReachDownloadSite()
             app.main.post {
                 networkProblem = problem
+                for (m in fromPlay) mm.enqueueFromPlay(m)?.let { app.toast(it) }
                 if (problem != null) { refresh(); app.showTutorial("manual"); return@post }
-                for (m in list) {
+                for (m in fromWeb) {
                     val err = mm.enqueue(m, wifiOnly)
                     if (err != null) { app.toast(err); break }
                 }
-                if (wifiOnly && !mm.onWifi()) app.toast("It will start when you're on Wi-Fi (or untick “Only download on Wi-Fi”).")
+                if (fromWeb.isNotEmpty() && wifiOnly && !mm.onWifi()) app.toast("It will start when you're on Wi-Fi (or untick “Only download on Wi-Fi”).")
                 refresh()
             }
         }.start()
@@ -211,6 +221,9 @@ class AskMode(app: MainActivity) : Mode(app) {
             }
         }.start()
     }
+
+    /** Pick up downloads still running (e.g. after the app was closed). */
+    fun resumeWatching() { if (app.models.wanted().any { app.models.progress(it).state !in setOf(ModelManager.State.NONE, ModelManager.State.READY, ModelManager.State.FAILED) }) watchDownloads() }
 
     private var watching = false
     /** While a download runs: refresh the notepad every second and check finished files. */

@@ -324,6 +324,8 @@ class MainActivity : Activity() {
         super.onResume()
         // a download may have finished while the app was closed: check it and put it in place
         Thread {
+            models.refreshPlay()
+            main.post { (modes.firstOrNull { it is app.sketchsolve.ui.modes.AskMode } as? app.sketchsolve.ui.modes.AskMode)?.resumeWatching() }
             for (m in models.LANGUAGE + models.SPEECH) if (models.finishIfDone(m)) main.post { modelsChanged(); toast("${m.title} is ready."); mode?.refresh() }
         }.start()
     }

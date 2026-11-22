@@ -1,3 +1,4 @@
+import java.util.Properties
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -5,25 +6,47 @@ plugins {
 
 android {
     namespace = "app.sketchsolve"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "app.sketchsolve"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        targetSdk = 36
+        versionCode = 2
+        versionName = "1.1"
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
         externalNativeBuild { cmake { arguments += listOf("-DANDROID_STL=c++_shared") } }
     }
     externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "4.1.2" } }
     ndkVersion = "29.0.14206865"
 
+    // The Play upload key, if keystore.properties is present (never commit either file):
+    //   storeFile=/path/to/upload.jks  storePassword=…  keyAlias=upload  keyPassword=…
+    val keys = rootProject.file("keystore.properties").takeIf { it.exists() }?.let { f -> Properties().apply { f.inputStream().use { load(it) } } }
+    signingConfigs {
+        if (keys != null) create("upload") {
+            storeFile = file(keys.getProperty("storeFile"))
+            storePassword = keys.getProperty("storePassword")
+            keyAlias = keys.getProperty("keyAlias")
+            keyPassword = keys.getProperty("keyPassword")
+        }
+    }
     buildTypes {
         release {
             isMinifyEnabled = false
-            // Signed with the debug key so the release APK installs directly.
-            signingConfig = signingConfigs.getByName("debug")
+            // Without an upload key, signed with the debug key so the release APK installs directly.
+            signingConfig = signingConfigs.findByName("upload") ?: signingConfigs.getByName("debug")
+        }
+    }
+
+    // Model files delivered by Google Play (see preparePlayPacks in the root build file).
+    assetPacks += listOf("e4b_1", "e4b_2", "e4b_3", "e2b_1", "e2b_2", "whisper_small", "whisper_base")
+        .filter { rootProject.findProject(":$it") != null }.map { ":$it" }
+    bundle {
+        deviceTargetingConfig = file("device_targeting_config.xml")
+        deviceGroup {
+            enableSplit = true
+            defaultGroup = "standard"
         }
     }
     compileOptions {
@@ -37,6 +60,9 @@ kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarg
 
 dependencies {
     implementation("com.google.ai.edge.litertlm:litertlm-android:0.19.1")
+    // Google Play delivery of the model files (Play for On-device AI)
+    implementation("com.google.android.play:ai-delivery:0.2.0-beta01")
+    implementation("androidx.activity:activity:1.9.3") // for Play's "download over mobile data?" prompt
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
     testImplementation("org.robolectric:robolectric:4.14.1")

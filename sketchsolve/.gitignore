@@ -5,3 +5,7 @@ local.properties
 .idea/
 captures/
 .cxx/
+playpacks/*/src/
+keystore.properties
+*.jks
+*.keystore

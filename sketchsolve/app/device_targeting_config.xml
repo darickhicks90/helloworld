@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Which Gemma model Google Play delivers: phones with 12 GB of memory or more
+     get E4B (more accurate), the rest get E2B. Matches ModelManager.fits(). -->
+<config:device-targeting-config xmlns:config="http://schemas.android.com/apk/config">
+    <config:device-group name="large">
+        <config:device-selector ram-min-bytes="10000000000"/>
+    </config:device-group>
+    <config:device-group name="standard">
+        <config:device-selector ram-max-bytes="10000000000"/>
+    </config:device-group>
+</config:device-targeting-config>

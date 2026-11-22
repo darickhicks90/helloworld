@@ -4,6 +4,7 @@ import android.app.DownloadManager
 import android.content.Context
 import android.os.Looper
 import app.sketchsolve.llm.ModelManager
+import app.sketchsolve.llm.PlayPacks
 import app.sketchsolve.ui.SampleInk
 import app.sketchsolve.ui.modes.AskMode
 import app.sketchsolve.ui.modes.ShapesMode
@@ -60,6 +61,30 @@ class AppBehaviourTest {
         ask.startDownload(listOf(ModelManager.GEMMA_E2B))
         settle()
         assertEquals(2, dm.requestCount)
+    }
+
+    @Test fun googlePlayDeliversTheModelsItCarries() {
+        val a = Robolectric.buildActivity(MainActivity::class.java).setup().get()
+        a.models.deviceOverride = ModelManager.DeviceInfo("Test phone", "chip", 8.0, 50.0, 8, "15")
+        val play = FakePlay(kotlin.io.path.createTempDirectory("play").toFile())
+        // this phone's group gets Gemma E2B from Play; Whisper base isn't carried for it
+        PlayPacks.packs(ModelManager.GEMMA_E2B).forEach { play.packs[it] = mapOf("x" to ByteArray(2_000_000)) }
+        PlayPacks.packs(ModelManager.WHISPER_BASE).forEach { play.packs[it] = emptyMap() }
+        a.models.packSourceOverride = play
+        a.models.skipNetworkCheck = true
+        val ask = a.modes.first { it is AskMode } as AskMode
+        a.select(ask)
+        ask.startDownload(listOf(ModelManager.WHISPER_BASE, ModelManager.GEMMA_E2B))
+        settle()
+        assertEquals(PlayPacks.packs(ModelManager.GEMMA_E2B), play.fetched)
+        assertTrue(a.models.viaPlay(ModelManager.GEMMA_E2B))
+        assertEquals(ModelManager.State.RUNNING, a.models.progress(ModelManager.GEMMA_E2B).state)
+        val dm = shadowOf(a.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager)
+        assertEquals("only Whisper comes from the internet", 1, dm.requestCount)
+        // cancelling forgets the Play download
+        a.models.cancel(ModelManager.GEMMA_E2B)
+        assertFalse(a.models.viaPlay(ModelManager.GEMMA_E2B))
+        assertEquals(ModelManager.State.NONE, a.models.progress(ModelManager.GEMMA_E2B).state)
     }
 
     @Test fun importingAModelFileChecksAndInstallsIt() {

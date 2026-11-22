@@ -125,6 +125,43 @@ would pin the answer down. It also tells you when two answers fit (such as
 the "two possible triangles" case), when your values contradict each other,
 and when no answer exists.
 
+## Publishing on Google Play (model delivery)
+
+When the app is installed from Google Play, the models come from Google Play
+too, using Play for On-device AI packs, not from Hugging Face. That gets past
+most network filters, and you don't pay for or run a download server.
+
+* Play allows at most 1.5 GB per pack, so each Gemma model is split into
+  parts of 1.4 GB, one pack each. The app downloads the parts, joins them
+  into one file, checks its SHA-256, and removes each pack after copying it.
+* Device targeting (`app/device_targeting_config.xml`): phones with about
+  12 GB of memory or more (group `large`) get Gemma E4B; the rest
+  (`standard`) get Gemma E2B and Whisper base. Everyone gets Whisper small.
+  Compressed downloads: about 3.3 GB on a `large` phone and 2.4 GB on a
+  `standard` one, under Play's 4 GB per device.
+* A model Play doesn't carry for a phone (for example E2B on a 12 GB phone),
+  and every model in a copy not installed from Play, is downloaded from the
+  internet or imported as before.
+* Packs are on demand. The app starts them when the user taps Download, and
+  Google Play asks before using mobile data for big files.
+
+Building the bundle (about 5.6 GB):
+
+```
+./gradlew preparePlayPacks -Pmodels=/folder/with/the/four/model/files
+./gradlew bundleRelease      # app/build/outputs/bundle/release/app-release.aab
+```
+
+`preparePlayPacks` checks each file's SHA-256 and writes the parts to
+`playpacks/*/src/main/assets` (not committed). Sign the bundle with your
+upload key: put `storeFile`, `storePassword`, `keyAlias` and `keyPassword`
+in `keystore.properties` (not committed). Without it the bundle is signed
+with the debug key, which Google Play rejects.
+
+To check Play delivery on a real phone, upload the bundle to an internal
+test track in Play Console and install from the link. Copies installed
+any other way (including the debug APK) fall back to internet downloads.
+
 ## Install
 
 Download the APK from the session, or build it yourself:

@@ -61,7 +61,7 @@ class ModelManager(private val ctx: Context) {
         val d = device()
         val known = d.ramGb > 0.5
         fun space(m: ModelSpec) = isReady(m) || d.freeGb * 1e9 > m.bytes + 300_000_000L
-        val bigOk = !known || d.ramGb >= 11.0
+        val bigOk = !known || d.ramGb >= 10.0 // 12 GB phones report about 11; matches the Play device group
         val llm = LANGUAGE.map { m ->
             when {
                 isReady(m) -> Fit(m, false, true, "Already downloaded.")
@@ -126,7 +126,7 @@ class ModelManager(private val ctx: Context) {
      * file's size and SHA-256 before using it. */
 
     enum class State { NONE, QUEUED, RUNNING, PAUSED, VERIFYING, FAILED, READY }
-    data class Progress(val state: State, val done: Long, val total: Long, val message: String = "")
+    data class Progress(val state: State, val done: Long, val total: Long, val message: String = "", val needsOk: Boolean = false)
 
     private val dm get() = ctx.getSystemService(Context.DOWNLOAD_SERVICE) as android.app.DownloadManager
     private fun idKey(m: ModelSpec) = "dl_${m.id}"
@@ -135,9 +135,35 @@ class ModelManager(private val ctx: Context) {
     private val verifying = java.util.Collections.synchronizedSet(HashSet<String>())
     private val failures = java.util.concurrent.ConcurrentHashMap<String, String>()
 
+    /* ---------------- Google Play delivery ----------------
+     * When the app came from Google Play, the models come from Google Play too
+     * (see PlayPacks). Otherwise, or for a model Play doesn't carry for this
+     * phone, they come from the internet as below. */
+
+    /** Tests set this before first use. */
+    var packSourceOverride: PackSource? = null
+    val play: PlayPacks by lazy { PlayPacks(packSourceOverride ?: runCatching { GooglePlayPackSource(ctx) }.getOrNull()) }
+    private fun playKey(m: ModelSpec) = "play_${m.id}"
+    fun viaPlay(m: ModelSpec) = prefs.getBoolean(playKey(m), false)
+
+    /** Download from Google Play. Call after play.offers(m) said yes. */
+    fun enqueueFromPlay(m: ModelSpec): String? {
+        if (isReady(m)) return null
+        val need = m.bytes + PlayPacks.CHUNK + 300_000_000L // the model plus one part while joining
+        if (freeBytes() < need) return "Not enough free space for ${m.title}: it needs ${"%.1f".format(need / 1e9)} GB."
+        cancel(m)
+        prefs.edit().putBoolean(playKey(m), true).apply()
+        play.fetch(m)
+        return null
+    }
+
+    /** After a restart, ask Google Play where its downloads are. Blocks. */
+    fun refreshPlay() { for (m in LANGUAGE + SPEECH) if (viaPlay(m) && !isReady(m)) play.refresh(m) }
+
     /** Start (or keep) a download. Returns an error message, or null if it was queued. */
     fun enqueue(m: ModelSpec, wifiOnly: Boolean): String? {
         if (isReady(m)) return null
+        if (viaPlay(m)) { play.cancel(m); prefs.edit().remove(playKey(m)).apply() }
         if (prefs.getLong(idKey(m), -1L) >= 0 && progress(m).state in setOf(State.QUEUED, State.RUNNING, State.PAUSED)) return null
         val need = m.bytes + 300_000_000L
         if (freeBytes() < need) return "Not enough free space for ${m.title}: it needs ${"%.1f".format(need / 1e9)} GB."
@@ -158,6 +184,7 @@ class ModelManager(private val ctx: Context) {
         if (isReady(m)) return Progress(State.READY, m.bytes, m.bytes)
         if (m.id in verifying) return Progress(State.VERIFYING, m.bytes, m.bytes, "Checking the file…")
         failures[m.id]?.let { return Progress(State.FAILED, 0, m.bytes, it) }
+        if (viaPlay(m)) return play.progress(m)
         val id = prefs.getLong(idKey(m), -1L)
         if (id < 0) return Progress(State.NONE, 0, m.bytes)
         dm.query(android.app.DownloadManager.Query().setFilterById(id))?.use { c ->
@@ -200,6 +227,14 @@ class ModelManager(private val ctx: Context) {
     fun finishIfDone(m: ModelSpec): Boolean {
         if (isReady(m)) return false
         if (progress(m).state != State.VERIFYING || !verifying.add(m.id)) return false
+        if (viaPlay(m)) try {
+            val tmp = File(dir, m.fileName + ".joining")
+            if (!play.assemble(m, tmp)) { prefs.edit().remove(playKey(m)).apply(); failures[m.id] = play.progress(m).message.ifEmpty { "The download was damaged. Please try again." }; play.clearFailure(m); return false }
+            prefs.edit().remove(playKey(m)).apply()
+            file(m).delete()
+            if (!tmp.renameTo(file(m))) { failures[m.id] = "Couldn't save ${m.fileName}."; return false }
+            return true
+        } finally { verifying.remove(m.id) }
         try {
             val tmp = tempFile(m)
             val ok = tmp.exists() && tmp.length() == m.bytes && sha256(tmp) == m.sha256
@@ -212,6 +247,7 @@ class ModelManager(private val ctx: Context) {
     }
 
     fun cancel(m: ModelSpec) {
+        if (viaPlay(m)) { play.cancel(m); prefs.edit().remove(playKey(m)).apply() }
         val id = prefs.getLong(idKey(m), -1L)
         if (id >= 0) runCatching { dm.remove(id) }
         prefs.edit().remove(idKey(m)).apply()
@@ -219,7 +255,7 @@ class ModelManager(private val ctx: Context) {
         tempFile(m).delete()
     }
 
-    fun clearFailure(m: ModelSpec) { failures.remove(m.id) }
+    fun clearFailure(m: ModelSpec) { failures.remove(m.id); play.clearFailure(m) }
 
     /** Tests can skip the address lookup. */
     var skipNetworkCheck = false

@@ -97,3 +97,28 @@ def pocket_mono(size):
     return Image.merge('LA', (Image.new('L', f.size, 255), f.getchannel('A')))
 write('pocket', pocket_fg, pocket_bg, pocket_mono)
 print('ok')
+
+# ---- Little Yeti (kids): the icon yeti, a size smaller, on a warm sunny background with a star
+def kids_fig(size):
+    f = ts.yeti(int(size * 4 * 0.55))
+    im = Image.new('RGBA', (size * 4, size * 4), (0, 0, 0, 0))
+    im.alpha_composite(f, ((size * 4 - f.width) // 2, (size * 4 - f.height) // 2 + size // 10))
+    return im.resize((size, size), Image.LANCZOS)
+def kids_bg(size):
+    S = size * 4
+    im = Image.new('RGBA', (S, S)); d = ImageDraw.Draw(im)
+    for y in range(S):
+        t = y / S; top, bot = (246, 178, 92), (230, 116, 44)
+        d.line([(0, y), (S, y)], fill=tuple(int(top[i] * (1 - t) + bot[i] * t) for i in range(3)) + (255,))
+    rnd = random.Random(3)
+    for _ in range(14):
+        x, y, s = rnd.random() * S, rnd.random() * S * 0.6, S * rnd.choice((0.01, 0.015))
+        d.ellipse([x, y, x + s, y + s], fill=(255, 246, 214, 220))
+    return im.resize((size, size), Image.LANCZOS)
+def kids_mono(size):
+    f = kids_fig(size); a = np.asarray(f).astype(float)
+    line = np.clip((a[..., 0] - 90) / 130.0, 0, 1) * (a[..., 3] / 255)
+    return Image.merge('LA', (Image.new('L', f.size, 255), Image.fromarray(np.uint8(line * 255))))
+import numpy as np  # noqa: E402
+write('kids', kids_fig, kids_bg, kids_mono)
+print('kids ok')

@@ -7,7 +7,7 @@ adb wait-for-device
 adb shell settings put global window_animation_scale 0
 adb shell settings put global transition_animation_scale 0
 adb shell settings put global animator_duration_scale 0
-for apk in 5IY.apk Wildwood-Hall.apk 5IY-Pocket.apk; do adb install -r -g "$apk" || echo "INSTALL FAILED: $apk" >> "$OUT/problems.txt"; done
+for apk in 5IY.apk Wildwood-Hall.apk 5IY-Pocket.apk Little-Yeti.apk; do adb install -r -g "$apk" || echo "INSTALL FAILED: $apk" >> "$OUT/problems.txt"; done
 adb logcat -c
 
 shot() { sleep "${2:-4}"; adb exec-out screencap -p > "$OUT/$1.png"; echo "shot $1"; }
@@ -46,6 +46,12 @@ adb shell am start -W -n app.fiveiy.pocket/app.foxbox.pocket.PocketActivity > /d
 size=$(adb shell wm size | tail -1 | grep -o '[0-9]*x[0-9]*')
 PW=$(adb exec-out screencap -p | python3 -c "import sys,struct; d=sys.stdin.buffer.read(); print(struct.unpack('>I', d[16:20])[0])")
 adb shell input tap $(( PW - $(dp 4) - $(dp 100) + $(dp 24) )) $RY; shot 21-pocket-radio 4
+
+# Little Yeti: each page
+for pg in 0 1 2; do
+  adb shell am force-stop app.fiveiy.kids
+  adb shell am start -W -n app.fiveiy.kids/.KidsActivity --ei page $pg > /dev/null; shot 3$pg-kids-page$pg 4
+done
 
 adb logcat -d -b crash > "$OUT/crashes.txt"
 adb logcat -d '*:E' | grep -E "app.foxbox|fiveiy|AndroidRuntime|FATAL" | tail -200 > "$OUT/errors.txt" || true

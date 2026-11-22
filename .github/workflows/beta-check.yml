@@ -11,6 +11,7 @@ on:
       - "android/kit/**"
       - "android/game/**"
       - "android/pocket/**"
+      - "android/kids/**"
       - "android/shared/**"
       - ".github/beta/**"
       - ".github/workflows/beta-check.yml"
@@ -37,10 +38,11 @@ jobs:
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon :app:assembleRelease :game:assembleRelease :pocket:assembleRelease
+          ./gradlew --no-daemon :app:assembleRelease :game:assembleRelease :pocket:assembleRelease :kids:assembleRelease
           cp app/build/outputs/apk/release/app-release.apk ../5IY.apk
           cp game/build/outputs/apk/release/game-release.apk ../Wildwood-Hall.apk
           cp pocket/build/outputs/apk/release/pocket-release.apk ../5IY-Pocket.apk
+          cp kids/build/outputs/apk/release/kids-release.apk ../Little-Yeti.apk
 
       - name: Enable KVM
         run: |

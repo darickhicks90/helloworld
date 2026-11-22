@@ -1,6 +1,6 @@
 # Builds 5 Eye Yeti (5IY): a signed App Bundle (.aab) for Google Play and an APK for
 # sideloading, plus 5IY Builder (the world editor), Wildwood Hall (the game) and 5IY Pocket
-# (radio + notebook), each as its own APK. Download them from the run's "Artifacts" section.
+# (radio + notebook) and Little Yeti (for kids), each as its own APK. Download them from the run's "Artifacts" section.
 # Release signing uses the FOXBOX_UPLOAD_* secrets when they are set
 # (see android/play/release-checklist.md); otherwise the test key is used.
 name: Android app
@@ -50,7 +50,7 @@ jobs:
           FOXBOX_UPLOAD_KEY_PASSWORD: ${{ secrets.FOXBOX_UPLOAD_KEY_PASSWORD }}
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon :app:assembleRelease :builder:assembleRelease :game:assembleRelease :pocket:assembleRelease
+          ./gradlew --no-daemon :app:assembleRelease :builder:assembleRelease :game:assembleRelease :pocket:assembleRelease :kids:assembleRelease
           cp app/build/outputs/apk/release/app-release.apk ../5IY.apk
           cp builder/build/outputs/apk/release/builder-release.apk ../5IY-Builder.apk
           # The Play bundle is only built with the real upload key: a bundle signed with the public
@@ -63,6 +63,7 @@ jobs:
           fi
           cp game/build/outputs/apk/release/game-release.apk ../Wildwood-Hall.apk
           cp pocket/build/outputs/apk/release/pocket-release.apk ../5IY-Pocket.apk
+          cp kids/build/outputs/apk/release/kids-release.apk ../Little-Yeti.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -94,3 +95,9 @@ jobs:
         with:
           name: 5IY-pocket
           path: 5IY-Pocket.apk
+
+      - name: Upload Little Yeti APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: little-yeti
+          path: Little-Yeti.apk

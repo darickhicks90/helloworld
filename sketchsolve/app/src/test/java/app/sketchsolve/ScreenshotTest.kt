@@ -81,6 +81,16 @@ class ScreenshotTest {
 
         a.select(a.modes.first { it is FormulasMode }); settle(a); shot(a, "$prefix-4-formulas")
         a.select(a.modes.first { it is TeachMode }); settle(a); shot(a, "$prefix-5-teach")
+
+        // the model setup screen, pretending to be a real device
+        a.models.deviceOverride = if (prefix == "tablet") app.sketchsolve.llm.ModelManager.DeviceInfo("Samsung SM-X920", "Qualcomm SM8650", 12.0, 96.0, 8, "15")
+            else app.sketchsolve.llm.ModelManager.DeviceInfo("Google Pixel 9", "Google Tensor G4", 7.6, 41.0, 8, "16")
+        a.showModelSetup(); settle(a)
+        val dlg = org.robolectric.shadows.ShadowDialog.getLatestDialog()
+        val v = dlg.window!!.decorView
+        val bmp = Bitmap.createBitmap(v.width, v.height, Bitmap.Config.ARGB_8888)
+        v.draw(Canvas(bmp))
+        FileOutputStream(File(out, "$prefix-6-setup.png")).use { bmp.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 
     companion object {

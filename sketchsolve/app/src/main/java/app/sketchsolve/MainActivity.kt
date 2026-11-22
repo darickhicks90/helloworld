@@ -101,6 +101,7 @@ class MainActivity : Activity() {
         state?.optJSONObject("settings")?.let { settings.deg = it.optBoolean("deg", true); settings.learn = it.optBoolean("learn", true) }
         val start = modes.firstOrNull { it.id == state?.optString("tab") } ?: modes[0]
         select(start)
+        maybeShowSetup()
         for (m in modes) if (m !== start) m.refresh()
     }
 
@@ -159,15 +160,33 @@ class MainActivity : Activity() {
     fun gemma(): app.sketchsolve.llm.LanguageModel? {
         testModel?.let { return it }
         gemmaModel?.let { return it }
-        val spec = app.sketchsolve.llm.ModelManager.GEMMA_E2B
-        if (!models.isReady(spec)) return null
+        val spec = models.languageModel() ?: return null
         return app.sketchsolve.llm.GemmaModel(models.file(spec), cacheDir).also { gemmaModel = it }
     }
 
     fun modelsChanged() {
         speech?.close(); speech = null
-        val ws = models.speechModel()
-        if (models.isReady(ws)) speech = app.sketchsolve.llm.WhisperSpeech.create(this, models.file(ws))
+        gemmaModel?.close(); gemmaModel = null
+        models.speechReady()?.let { speech = app.sketchsolve.llm.WhisperSpeech.create(this, models.file(it)) }
+    }
+
+    /** First launch: offer the model download, with choices suited to this device. */
+    private fun maybeShowSetup() {
+        if (models.languageModel() != null) return
+        val prefs = getSharedPreferences("sketchsolve", MODE_PRIVATE)
+        val last = prefs.getLong("setupShown", 0)
+        if (System.currentTimeMillis() - last < 24 * 3600 * 1000L) return
+        prefs.edit().putLong("setupShown", System.currentTimeMillis()).apply()
+        main.post { showModelSetup() }
+    }
+
+    fun showModelSetup() {
+        val ask = modes.firstOrNull { it is AskMode } as? AskMode ?: return
+        app.sketchsolve.ui.ModelSetup(this) { llm, sp ->
+            models.chosenLanguage = llm; models.chosenSpeech = sp
+            select(ask)
+            ask.startDownload(listOf(llm, sp).filter { !models.isReady(it) })
+        }.show()
     }
 
     private var pendingMic: (() -> Unit)? = null

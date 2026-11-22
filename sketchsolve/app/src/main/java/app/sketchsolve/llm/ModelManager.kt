@@ -24,6 +24,9 @@ class ModelManager(private val ctx: Context) {
         val GEMMA_E2B = ModelSpec("gemma4-e2b", "Gemma 4 (E2B)", "Understands word problems",
             "https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm/resolve/main/gemma-4-E2B-it.litertlm",
             "gemma-4-E2B-it.litertlm", 2_588_147_712L, "181938105e0eefd105961417e8da75903eacda102c4fce9ce90f50b97139a63c", 6)
+        val GEMMA_E4B = ModelSpec("gemma4-e4b", "Gemma 4 (E4B)", "Understands word problems — most accurate",
+            "https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it.litertlm",
+            "gemma-4-E4B-it.litertlm", 3_659_530_240L, "0b2a8980ce155fd97673d8e820b4d29d9c7d99b8fa6806f425d969b145bd52e0", 8)
         val WHISPER_SMALL = ModelSpec("whisper-small-en", "Whisper small (English)", "Push-to-talk speech",
             "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.en-q5_1.bin",
             "ggml-small.en-q5_1.bin", 190_098_681L, "bfdff4894dcb76bbf647d56263ea2a96645423f1669176f4844a1bf8e478ad30", 4)
@@ -32,23 +35,83 @@ class ModelManager(private val ctx: Context) {
             "ggml-base.en-q5_1.bin", 59_721_011L, "4baf70dd0d7c4247ba2b81fafd9c01005ac77c2f9ef064e00dcf195d0e2fdd2f", 2)
     }
 
+    val LANGUAGE = listOf(GEMMA_E2B, GEMMA_E4B)
+    val SPEECH = listOf(WHISPER_BASE, WHISPER_SMALL)
+
+    /** What we know about this phone or tablet. */
+    data class DeviceInfo(val name: String, val chip: String, val ramGb: Double, val freeGb: Double, val cores: Int, val android: String)
+
+    /** Tests can pretend to be a particular device. */
+    var deviceOverride: DeviceInfo? = null
+
+    fun device(): DeviceInfo {
+        deviceOverride?.let { return it }
+        val chip = if (android.os.Build.VERSION.SDK_INT >= 31)
+            listOf(android.os.Build.SOC_MANUFACTURER, android.os.Build.SOC_MODEL).filter { it.isNotBlank() && it != android.os.Build.UNKNOWN }.joinToString(" ")
+        else android.os.Build.HARDWARE
+        val maker = android.os.Build.MANUFACTURER.replaceFirstChar { it.uppercase() }
+        return DeviceInfo("$maker ${android.os.Build.MODEL}".trim(), chip.ifBlank { "unknown chip" }, ramGb(), freeBytes() / 1e9,
+            Runtime.getRuntime().availableProcessors(), android.os.Build.VERSION.RELEASE ?: "")
+    }
+
+    /** How a model suits this device. */
+    data class Fit(val model: ModelSpec, val recommended: Boolean, val usable: Boolean, val note: String)
+
+    fun fits(): Pair<List<Fit>, List<Fit>> {
+        val d = device()
+        val known = d.ramGb > 0.5
+        fun space(m: ModelSpec) = isReady(m) || d.freeGb * 1e9 > m.bytes + 300_000_000L
+        val bigOk = !known || d.ramGb >= 11.0
+        val llm = LANGUAGE.map { m ->
+            when {
+                isReady(m) -> Fit(m, false, true, "Already downloaded.")
+                !space(m) -> Fit(m, false, false, "Needs ${"%.1f".format(m.bytes / 1e9 + 0.3)} GB of free space; this device has ${"%.1f".format(d.freeGb)} GB.")
+                m == GEMMA_E4B && known && d.ramGb < m.minRamGb - 0.5 -> Fit(m, false, false, "Needs about ${m.minRamGb} GB of memory; this device has ${"%.1f".format(d.ramGb)} GB.")
+                m == GEMMA_E4B -> Fit(m, bigOk, true, "Most accurate on tricky wording. About twice as slow, and uses more battery.")
+                known && d.ramGb < 5.5 -> Fit(m, true, true, "Works, but this device has only ${"%.1f".format(d.ramGb)} GB of memory, so answers will be slow.")
+                else -> Fit(m, !bigOk, true, "Fast and accurate on everyday word problems. Best for most phones.")
+            }
+        }
+        val speech = SPEECH.map { m ->
+            when {
+                isReady(m) -> Fit(m, false, true, "Already downloaded.")
+                !space(m) -> Fit(m, false, false, "Not enough free space.")
+                m == WHISPER_SMALL -> Fit(m, !known || d.ramGb >= 5.5, true, "Hears numbers and maths words more accurately.")
+                else -> Fit(m, known && d.ramGb < 5.5, true, "Smaller and quicker; fine in a quiet room.")
+            }
+        }
+        // if nothing is marked recommended (e.g. one is already downloaded), recommend the first usable
+        fun fix(l: List<Fit>) = if (l.any { it.recommended }) l else l.mapIndexed { i, f -> if (i == l.indexOfFirst { it.usable }) f.copy(recommended = true) else f }
+        return fix(llm) to fix(speech)
+    }
+
+    private val prefs = ctx.getSharedPreferences("sketchsolve", Context.MODE_PRIVATE)
+    var chosenLanguage: ModelSpec
+        get() = LANGUAGE.firstOrNull { it.id == prefs.getString("llm", null) } ?: fits().first.firstOrNull { it.recommended }?.model ?: GEMMA_E2B
+        set(v) { prefs.edit().putString("llm", v.id).apply() }
+    var chosenSpeech: ModelSpec
+        get() = SPEECH.firstOrNull { it.id == prefs.getString("speech", null) } ?: fits().second.firstOrNull { it.recommended }?.model ?: WHISPER_BASE
+        set(v) { prefs.edit().putString("speech", v.id).apply() }
+
+    /** The language model to use: the chosen one if downloaded, otherwise any downloaded one. */
+    fun languageModel(): ModelSpec? = chosenLanguage.takeIf { isReady(it) } ?: LANGUAGE.firstOrNull { isReady(it) }
+    fun speechReady(): ModelSpec? = chosenSpeech.takeIf { isReady(it) } ?: SPEECH.firstOrNull { isReady(it) }
+
     val dir: File = File(ctx.getExternalFilesDir(null) ?: ctx.filesDir, "models").apply { mkdirs() }
 
     fun file(m: ModelSpec) = File(dir, m.fileName)
     fun isReady(m: ModelSpec) = file(m).let { it.exists() && it.length() == m.bytes }
 
     fun ramGb(): Double {
+        deviceOverride?.let { return it.ramGb }
         val mi = ActivityManager.MemoryInfo()
         (ctx.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(mi)
         return mi.totalMem / 1e9
     }
 
-    /** The speech model that suits this device. */
-    fun speechModel() = if (ramGb() >= 5.5) WHISPER_SMALL else WHISPER_BASE
+    fun wanted(): List<ModelSpec> = listOf(chosenLanguage, chosenSpeech)
 
-    fun wanted(): List<ModelSpec> = listOf(GEMMA_E2B, speechModel())
-
-    fun freeBytes(): Long = StatFs(dir.absolutePath).availableBytes
+    fun freeBytes(): Long = deviceOverride?.let { (it.freeGb * 1e9).toLong() } ?: StatFs(dir.absolutePath).availableBytes
 
     fun onWifi(): Boolean {
         val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager

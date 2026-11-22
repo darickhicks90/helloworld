@@ -137,9 +137,11 @@ class AskMode(app: MainActivity) : Mode(app) {
                 else -> pad.muted("• ${m.title} — ${m.purpose} (${size(m.bytes)})")
             }
         }
+        val d = mm.device()
+        pad.muted("This device: ${d.name} · ${if (d.ramGb > 0.5) "%.0f GB memory · ".format(d.ramGb) else ""}${"%.0f".format(d.freeGb)} GB free")
+        pad.button("Choose models…") { app.showModelSetup() }
         val missing = mm.wanted().filter { !mm.isReady(it) && downloads[it.id] == null }
         if (missing.isNotEmpty()) {
-            if (mm.ramGb() > 0.5 && mm.ramGb() < ModelManager.GEMMA_E2B.minRamGb - 0.5) pad.warn("This device has ${"%.1f".format(mm.ramGb())} GB of memory. The word-problem model works best with 6 GB or more, so it may be slow here.")
             pad.add(CheckBox(app).apply { text = "Only download on Wi-Fi"; isChecked = wifiOnly; setOnCheckedChangeListener { _, v -> wifiOnly = v } })
             pad.button("⇣ Download (${size(missing.sumOf { it.bytes })})") { download(missing) }
             pad.muted("A one-time download. After this the app works with no internet connection.")
@@ -157,6 +159,8 @@ class AskMode(app: MainActivity) : Mode(app) {
     }
 
     private fun size(b: Long) = if (b > 1e9) "%.1f GB".format(b / 1e9) else "%d MB".format(b / 1_000_000)
+
+    fun startDownload(list: List<ModelSpec>) { if (list.isNotEmpty()) download(list) }
 
     private fun download(list: List<ModelSpec>) {
         val mm = app.models

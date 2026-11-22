@@ -39,56 +39,49 @@ struct TitleView: View {
     private static let mint = Color(red: 0.87, green: 0.95, blue: 0.83)
 
     var body: some View {
-        GeometryReader { geo in
-            let w = geo.size.width, h = geo.size.height
-            // fill the screen, keeping the right edge (where he stands)
-            let k = max(w / Self.sceneW, h / Self.sceneH)
-            let ox = w - Self.sceneW * k, oy = (h - Self.sceneH * k) / 2
-            ZStack(alignment: .topLeading) {
-                Look.night
-                if let s = Self.scene {
-                    Image(uiImage: s).resizable().frame(width: Self.sceneW * k, height: Self.sceneH * k).offset(x: ox, y: oy)
-                }
-                TimelineView(.animation(minimumInterval: 1.0 / 30)) { tl in
+        ZStack(alignment: .topLeading) {
+            // the scene, its twinkles and the yeti in one canvas exactly the size of the screen
+            // (an oversized image in the layout would stretch it and push the title off the edge)
+            TimelineView(.animation(minimumInterval: 1.0 / 30)) { tl in
+                Canvas { ctx, size in
+                    let w = size.width, h = size.height
                     let t = tl.date.timeIntervalSinceReferenceDate
-                    ZStack(alignment: .topLeading) {
-                        Canvas { ctx, _ in
-                            for (i, s) in Self.twinkles.enumerated() {
-                                let p = 0.5 + 0.5 * sin(t * (0.9 + 0.23 * Double(i % 5)) + Double(i) * 2.1)
-                                if p < 0.55 { continue }
-                                let a = (p - 0.55) / 0.45
-                                let x = ox + s.0 * k, y = oy + s.1 * k, r = s.2 * k * (1.2 + 0.9 * a)
-                                var path = Path()
-                                path.move(to: CGPoint(x: x, y: y - r)); path.addLine(to: CGPoint(x: x, y: y + r))
-                                path.move(to: CGPoint(x: x - r * 0.8, y: y)); path.addLine(to: CGPoint(x: x + r * 0.8, y: y))
-                                ctx.stroke(path, with: .color(Self.mint.opacity(0.8 * a)), style: StrokeStyle(lineWidth: max(1, s.2 * k * 0.14), lineCap: .round))
-                            }
-                        }
-                        if let y = Self.yeti {
-                            let breathe = 1 + 0.014 * CGFloat(sin(t * 1.7))
-                            let yw = y.size.width * k * (2 - breathe), yh = y.size.height * k * breathe
-                            Image(uiImage: y).resizable().frame(width: yw, height: yh)
-                                .offset(x: ox + Self.yetiX * k - yw / 2, y: oy + Self.yetiFeet * k - yh)
-                        }
+                    // fill the screen, keeping the right edge (where he stands)
+                    let k = max(w / Self.sceneW, h / Self.sceneH)
+                    let ox = w - Self.sceneW * k, oy = (h - Self.sceneH * k) / 2
+                    ctx.fill(Path(CGRect(origin: .zero, size: size)), with: .color(Look.night))
+                    if let s = Self.scene { ctx.draw(Image(uiImage: s), in: CGRect(x: ox, y: oy, width: Self.sceneW * k, height: Self.sceneH * k)) }
+                    for (i, s) in Self.twinkles.enumerated() {
+                        let p = 0.5 + 0.5 * sin(t * (0.9 + 0.23 * Double(i % 5)) + Double(i) * 2.1)
+                        if p < 0.55 { continue }
+                        let a = (p - 0.55) / 0.45
+                        let x = ox + s.0 * k, y = oy + s.1 * k, r = s.2 * k * (1.2 + 0.9 * a)
+                        var path = Path()
+                        path.move(to: CGPoint(x: x, y: y - r)); path.addLine(to: CGPoint(x: x, y: y + r))
+                        path.move(to: CGPoint(x: x - r * 0.8, y: y)); path.addLine(to: CGPoint(x: x + r * 0.8, y: y))
+                        ctx.stroke(path, with: .color(Self.mint.opacity(0.8 * a)), style: StrokeStyle(lineWidth: max(1, s.2 * k * 0.14), lineCap: .round))
+                    }
+                    if let y = Self.yeti {
+                        let breathe = 1 + 0.014 * CGFloat(sin(t * 1.7))
+                        let yw = y.size.width * k * (2 - breathe), yh = y.size.height * k * breathe
+                        ctx.draw(Image(uiImage: y), in: CGRect(x: ox + Self.yetiX * k - yw / 2, y: oy + Self.yetiFeet * k - yh, width: yw, height: yh))
                     }
                 }
-                VStack(alignment: .leading, spacing: 14) {
-                    Text("5 EYE YETI")
-                        .font(Look.head(30))
-                        .foregroundColor(Self.mint)
-                        .shadow(color: Color.black.opacity(0.7), radius: 0, x: 3, y: 3)
-                    Text("TAP TO START")
-                        .font(Look.head(11))
-                        .foregroundColor(Self.mint)
-                        .opacity(blink ? 1 : 0.2)
-                        .animation(.easeInOut(duration: 0.8).repeatForever(), value: blink)
-                }
-                .padding(.leading, 64).padding(.top, 24)   // clear of the notch in landscape
             }
-            .frame(width: w, height: h)
-            .clipped()
+            .ignoresSafeArea()
+            VStack(alignment: .leading, spacing: 14) {
+                Text("5 EYE YETI")
+                    .font(Look.head(30))
+                    .foregroundColor(Self.mint)
+                    .shadow(color: Color.black.opacity(0.7), radius: 0, x: 3, y: 3)
+                Text("TAP TO START")
+                    .font(Look.head(11))
+                    .foregroundColor(Self.mint)
+                    .opacity(blink ? 1 : 0.2)
+                    .animation(.easeInOut(duration: 0.8).repeatForever(), value: blink)
+            }
+            .padding(.leading, 24).padding(.top, 20)   // inside the safe area, so clear of the notch
         }
-        .ignoresSafeArea()
         .contentShape(Rectangle())
         .onTapGesture(perform: start)
         .onAppear { blink.toggle() }

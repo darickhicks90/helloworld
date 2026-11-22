@@ -59,6 +59,17 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -no-snapshot
           script: bash .github/beta/android-shots.sh shots
 
+      - name: Screenshots and problems in the log
+        if: always()
+        run: |
+          cat shots/device.txt shots/problems.txt 2>/dev/null || true
+          echo "=====CRASHES====="; cat shots/crashes.txt 2>/dev/null; echo "=====ERRORS====="; tail -60 shots/errors.txt 2>/dev/null
+          for f in shots/*.png; do
+            n=$(basename "$f" .png)
+            convert "$f" -resize 900x900\> -quality 55 "/tmp/$n.jpg"
+            echo "=====BEGIN $n====="; base64 -w0 "/tmp/$n.jpg"; echo; echo "=====END $n====="
+          done
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -145,6 +145,8 @@ class MainActivity : Activity() {
             } else tok.setOnClickListener { m.onTool(spec.id); buildTray(m) }
             tray.addView(tok)
         }
+        // every tab has a "?" that opens its page of the tour
+        tray.addView(ToolToken(this, "help", "?", "How to", 0xFF3E5C8A.toInt()).apply { setOnClickListener { showTutorial(m.tourPage) } })
     }
 
     /* -------- on-device models -------- */
@@ -172,12 +174,18 @@ class MainActivity : Activity() {
 
     /** First launch: offer the model download, with choices suited to this device. */
     private fun maybeShowSetup() {
-        if (models.languageModel() != null) return
         val prefs = getSharedPreferences("sketchsolve", MODE_PRIVATE)
+        if (!prefs.getBoolean("tourSeen", false)) { main.post { showTutorial(null) }; return }
+        if (models.languageModel() != null) return
         val last = prefs.getLong("setupShown", 0)
         if (System.currentTimeMillis() - last < 24 * 3600 * 1000L) return
         prefs.edit().putLong("setupShown", System.currentTimeMillis()).apply()
         main.post { showModelSetup() }
+    }
+
+    /** The guided tour; [page] opens it at one tab's page. Finishing the full tour leads into the model setup. */
+    fun showTutorial(page: String?) {
+        app.sketchsolve.ui.Tutorial(this, page) { if (page == null && models.languageModel() == null) showModelSetup() }.show()
     }
 
     fun showModelSetup() {

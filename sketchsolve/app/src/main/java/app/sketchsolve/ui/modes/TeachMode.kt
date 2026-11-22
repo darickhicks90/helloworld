@@ -17,6 +17,7 @@ class TeachMode(app: MainActivity) : Mode(app) {
     override val title = "Teach & help"
     override val padTitle = "HOW TO USE IT"
     override val tools = emptyList<ToolSpec>()
+    override val tourPage = "welcome"
     private var root: View? = null
     private lateinit var counts: TextView
     private val labels = (Recognizer.LABELS.filter { it != "?" } + listOf("z", "r", "h", "k", "m", "V", "I", "R", "P", "A", "θ")).distinct()
@@ -92,6 +93,7 @@ class TeachMode(app: MainActivity) : Mode(app) {
         if (app.mode !== this) return
         val pad = app.pad
         pad.clear()
+        pad.button("▶  Take the guided tour again") { app.showTutorial(null) }
         pad.heading("Equations")
         pad.text("Write neatly, one equation per line. Draw a loop around what you want:")
         pad.muted("• a letter to solve for it\n• a piece like 3 + 4 to work it out\n• a whole equation to solve it\nPut known values on their own lines (R = 4). Several lines are solved together.\nExponents: small and raised. Fractions: a line with numbers above and below. Write 2x for 2 × x.")

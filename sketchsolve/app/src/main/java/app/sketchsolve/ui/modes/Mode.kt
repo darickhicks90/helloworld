@@ -18,6 +18,8 @@ abstract class Mode(val app: MainActivity) {
     abstract val title: String
     abstract val padTitle: String
     abstract val tools: List<ToolSpec>
+    /** Which page of the guided tour explains this tab. */
+    open val tourPage: String get() = id
     abstract fun view(): View
     abstract fun refresh()
     open fun isActiveTool(tool: String) = false

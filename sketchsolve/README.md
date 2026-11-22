@@ -15,6 +15,22 @@ you which extra value would be enough.
 | **Formulas** | 112 formulas from geometry, trigonometry, algebra, electrical, physics, chemistry, money and conversions. Fill in what you know and tap ◯ next to what you want. |
 | **Teach & help** | Teach it your handwriting, choose degrees or radians, and read the how-to. |
 
+## Tutorial
+
+* A guided tour opens on first launch. It has one page per feature, each
+  with a drawn illustration and short steps, and ends by leading into the
+  model setup.
+* Most pages have a **Try it** button that opens the tab with an example
+  ready to finish:
+  * a word problem to solve
+  * "2x + 3 = 11" to circle
+  * a triangle to label
+  * a circuit to add values to
+* The Circuits page includes a symbol cheat sheet. The Formulas page has an
+  example formula pack you can copy.
+* Every tab's tool tray has a **?** token that opens that tab's page.
+  Teach & help has **Take the guided tour again**.
+
 ## What it understands
 
 * **Handwriting:** digits, `+ - = ( ) /`, a decimal point, a raised dot for

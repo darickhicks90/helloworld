@@ -7,6 +7,8 @@ adb wait-for-device
 adb shell settings put global window_animation_scale 0
 adb shell settings put global transition_animation_scale 0
 adb shell settings put global animator_duration_scale 0
+# the one-time "Viewing full screen" hint would cover every screenshot
+adb shell settings put secure immersive_mode_confirmations confirmed
 for apk in 5IY.apk Wildwood-Hall.apk 5IY-Pocket.apk Little-Yeti.apk; do adb install -r -g "$apk" || echo "INSTALL FAILED: $apk" >> "$OUT/problems.txt"; done
 adb logcat -c
 

@@ -77,9 +77,9 @@ class KidsView(c: Context, private val host: Host) : View(c) {
         val midT = pad + topH + pad; val midB = keysR.top - pad
         // the TV sits inside a frame of wood that carries the four effect pictures (outside the
         // picture, so they're easy to read); it's a little wider than tall to make up the room
-        val m = ((midB - midT) * 0.14f).coerceIn(20 * d, 30 * d)
+        val m = ((midB - midT) * 0.2f).coerceIn(28 * d, 46 * d)
         val tvH = midB - midT - 2 * m
-        val tvW = min(tvH * 1.3f, w * 0.36f)
+        val tvW = min(tvH * 1.35f, w * 0.38f)
         xyOuter.set(pad, midT, pad + tvW + 2 * m, midB)
         xy.set(pad + m, midT + m, pad + m + tvW, midB - m)
         panel.set(xyOuter.right + pad, midT, w - pad, midB)
@@ -182,7 +182,7 @@ class KidsView(c: Context, private val host: Host) : View(c) {
         val sx = 0.5f + dotX * (r.width() / 2 - 16 * d) / r.width(); val sy = 0.5f + dotY * (r.height() / 2 - 16 * d) / r.height()
         tvs[page].draw(c, r, t, sx, sy, dotHeld) { _, _, _ -> }
         // the four effects, as pictures on the wood around the screen: left, right, up, down
-        val o = xyOuter; val sz = (r.top - o.top) * 0.42f
+        val o = xyOuter; val sz = (r.top - o.top) * 0.5f
         val lx = (o.left + r.left) / 2; val rx = (r.right + o.right) / 2; val ty = (o.top + r.top) / 2; val by = (r.bottom + o.bottom) / 2
         for (pass in 0..1) {
             val col = if (pass == 0) Pal.alpha(INK, 0.6f) else Pal.CREAM
@@ -361,25 +361,25 @@ class KidsView(c: Context, private val host: Host) : View(c) {
         c.drawRect(cx - r * 0.8f, cy + r * 0.1f, cx + r * 0.8f, cy + r * 0.8f, paint)
     }
     private fun bubbles(c: Canvas, cx: Float, cy: Float, s: Float, color: Int) {
-        stroke.color = color; stroke.strokeWidth = 2.5f * d
+        stroke.color = color; stroke.strokeWidth = max(2.5f * d, s * 0.14f)
         c.drawCircle(cx, cy + s * 0.6f, s * 0.55f, stroke); c.drawCircle(cx + s * 0.4f, cy - s * 0.4f, s * 0.38f, stroke); c.drawCircle(cx - s * 0.2f, cy - s * 1.1f, s * 0.25f, stroke)
     }
     /** A wavy line: `cycles` across (1 = big and slow, 4 = small and fast). */
     private fun waveSym(c: Canvas, cx: Float, cy: Float, s: Float, cycles: Int, color: Int) {
         path.reset(); val w = s * 1.6f; val amp = s * (if (cycles <= 1) 0.7f else 0.35f)
         for (k in 0..32) { val x = cx - w / 2 + w * k / 32; val y = cy - amp * sin(2 * PI * cycles * k / 32).toFloat(); if (k == 0) path.moveTo(x, y) else path.lineTo(x, y) }
-        stroke.color = color; stroke.strokeWidth = (if (cycles <= 1) 4f else 2.5f) * d; c.drawPath(path, stroke)
+        stroke.color = color; stroke.strokeWidth = max((if (cycles <= 1) 4f else 2.5f) * d, s * (if (cycles <= 1) 0.2f else 0.13f)); c.drawPath(path, stroke)
     }
     private fun echoSym(c: Canvas, cx: Float, cy: Float, s: Float, color: Int) {
         paint.color = color; c.drawCircle(cx - s * 0.8f, cy, s * 0.22f, paint)
         stroke.color = color
-        for (k in 1..3) { stroke.strokeWidth = (3.2f - k * 0.6f) * d; stroke.alpha = 255 - k * 55; hits.set(cx - s * 0.8f - s * 0.45f * k, cy - s * 0.45f * k, cx - s * 0.8f + s * 0.45f * k, cy + s * 0.45f * k); c.drawArc(hits, -50f, 100f, false, stroke) }
+        for (k in 1..3) { stroke.strokeWidth = max((3.2f - k * 0.6f) * d, s * (0.18f - k * 0.03f)); stroke.alpha = 255 - k * 55; hits.set(cx - s * 0.8f - s * 0.45f * k, cy - s * 0.45f * k, cx - s * 0.8f + s * 0.45f * k, cy + s * 0.45f * k); c.drawArc(hits, -50f, 100f, false, stroke) }
         stroke.alpha = 255
     }
     private fun zigzag(c: Canvas, cx: Float, cy: Float, s: Float, color: Int) {
         path.reset(); val w = s * 1.6f
         for (k in 0..6) { val x = cx - w / 2 + w * k / 6; val y = cy + (if (k % 2 == 0) -s * 0.35f else s * 0.35f); if (k == 0) path.moveTo(x, y) else path.lineTo(x, y) }
-        stroke.color = color; stroke.strokeWidth = 2.5f * d; stroke.strokeJoin = Paint.Join.MITER; c.drawPath(path, stroke); stroke.strokeJoin = Paint.Join.ROUND
+        stroke.color = color; stroke.strokeWidth = max(2.5f * d, s * 0.14f); stroke.strokeJoin = Paint.Join.MITER; c.drawPath(path, stroke); stroke.strokeJoin = Paint.Join.ROUND
     }
     private fun star(c: Canvas, cx: Float, cy: Float, r: Float) {
         path.reset()

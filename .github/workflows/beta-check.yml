@@ -1,4 +1,4 @@
-# Simulated beta: builds the apps, runs them on Android emulators (a phone, a small phone and a
+# Simulated beta (not the game, which is still in development): builds the apps, runs them on Android emulators (a phone, a small phone and a
 # tablet) and on iOS simulators (in ios.yml), opening every main screen and saving screenshots,
 # crashes and errors. Download "beta-shots-*" from the run's Artifacts.
 name: Beta check
@@ -9,7 +9,6 @@ on:
     paths:
       - "android/app/**"
       - "android/kit/**"
-      - "android/game/**"
       - "android/pocket/**"
       - "android/kids/**"
       - "android/shared/**"
@@ -38,9 +37,8 @@ jobs:
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon :app:assembleRelease :game:assembleRelease :pocket:assembleRelease :kids:assembleRelease
+          ./gradlew --no-daemon :app:assembleRelease :pocket:assembleRelease :kids:assembleRelease
           cp app/build/outputs/apk/release/app-release.apk ../5IY.apk
-          cp game/build/outputs/apk/release/game-release.apk ../Wildwood-Hall.apk
           cp pocket/build/outputs/apk/release/pocket-release.apk ../5IY-Pocket.apk
           cp kids/build/outputs/apk/release/kids-release.apk ../Little-Yeti.apk
 

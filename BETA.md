@@ -1,8 +1,8 @@
 # Beta test guide
 
-## Android (5 Eye Yeti, Wildwood Hall, 5IY Pocket)
+## Android (5 Eye Yeti, 5IY Pocket, Little Yeti)
 
-**Quick beta (sideload):** every push builds `5IY.apk`, `Wildwood-Hall.apk` and `5IY-Pocket.apk`
+**Quick beta (sideload):** every push builds `5IY.apk`, `5IY-Pocket.apk` and `Little-Yeti.apk` (and `Wildwood-Hall.apk`, the game, which is still in development and not part of the beta)
 (GitHub → Actions → *Android app* → the run → Artifacts). Testers allow "install unknown apps"
 for their browser or file manager and open the APK. These builds are signed with the public test
 key in `android/app/foxbox-debug.keystore`: fine for testing, never for Google Play.
@@ -15,8 +15,9 @@ key in `android/app/foxbox-debug.keystore`: fine for testing, never for Google P
    by email (up to 100), share the opt-in link.
 3. Each new beta: raise `versionCode` in `android/app/build.gradle.kts` (now 18, version 1.7.0).
 
-Wildwood Hall (`app.fiveiy.wildwood`) and 5IY Pocket (`app.fiveiy.pocket`) are separate Play
-listings when you're ready; they're APK-only for now.
+5IY Pocket (`app.fiveiy.pocket`) and Little Yeti (`app.fiveiy.kids`) are separate Play listings
+when you're ready; they're APK-only for now. Little Yeti targets children, so its listing goes
+through Google Play's Families policy (ages 5 to 10).
 
 ## iOS (5 Eye Yeti)
 
@@ -26,7 +27,7 @@ what is still Android-only.
 
 ## Automated beta check
 
-The *Beta check* workflow runs all three Android apps on emulators (Pixel 6, a small phone, a
+The *Beta check* workflow runs 5 Eye Yeti, 5IY Pocket and Little Yeti on emulators (Wildwood Hall is still in development and left out) (Pixel 6, a small phone, a
 tablet) and the *iOS app* workflow runs the iOS app on simulators (a Pro Max, an SE, an iPad). Each
 opens every main screen and saves screenshots plus crashes and errors as artifacts.
 

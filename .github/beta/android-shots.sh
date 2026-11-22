@@ -9,7 +9,7 @@ adb shell settings put global transition_animation_scale 0
 adb shell settings put global animator_duration_scale 0
 # the one-time "Viewing full screen" hint would cover every screenshot
 adb shell settings put secure immersive_mode_confirmations confirmed
-for apk in 5IY.apk Wildwood-Hall.apk 5IY-Pocket.apk Little-Yeti.apk; do adb install -r -g "$apk" || echo "INSTALL FAILED: $apk" >> "$OUT/problems.txt"; done
+for apk in 5IY.apk 5IY-Pocket.apk Little-Yeti.apk; do adb install -r -g "$apk" || echo "INSTALL FAILED: $apk" >> "$OUT/problems.txt"; done
 adb logcat -c
 
 shot() { sleep "${2:-4}"; adb exec-out screencap -p > "$OUT/$1.png"; echo "shot $1"; }
@@ -38,10 +38,7 @@ adb shell input keyevent KEYCODE_BACK; sleep 1
 adb shell input tap $(( W - $(dp 104) - $(dp 50) )) $(dp 24); shot 07-menu 3
 adb shell input keyevent KEYCODE_BACK
 
-# Wildwood Hall
-adb shell am start -W -n app.fiveiy.wildwood/app.foxbox.game.GameActivity > /dev/null; shot 10-game 8
-adb shell input keyevent KEYCODE_BACK; shot 11-game-leave 2
-adb shell am force-stop app.fiveiy.wildwood
+# (Wildwood Hall is still in development: not part of the beta check)
 
 # 5IY Pocket
 adb shell am start -W -n app.fiveiy.pocket/app.foxbox.pocket.PocketActivity > /dev/null; shot 20-pocket 6

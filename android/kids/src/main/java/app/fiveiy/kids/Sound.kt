@@ -45,7 +45,10 @@ object Sound {
     private val queue = ConcurrentLinkedQueue<Runnable>()
     @Volatile private var running = false
     private var thread: Thread? = null
-    private const val BLOCK = 256
+    /** Room for the largest block the device may ask for. */
+    private const val BLOCK = 1024
+    /** The device's own burst (frames per buffer): we render exactly that much at a time. */
+    private var burst = 192
     private val l = FloatArray(BLOCK); private val r = FloatArray(BLOCK)
     private val rl = FloatArray(BLOCK); private val rr = FloatArray(BLOCK)
     private val tmpL = FloatArray(BLOCK); private val tmpR = FloatArray(BLOCK)
@@ -55,9 +58,12 @@ object Sound {
     @Volatile private var tickAmp = 0f
     private var tickPh = 0f; private var tickHz = 1000f; private var tickEnv = 0f
 
-    fun init(rate: Int) {
+    fun init(rate: Int, framesPerBurst: Int = 192) {
         if (ready) return
+        burst = framesPerBurst.coerceIn(64, BLOCK)
         setSampleRate(rate)
+        // a little under full scale: five notes at once peak around -3 dB, and the limiter makes sure
+        limiter.ceilingOverride = 0.708f
         reverb = Reverb().apply { room = 0.8f; damp = 0.4f }
         synth = Synth(); drums = Drums(); sampler = Sampler()
         all = arrayOf(synth, drums, sampler)
@@ -87,16 +93,25 @@ object Sound {
         val track = AudioTrack.Builder()
             .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_GAME).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
             .setAudioFormat(fmt)
-            .setBufferSizeInBytes(max(min, BLOCK * 2 * 4 * 2))
+            // capacity to grow into (the size actually used is set below, as small as works)
+            .setBufferSizeInBytes(max(min * 4, burst * 2 * 4 * 8))
             .setPerformanceMode(AudioTrack.PERFORMANCE_MODE_LOW_LATENCY)
             .setTransferMode(AudioTrack.MODE_STREAM)
             .build()
         val out = FloatArray(BLOCK * 2)
         runCatching { track.play() }
+        // start small (two bursts, the least latency) and grow a burst at a time only if this
+        // phone can't keep up (each underrun is a crackle): it settles where it plays cleanly
+        val n = burst
+        val cap = runCatching { track.bufferCapacityInFrames }.getOrDefault(n * 8)
+        var size = runCatching { track.setBufferSizeInFrames(n * 2) }.getOrDefault(n * 2)
+        var underruns = runCatching { track.underrunCount }.getOrDefault(0)
         while (running) {
-            render(BLOCK)
-            for (i in 0 until BLOCK) { out[i * 2] = l[i]; out[i * 2 + 1] = r[i] }
-            if (track.write(out, 0, BLOCK * 2, AudioTrack.WRITE_BLOCKING) < 0) break
+            render(n)
+            for (i in 0 until n) { out[i * 2] = l[i]; out[i * 2 + 1] = r[i] }
+            if (track.write(out, 0, n * 2, AudioTrack.WRITE_BLOCKING) < 0) break
+            val u = track.underrunCount
+            if (u > underruns) { underruns = u; if (size < cap) size = track.setBufferSizeInFrames(minOf(cap, size + n)) }
         }
         runCatching { track.stop() }; track.release()
     }
@@ -112,6 +127,8 @@ object Sound {
         for (inst in all) {
             tmpL.fill(0f); tmpR.fill(0f)
             inst.render(tmpL, tmpR, n)
+            val g = inst.level
+            for (i in 0 until n) { tmpL[i] *= g; tmpR[i] *= g }
             inst.fx.process(tmpL, tmpR, n)
             val send = inst.reverbSend
             for (i in 0 until n) { l[i] += tmpL[i]; r[i] += tmpR[i]; rl[i] += tmpL[i] * send; rr[i] += tmpR[i] * send }
@@ -138,6 +155,8 @@ abstract class Instrument {
     /** The envelope button next to the filter slider. */
     @Volatile var filterEnv = false
     open val reverbSend = 0.25f
+    /** Each instrument's level, measured so five notes at once peak about 3 dB under full scale. */
+    open val level = 0.5f
     /** Counts every note and hit (the XY screens react to it). */
     @Volatile var hits = 0
     abstract fun render(l: FloatArray, r: FloatArray, n: Int)
@@ -163,7 +182,11 @@ class Shape(a: Float, d: Float, s: Float, r: Float) {
 }
 
 /** The filter envelope behind the envelope button: quick, clear "bwow" that still sits in the music. */
-private fun filterShape(e: Adsr) { e.attack = 0.004f; e.decay = 0.32f; e.sustain = 0.12f; e.release = 0.25f }
+private fun filterShape(e: Adsr) { e.attack = 0.003f; e.decay = 0.45f; e.sustain = 0.06f; e.release = 0.3f }
+
+/** With the envelope button on, the filter starts low and sweeps up about four octaves, with more resonance: a clear "bwow". */
+private fun swept(base: Float, fe: Float) = min(base * 0.4f * (1f + 15f * fe), 14000f)
+private const val RES_ENV = 0.55f
 
 // ------------------------------------------------------------------ the synth
 
@@ -195,7 +218,7 @@ class Synth : Instrument() {
             for (i in 0 until n) {
                 if (i and 15 == 0) {
                     val fe = v.fenv.next()
-                    v.svf.set(if (env) min(base * (1f + 7f * fe), 12000f) else base, RES)
+                    if (env) v.svf.set(swept(base, fe), RES_ENV) else v.svf.set(base, RES)
                 } else v.fenv.next()
                 val o = v.osc.next(shapeIdx, inc) + v.sub.next(3, inc * 0.5f) * 0.25f
                 val s = v.svf.process(o) * v.amp.next() * lvl
@@ -216,6 +239,7 @@ class Drums : Instrument() {
     /** The pitch slider, 0..1 (0.5 = as recorded): an octave down to an octave up. */
     @Volatile var pitch = 0.5f
     override val reverbSend = 0.15f
+    override val level = 0.4f
     private class V { var pos = -1.0; var vel = 1f; val svf = Svf(); val fenv = Adsr() }
     private val voices = Array(8) { V() }
     init { filter = 1f }
@@ -238,7 +262,7 @@ class Drums : Instrument() {
                 if (k >= d.size - 1) { v.pos = -1.0; break }
                 val f = (v.pos - k).toFloat()
                 val x = d[k] + (d[k + 1] - d[k]) * f
-                if (i and 15 == 0) { val fe = v.fenv.next(); v.svf.set(if (env) min(base * (0.35f + 4f * fe), 14000f) else base, RES) } else v.fenv.next()
+                if (i and 15 == 0) { val fe = v.fenv.next(); if (env) v.svf.set(min(base * (0.2f + 8f * fe), 14000f), RES_ENV) else v.svf.set(base, RES) } else v.fenv.next()
                 val s = v.svf.process(x) * v.vel * 0.6f * gain[p]
                 l[i] += s; r[i] += s
                 v.pos += ratio
@@ -254,6 +278,7 @@ class Drums : Instrument() {
  * whole recording in the same time, just higher or lower (overlapping grains, like Reflections).
  */
 class Sampler : Instrument() {
+    override val level = 0.43f
     val shape = Shape(0.005f, 0.6f, 0.9f, 0.3f)
     @Volatile var data: FloatArray = demo(); private set
     /** Peaks of the current sample, for drawing it. */
@@ -300,7 +325,7 @@ class Sampler : Instrument() {
                     if (k in 0 until len - 1) { val f = (p - k).toFloat(); s += (d[k] + (d[k + 1] - d[k]) * f) * Hann.at(gr.t / gl.toFloat()) }
                     if (++gr.t >= gl) gr.on = false
                 }
-                if (i and 15 == 0) { val fe = v.fenv.next(); v.svf.set(if (env) min(base * (1f + 7f * fe), 12000f) else base, RES) } else v.fenv.next()
+                if (i and 15 == 0) { val fe = v.fenv.next(); if (env) v.svf.set(swept(base, fe), RES_ENV) else v.svf.set(base, RES) } else v.fenv.next()
                 val a = v.amp.next()
                 val o = v.svf.process(s) * a * 0.8f
                 l[i] += o; r[i] += o

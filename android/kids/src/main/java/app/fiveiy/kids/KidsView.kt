@@ -51,7 +51,7 @@ class KidsView(c: Context, private val host: Host) : View(c) {
     // ---- layout
     private val tabs = Array(3) { RectF() }
     private val rootDown = RectF(); private val rootUp = RectF(); private val rootBox = RectF()
-    private val xy = RectF(); private val panel = RectF(); private val keysR = RectF()
+    private val xy = RectF(); private val xyOuter = RectF(); private val panel = RectF(); private val keysR = RectF()
     private val keys = Array(8) { RectF() }
     private val waves = Array(4) { RectF() }
     private val filterTrack = RectF(); private val filterCol = RectF(); private val envBtn = RectF()
@@ -75,9 +75,14 @@ class KidsView(c: Context, private val host: Host) : View(c) {
         val kw = (keysR.width() - 7 * 6 * d) / 8
         for (i in 0 until 8) keys[i].set(keysR.left + i * (kw + 6 * d), keysR.top, keysR.left + i * (kw + 6 * d) + kw, keysR.bottom)
         val midT = pad + topH + pad; val midB = keysR.top - pad
-        val side = min(midB - midT, w * 0.34f)
-        xy.set(pad, midT, pad + side, midT + side)
-        panel.set(xy.right + pad, midT, w - pad, midB)
+        // the TV sits inside a frame of wood that carries the four effect pictures (outside the
+        // picture, so they're easy to read); it's a little wider than tall to make up the room
+        val m = ((midB - midT) * 0.14f).coerceIn(20 * d, 30 * d)
+        val tvH = midB - midT - 2 * m
+        val tvW = min(tvH * 1.3f, w * 0.36f)
+        xyOuter.set(pad, midT, pad + tvW + 2 * m, midB)
+        xy.set(pad + m, midT + m, pad + m + tvW, midB - m)
+        panel.set(xyOuter.right + pad, midT, w - pad, midB)
         val ph = panel.height(); val inner = 8 * d
         // the filter column (all three pages): sun at the top, cloud at the bottom, envelope button underneath
         // a slider column: the slider runs the full height (sun at the top, cloud at the bottom);
@@ -175,17 +180,17 @@ class KidsView(c: Context, private val host: Host) : View(c) {
         val t = (System.nanoTime() - t0) / 1e9f
         // where the dot shows on the screen, 0..1 (it can reach 16 dp from each edge)
         val sx = 0.5f + dotX * (r.width() / 2 - 16 * d) / r.width(); val sy = 0.5f + dotY * (r.height() / 2 - 16 * d) / r.height()
-        tvs[page].draw(c, r, t, sx, sy, dotHeld) { cc, w, h ->
-            // the four effects, as pictures at the edges (cream, with a soft shadow so they read on any picture)
-            val s = min(w, h) * 0.09f
-            for (pass in 0..1) {
-                val col = if (pass == 0) Pal.alpha(INK, 0.45f) else Pal.alpha(Pal.CREAM, 0.95f)
-                val o = if (pass == 0) 1.5f * d else 0f
-                if (pitch) waveSym(cc, s * 1.6f + o, h / 2 + o, s * 1.2f, 1, col) else bubbles(cc, s * 1.5f + o, h / 2 + o, s, col)
-                if (pitch) waveSym(cc, w - s * 1.6f + o, h / 2 + o, s * 1.2f, 4, col) else waveSym(cc, w - s * 1.6f + o, h / 2 + o, s * 1.1f, 3, col)
-                echoSym(cc, w / 2 + o, s * 1.4f + o, s, col)
-                zigzag(cc, w / 2 + o, h - s * 1.4f + o, s, col)
-            }
+        tvs[page].draw(c, r, t, sx, sy, dotHeld) { _, _, _ -> }
+        // the four effects, as pictures on the wood around the screen: left, right, up, down
+        val o = xyOuter; val sz = (r.top - o.top) * 0.42f
+        val lx = (o.left + r.left) / 2; val rx = (r.right + o.right) / 2; val ty = (o.top + r.top) / 2; val by = (r.bottom + o.bottom) / 2
+        for (pass in 0..1) {
+            val col = if (pass == 0) Pal.alpha(INK, 0.6f) else Pal.CREAM
+            val sh = if (pass == 0) 1.5f * d else 0f
+            if (pitch) waveSym(c, lx + sh, r.centerY() + sh, sz * 1.1f, 1, col) else bubbles(c, lx + sh, r.centerY() + sh, sz, col)
+            if (pitch) waveSym(c, rx + sh, r.centerY() + sh, sz * 1.1f, 4, col) else waveSym(c, rx + sh, r.centerY() + sh, sz, 3, col)
+            echoSym(c, r.centerX() + sz * 0.6f + sh, ty + sh, sz, col)
+            zigzag(c, r.centerX() + sh, by + sh, sz, col)
         }
         val fx = inst.fx
         fx.x = if (dotHeld) dotX else 0f; fx.y = if (dotHeld) dotY else 0f
@@ -453,7 +458,7 @@ class KidsView(c: Context, private val host: Host) : View(c) {
 
     private fun down(id: Int, x: Float, y: Float): Grab {
         keyAt(x, y).takeIf { it >= 0 }?.let { press(id, it); return Grab.Key(it) }
-        if (xy.contains(x, y) && xyPointer < 0) { xyPointer = id; dotHeld = true; setDot(x, y); return Grab.Xy }
+        if (xyOuter.contains(x, y) && xyPointer < 0) { xyPointer = id; dotHeld = true; setDot(x, y); return Grab.Xy }
         for (i in 0 until 3) if (tabs[i].contains(x, y)) { if (page != i) { allUp(); for (f in arrayOf(Sound.synth.fx, Sound.drums.fx, Sound.sampler.fx)) { f.x = 0f; f.y = 0f }; page = i; layoutAll(width.toFloat(), height.toFloat()); tap(); host.changed() }; return Grab.None }
         if (rootDown.contains(x, y)) { Sound.root = (Sound.root + 11) % 12; tap(); host.changed(); return Grab.None }
         if (rootUp.contains(x, y)) { Sound.root = (Sound.root + 1) % 12; tap(); host.changed(); return Grab.None }

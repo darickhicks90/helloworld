@@ -219,6 +219,8 @@ class Limiter {
 
     /** True while the sound comes out of the phone's own speaker. */
     @Volatile var speaker = false
+    /** A lower ceiling than the default (linear, e.g. 0.708 for -3 dBFS); 0 = the default. */
+    @Volatile var ceilingOverride = 0f
     /** How far the gain is turned down right now (1 = untouched), for meters. */
     var reduction = 1f; private set
 
@@ -237,7 +239,7 @@ class Limiter {
         if (rate != SR) setup()
         val spk = speaker
         if (spk && hpHz != SPEAKER_HP) { hpHz = SPEAKER_HP; hpL1.highPass(SPEAKER_HP); hpL2.highPass(SPEAKER_HP); hpR1.highPass(SPEAKER_HP); hpR2.highPass(SPEAKER_HP) }
-        val ceiling = if (spk) CEILING_SPEAKER else CEILING
+        val ceiling = if (ceilingOverride > 0f) ceilingOverride else if (spk) CEILING_SPEAKER else CEILING
         val g0 = gain.coerceIn(0f, 1f)   // the master fader only ever turns down
         var minG = 1f
         for (i in 0 until n) {

@@ -30,7 +30,8 @@ class KidsActivity : Activity(), KidsView.Host {
         Px.init(this)
         val am = getSystemService(AUDIO_SERVICE) as AudioManager
         val rate = am.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)?.toIntOrNull() ?: 48000
-        Sound.init(rate)
+        val burst = am.getProperty(AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER)?.toIntOrNull() ?: 192
+        Sound.init(rate, burst)
         load()
         // (`--ei page N` opens a given page: used by the automated screenshot check)
         view = KidsView(this, this).apply { page = intent?.getIntExtra("page", -1)?.takeIf { it in 0..2 } ?: prefs.getInt("page", 0) }

@@ -221,6 +221,59 @@ class ModelManager(private val ctx: Context) {
 
     fun clearFailure(m: ModelSpec) { failures.remove(m.id) }
 
+    /** Tests can skip the address lookup. */
+    var skipNetworkCheck = false
+
+    /** Can this phone look up the download site's address? (Run off the main thread.) */
+    fun canReachDownloadSite(): String? = if (skipNetworkCheck) null else try {
+        for (h in listOf("huggingface.co", "us.aws.cdn.hf.co")) java.net.InetAddress.getByName(h)
+        null
+    } catch (e: java.net.UnknownHostException) {
+        "This phone can't look up the download site (${e.message?.substringAfter('"')?.substringBefore('"') ?: "huggingface.co"}). " +
+            "A VPN, an ad blocker, Private DNS, or a filtered Wi-Fi network can cause this. Try another network, or download the files yourself and import them."
+    } catch (e: Exception) { null }
+
+    /**
+     * Install a model file the user downloaded themselves (e.g. on a computer,
+     * then copied to the phone). Works out which model it is from its size,
+     * checks its SHA-256 while copying, and only then puts it in place.
+     * Returns the model installed. Blocks; call from a background thread.
+     */
+    fun importFile(uri: android.net.Uri, progress: (Long, Long) -> Unit): ModelSpec {
+        val cr = ctx.contentResolver
+        var size = -1L; var name = ""
+        cr.query(uri, arrayOf(android.provider.OpenableColumns.SIZE, android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+            if (c.moveToFirst()) { if (!c.isNull(0)) size = c.getLong(0); name = c.getString(1) ?: "" }
+        }
+        if (uri.scheme == "file") uri.path?.let { p -> File(p).let { f -> if (size < 0) size = f.length(); if (name.isEmpty()) name = f.name } }
+        if (name.isEmpty()) name = uri.lastPathSegment?.substringAfterLast('/') ?: "file"
+        val all = LANGUAGE + SPEECH
+        val m = all.firstOrNull { it.bytes == size } ?: all.firstOrNull { it.fileName.equals(name, ignoreCase = true) }
+            ?: throw IllegalStateException("“$name” isn't one of the SketchSolve model files. Expected one of: ${all.joinToString(", ") { it.fileName }}.")
+        if (size >= 0 && size != m.bytes) throw IllegalStateException("“$name” is the wrong size (${size} bytes; ${m.fileName} should be ${m.bytes}). It may not have finished downloading.")
+        if (freeBytes() < m.bytes + 100_000_000L) throw IllegalStateException("Not enough free space to import ${m.title}.")
+        val tmp = File(dir, m.fileName + ".import")
+        val md = MessageDigest.getInstance("SHA-256")
+        var done = 0L
+        (cr.openInputStream(uri) ?: throw IllegalStateException("Couldn't open “$name”.")).use { input ->
+            tmp.outputStream().buffered(1 shl 20).use { out ->
+                val buf = ByteArray(1 shl 16)
+                var last = 0L
+                while (true) {
+                    val n = input.read(buf); if (n < 0) break
+                    out.write(buf, 0, n); md.update(buf, 0, n); done += n
+                    if (done - last > 8_000_000) { progress(done, m.bytes); last = done }
+                }
+            }
+        }
+        val hash = md.digest().joinToString("") { "%02x".format(it) }
+        if (done != m.bytes || hash != m.sha256) { tmp.delete(); throw IllegalStateException("“$name” is damaged or incomplete. Download it again and re-import it.") }
+        cancel(m)
+        file(m).delete()
+        if (!tmp.renameTo(file(m))) throw IllegalStateException("Couldn't save ${m.fileName}.")
+        return m
+    }
+
     private fun sha256(f: File): String {
         val md = MessageDigest.getInstance("SHA-256")
         f.inputStream().buffered(1 shl 20).use { s -> val b = ByteArray(1 shl 16); while (true) { val n = s.read(b); if (n < 0) break; md.update(b, 0, n) } }

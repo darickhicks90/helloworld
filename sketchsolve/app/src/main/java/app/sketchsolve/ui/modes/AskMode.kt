@@ -152,11 +152,17 @@ class AskMode(app: MainActivity) : Mode(app) {
         val d = mm.device()
         pad.muted("This device: ${d.name} · ${if (d.ramGb > 0.5) "%.0f GB memory · ".format(d.ramGb) else ""}${"%.0f".format(d.freeGb)} GB free")
         pad.button("Choose models…") { app.showModelSetup() }
+        networkProblem?.let { pad.warn(it) }
+        importing?.let { pad.text("⇣ Importing: $it") }
         val missing = mm.wanted().filter { mm.progress(it).state == ModelManager.State.NONE }
         if (missing.isNotEmpty()) {
             pad.add(CheckBox(app).apply { text = "Only download on Wi-Fi"; isChecked = wifiOnly; setOnCheckedChangeListener { _, v -> wifiOnly = v; app.scheduleSave() } })
             pad.button("⇣ Download (${size(missing.sumOf { it.bytes })})") { startDownload(missing) }
             pad.muted("A one-time download. After this the app works with no internet connection.")
+        }
+        if (mm.wanted().any { !mm.isReady(it) }) {
+            pad.button("Downloaded the files yourself? Import…") { app.pickModelFile() }
+            pad.button("How to download them yourself") { app.showTutorial("manual") }
         }
         pad.heading("My formula library")
         val lib = app.library
@@ -172,14 +178,38 @@ class AskMode(app: MainActivity) : Mode(app) {
 
     private fun size(b: Long) = if (b > 1e9) "%.1f GB".format(b / 1e9) else "%d MB".format(b / 1_000_000)
 
+    private var networkProblem: String? = null
+    private var importing: String? = null
+
     fun startDownload(list: List<ModelSpec>) {
         val mm = app.models
-        for (m in list) {
-            val err = mm.enqueue(m, wifiOnly)
-            if (err != null) { app.toast(err); break }
-        }
-        if (wifiOnly && !mm.onWifi()) app.toast("It will start when you're on Wi-Fi (or untick “Only download on Wi-Fi”).")
-        refresh()
+        // check the phone can find the download site first, so a blocked network is explained, not silent
+        Thread {
+            val problem = mm.canReachDownloadSite()
+            app.main.post {
+                networkProblem = problem
+                if (problem != null) { refresh(); app.showTutorial("manual"); return@post }
+                for (m in list) {
+                    val err = mm.enqueue(m, wifiOnly)
+                    if (err != null) { app.toast(err); break }
+                }
+                if (wifiOnly && !mm.onWifi()) app.toast("It will start when you're on Wi-Fi (or untick “Only download on Wi-Fi”).")
+                refresh()
+            }
+        }.start()
+    }
+
+    /** Install a model file picked from the phone's storage. */
+    fun importModel(uri: android.net.Uri) {
+        importing = "Starting…"; refresh()
+        Thread {
+            try {
+                val m = app.models.importFile(uri) { done, total -> app.main.post { importing = "${100 * done / total}% checked and copied"; refresh() } }
+                app.main.post { importing = null; app.modelsChanged(); app.toast("${m.title} is installed."); refresh() }
+            } catch (e: Exception) {
+                app.main.post { importing = null; AlertDialog.Builder(app).setTitle("Couldn't import that file").setMessage(e.message).setPositiveButton("OK", null).show(); refresh() }
+            }
+        }.start()
     }
 
     private var watching = false

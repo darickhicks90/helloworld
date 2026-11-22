@@ -82,12 +82,52 @@ class Tutorial(private val app: MainActivity, private val startAt: String? = nul
             "Word problems and push-to-talk use AI models that run on this device.",
             "SketchSolve checks your device and recommends the right ones — you can choose others.",
             "It's a one-time download (about 2.8 GB). After that, no internet is needed and nothing you say or write leaves the device.",
-            "Equations, Shapes, Circuits and Formulas work right now, without the download."))
+            "Equations, Shapes, Circuits and Formulas work right now, without the download.")),
+        Page("manual", "manual", "Download the models yourself", listOf(
+            "Use this if the download in the app doesn't start (for example “Unable to resolve host”).",
+            "1  First try: turn off any VPN or ad blocker, set Settings → Connections → More connection settings → Private DNS to Automatic, or switch to another Wi-Fi or mobile data. Then tap Download again.",
+            "2  Or download the files below in a browser — on this phone, or on a computer.",
+            "3  On a computer, move them to the phone: USB cable into the Download folder, Google Drive, or Quick Share.",
+            "4  On the Ask tab tap “Import…” and pick each file. The app checks it's the right, undamaged file and installs it."),
+            extra = { box -> manualLinks(box) })
     )
 
     private inline fun <reified T : Mode> mode(): T = app.modes.first { it is T } as T
 
-    private var index = maxOf(0, pages.indexOfFirst { it.id == startAt })
+    // the manual-download page is shown on its own, not as part of the tour
+    private val shown = if (startAt == "manual") pages.filter { it.id == "manual" } else pages.filter { it.id != "manual" }
+    private var index = maxOf(0, shown.indexOfFirst { it.id == startAt })
+
+    private fun manualLinks(box: LinearLayout) {
+        val mm = app.models
+        val (lang, speech) = mm.fits()
+        fun row(m: app.sketchsolve.llm.ModelSpec, note: String) {
+            val col = LinearLayout(app).apply {
+                orientation = LinearLayout.VERTICAL
+                background = GradientDrawable().apply { cornerRadius = app.dp(8f); setColor(0xFFFFFFFF.toInt()); setStroke(app.dp(1), 0x33000000) }
+                setPadding(app.dp(10), app.dp(6), app.dp(10), app.dp(8))
+            }
+            col.addView(TextView(app).apply { text = "${m.title} — ${m.fileName} (${"%.2f".format(m.bytes / 1e9)} GB)" + if (mm.isReady(m)) "  ✓ installed" else ""; setTextColor(Ink.TEXT); typeface = Typeface.DEFAULT_BOLD; setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f) })
+            if (note.isNotEmpty()) col.addView(TextView(app).apply { text = note; setTextColor(Ink.MUTED); setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f) })
+            col.addView(TextView(app).apply { text = m.url; setTextColor(0xFF2B4C7E.toInt()); setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f); setTextIsSelectable(true) })
+            val btns = LinearLayout(app).apply { orientation = LinearLayout.HORIZONTAL }
+            btns.addView(smallButton("Copy link") {
+                (app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText(m.fileName, m.url))
+                app.toast("Link copied.")
+            })
+            btns.addView(smallButton("Open in browser") {
+                try { app.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(m.url))) } catch (e: Exception) { app.toast("No browser found.") }
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { leftMargin = app.dp(8) })
+            col.addView(btns)
+            box.addView(col, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = app.dp(6) })
+        }
+        box.addView(TextView(app).apply { text = "WORD PROBLEMS — pick one"; setTextColor(Ink.MUTED); typeface = Typeface.DEFAULT_BOLD; setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f); setPadding(0, app.dp(8), 0, 0) })
+        for (f in lang) row(f.model, if (f.recommended) "Recommended for this device" else "")
+        box.addView(TextView(app).apply { text = "PUSH TO TALK — pick one"; setTextColor(Ink.MUTED); typeface = Typeface.DEFAULT_BOLD; setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f); setPadding(0, app.dp(8), 0, 0) })
+        for (f in speech) row(f.model, if (f.recommended) "Recommended for this device" else "")
+        box.addView(smallButton("⇣  Import a downloaded file…") { dialog.dismiss(); app.pickModelFile() },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = app.dp(10) })
+    }
     private lateinit var dialog: Dialog
     private lateinit var art: Art
     private lateinit var body: LinearLayout
@@ -119,7 +159,7 @@ class Tutorial(private val app: MainActivity, private val startAt: String? = nul
         dots = TextView(app).apply { gravity = Gravity.CENTER; setTextColor(Ink.MUTED) }
         nav.addView(dots, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         back = smallButton("Back") { if (index > 0) { index--; render() } }
-        next = smallButton("Next") { if (index < pages.size - 1) { index++; render() } else finish() }
+        next = smallButton("Next") { if (index < shown.size - 1) { index++; render() } else finish() }
         nav.addView(back); nav.addView(next, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { leftMargin = app.dp(8) })
         right.addView(nav)
         root.addView(right, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1.1f))
@@ -139,7 +179,7 @@ class Tutorial(private val app: MainActivity, private val startAt: String? = nul
     }
 
     private fun render() {
-        val p = pages[index]
+        val p = shown[index]
         art.kind = p.art
         body.removeAllViews()
         val pad = Pad(app, body)
@@ -148,9 +188,9 @@ class Tutorial(private val app: MainActivity, private val startAt: String? = nul
         p.extra?.invoke(body)
         if (p.tryIt != null) body.addView(smallButton("▶  ${p.tryLabel}") { app.getSharedPreferences("sketchsolve", Context.MODE_PRIVATE).edit().putBoolean("tourSeen", true).apply(); dialog.dismiss(); p.tryIt.invoke() },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = app.dp(10) })
-        dots.text = if (app.resources.configuration.screenHeightDp < 480) "${index + 1} of ${pages.size}" else pages.indices.joinToString(" ") { if (it == index) "●" else "○" }
+        dots.text = if (shown.size == 1) "" else if (app.resources.configuration.screenHeightDp < 480) "${index + 1} of ${shown.size}" else shown.indices.joinToString(" ") { if (it == index) "●" else "○" }
         back.visibility = if (index == 0) View.INVISIBLE else View.VISIBLE
-        next.text = if (index == pages.size - 1) "Done" else "Next"
+        next.text = if (index == shown.size - 1) "Done" else "Next"
     }
 
     /** Hand-drawn illustration for a tutorial page. */
@@ -268,6 +308,18 @@ class Tutorial(private val app: MainActivity, private val startAt: String? = nul
                     canvas.drawRoundRect(260f, 138f, 310f, 160f, 6f, 6f, fill)
                     label(canvas, "my packs", 280f, 205f, Ink.TEXT, 16f)
                     label(canvas, "optics.txt", 60f, 220f, Ink.MUTED, 14f); label(canvas, "electronics.txt", 60f, 242f, Ink.MUTED, 14f)
+                }
+                "manual" -> {
+                    ink.color = Ink.PENCIL; ink.strokeWidth = 3f
+                    canvas.drawRoundRect(20f, 60f, 170f, 160f, 8f, 8f, ink)          // laptop screen
+                    canvas.drawLine(5f, 172f, 185f, 172f, ink)
+                    label(canvas, "browser", 60f, 115f, Ink.MUTED, 15f)
+                    path(canvas, SampleInk.line(Pt(195.0, 120.0), Pt(270.0, 120.0)), Ink.KNOWN, 4f)
+                    path(canvas, listOf(Pt(255.0, 106.0), Pt(272.0, 120.0), Pt(255.0, 134.0)), Ink.KNOWN, 4f)
+                    label(canvas, "USB · Drive · Quick Share", 150f, 200f, Ink.KNOWN, 14f)
+                    canvas.drawRoundRect(290f, 40f, 380f, 230f, 14f, 14f, ink)       // phone
+                    label(canvas, "Import…", 300f, 140f, Ink.FIND, 16f)
+                    label(canvas, "checked ✓", 298f, 166f, Ink.KNOWN, 14f)
                 }
                 "setup" -> {
                     ink.color = Ink.PENCIL; ink.strokeWidth = 3f

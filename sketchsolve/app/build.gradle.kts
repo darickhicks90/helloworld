@@ -61,4 +61,5 @@ tasks.withType<Test>().configureEach {
     maxHeapSize = "3g"
     // the word-problem scorer reads files Gradle doesn't track, so always run tests
     outputs.upToDateWhen { false }
+    System.getenv("WHISPER_FILE")?.let { systemProperty("whisperFile", it) }
 }

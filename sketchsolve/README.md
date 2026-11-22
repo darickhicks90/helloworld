@@ -72,6 +72,17 @@ you which extra value would be enough.
   60–190 MB). The download is resumable and checksum-verified, with an
   optional Wi-Fi-only setting. After that the app is fully offline.
 
+### If the download is blocked
+
+* Before downloading, the app checks that the phone can look up the download
+  site. If it can't (a VPN, ad blocker, Private DNS or filtered network), it
+  says so and opens **Download the models yourself**.
+* That page lists every model file with Copy link and Open in browser
+  buttons, and explains how to move the files from a computer.
+* Then **Import…** on the Ask tab installs a file from the phone's storage.
+  The app works out which model it is, checks the SHA-256 while copying, and
+  refuses wrong or damaged files.
+
 ### Formula library folder
 
 Pick any folder on the device. Every `.txt` file in it is read as a formula

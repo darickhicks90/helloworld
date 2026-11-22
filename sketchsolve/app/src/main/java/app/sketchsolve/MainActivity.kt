@@ -223,10 +223,22 @@ class MainActivity : Activity() {
         catch (e: Exception) { toast("This device can't pick folders.") }
     }
 
+    fun pickModelFile() {
+        try {
+            startActivityForResult(android.content.Intent(android.content.Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(android.content.Intent.CATEGORY_OPENABLE); type = "*/*"
+            }, 12)
+        } catch (e: Exception) { toast("This device can't pick files.") }
+    }
+
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         val uri = data?.data
+        if (requestCode == 12 && resultCode == RESULT_OK && uri != null) {
+            (modes.firstOrNull { it is AskMode } as? AskMode)?.let { select(it); it.importModel(uri) }
+            return
+        }
         if (requestCode == 11 && resultCode == RESULT_OK && uri != null) {
             contentResolver.takePersistableUriPermission(uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
             getSharedPreferences("sketchsolve", MODE_PRIVATE).edit().putString("libraryUri", uri.toString()).apply()

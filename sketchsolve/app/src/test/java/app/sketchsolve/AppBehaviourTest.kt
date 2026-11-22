@@ -42,7 +42,9 @@ class AppBehaviourTest {
         a.models.deviceOverride = ModelManager.DeviceInfo("Test phone", "chip", 8.0, 50.0, 8, "15")
         val ask = a.modes.first { it is AskMode } as AskMode
         a.select(ask)
+        a.models.skipNetworkCheck = true
         ask.startDownload(listOf(ModelManager.WHISPER_BASE, ModelManager.GEMMA_E2B))
+        settle()
         val dm = shadowOf(a.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager)
         assertEquals(2, dm.requestCount)
         val prefs = a.getSharedPreferences("sketchsolve", Context.MODE_PRIVATE)
@@ -56,7 +58,27 @@ class AppBehaviourTest {
         assertTrue(req.destination.toString().endsWith("models/gemma-4-E2B-it.litertlm.download"))
         // asking again doesn't start a second copy
         ask.startDownload(listOf(ModelManager.GEMMA_E2B))
+        settle()
         assertEquals(2, dm.requestCount)
+    }
+
+    @Test fun importingAModelFileChecksAndInstallsIt() {
+        val a = Robolectric.buildActivity(MainActivity::class.java).setup().get()
+        a.models.deviceOverride = ModelManager.DeviceInfo("Test phone", "chip", 8.0, 50.0, 8, "15")
+        val real = java.io.File(System.getProperty("whisperFile") ?: "/nonexistent")
+        if (real.exists()) {
+            val m = a.models.importFile(android.net.Uri.fromFile(real)) { _, _ -> }
+            assertEquals(ModelManager.WHISPER_BASE, m)
+            assertTrue(a.models.isReady(ModelManager.WHISPER_BASE))
+        }
+        // a file that isn't a model is refused with an explanation
+        val junk = java.io.File.createTempFile("holiday", ".jpg").apply { writeText("not a model") }
+        val err = runCatching { a.models.importFile(android.net.Uri.fromFile(junk)) { _, _ -> } }.exceptionOrNull()
+        assertTrue(err?.message ?: "", err?.message?.contains("isn't one of the SketchSolve model files") == true)
+        // a model file with the right name but damaged contents is refused too
+        val fake = java.io.File(junk.parentFile, "ggml-base.en-q5_1.bin").apply { writeText("damaged") }
+        val err2 = runCatching { a.models.importFile(android.net.Uri.fromFile(fake)) { _, _ -> } }.exceptionOrNull()
+        assertTrue(err2?.message ?: "", err2?.message?.contains("damaged") == true || err2?.message?.contains("wrong size") == true)
     }
 
     @Test fun notEnoughSpaceIsExplained() {

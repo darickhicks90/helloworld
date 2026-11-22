@@ -8,6 +8,7 @@ you which extra value would be enough.
 
 | Sticky-note tab | What it does |
 | --- | --- |
+| **Ask** | Hold the microphone and say a question, or type it. Plain sums and equations are solved straight away. Word problems are read by Gemma 4 running on the device, checked, and written out on the page with a diagram, the equations, the working and a boxed answer. |
 | **Equations** | Write equations by hand. Circle a letter to solve for it, a piece like `3 + 4` to work it out, or a whole equation. Several lines are solved together as a system. |
 | **Shapes** | **1** draw a 2D or 3D shape · **2** bracket the sides or angles you know and write their numbers · **3** circle a side, an angle, or the whole shape (for area, perimeter, volume or surface area). |
 | **Circuits** | **1** draw a schematic · **2** write each value next to its part · **3** circle a part to get its current, voltage and power, or circle the whole circuit for its totals. |
@@ -32,6 +33,61 @@ you which extra value would be enough.
   mixed circuits with node analysis. It treats capacitors as fully charged
   (steady DC). With no battery, leave two wire ends open and it gives the
   resistance (or capacitance) between them. Values are in ohms, volts and µF.
+
+## Word problems and voice (Ask tab)
+
+* **Gemma 4 E2B** (Apache 2.0) runs on the phone through Google's LiteRT-LM.
+  It only *sets up* the problem, as JSON that is forced to follow a schema.
+  It never does the maths.
+* SketchSolve then checks the setup:
+  * every number used must appear in the question
+  * every number in the question should be used
+  * units must match (no adding hours to miles; minutes and hours need converting)
+  * the asked-for quantity must be unknown
+  * no equation may be true for every value
+* It solves with its own solver, and reads the problem a second (and third)
+  time to make sure independent readings agree.
+* The answer is stamped **CHECKED**, or **PLEASE CHECK** with the reasons.
+* **whisper.cpp** (MIT) does push-to-talk speech recognition on the device.
+  It's built from source in `app/src/main/cpp`.
+* Spoken maths such as "x squared plus three equals twelve" or "fifteen
+  percent of eighty" is turned into maths text directly.
+* Models download once on first use (about 2.7 GB: Gemma 2.6 GB plus Whisper
+  60–190 MB). The download is resumable and checksum-verified, with an
+  optional Wi-Fi-only setting. After that the app is fully offline.
+
+### Formula library folder
+
+Pick any folder on the device. Every `.txt` file in it is read as a formula
+pack. The formulas appear in the Formulas tab, and the most relevant ones are
+shown to Gemma when it reads a word problem. Here's the format:
+
+```
+# Optics
+formula: Thin lens equation
+equation: 1/f = 1/d_o + 1/d_i
+f: focal length (cm)
+d_o: distance from the object to the lens (cm)
+d_i: distance from the lens to the image (cm)
+keywords: lens, focal, magnifying
+note: A negative d_i means the image is on the same side as the object.
+example: A magnifying glass has a focal length of 10 cm.
+---
+formula: Magnification
+equation: m = -d_i/d_o
+m: magnification
+```
+
+### Measuring accuracy
+
+`app/src/test/resources/word_eval.json` holds 50 word problems with known
+answers, including some that genuinely lack information. To measure Gemma
+on them:
+
+1. `./gradlew testDebugUnitTest --tests '*WordEval.exportPrompts*'` writes the prompts.
+2. `python tools/run_eval.py MODEL.litertlm app/build/eval/prompts.jsonl app/build/eval/outputs.jsonl`
+   (needs `pip install litert-lm-api`) runs Gemma on them.
+3. `--tests '*WordEval.score*'` writes `app/build/eval/report.txt`.
 
 ## Not enough information?
 
@@ -76,4 +132,6 @@ computer-generated strokes, not real handwriting.
 | `shapes` | Shape recognition, shape models, reading brackets, numbers and circles |
 | `circuit` | Schematic recognition, connectivity, node equations |
 | `data` | The formula library |
-| `ui` | Desk, paper, legal pad, and one class per tab |
+| `word` | Spoken maths, units, word-problem setup checks, prompt, formula packs |
+| `llm` | Gemma (LiteRT-LM), Whisper speech, model downloads |
+| `ui` | Desk, paper, legal pad, written-out working, and one class per tab |

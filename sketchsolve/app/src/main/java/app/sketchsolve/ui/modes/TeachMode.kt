@@ -101,6 +101,12 @@ class TeachMode(app: MainActivity) : Mode(app) {
         pad.muted("1  Draw: wires, resistors (zigzag or box), lamps (circle with X), batteries (long + short plates; long is +), capacitors (two equal plates), sources (circle).\n2  Values: write each number next to its part (ohms, volts, µF).\n3  Find: circle a part for its current, voltage and power, or circle everything for totals.")
         pad.heading("Not enough information?")
         pad.muted("SketchSolve checks whether your values really pin the answer down. If not, it says so and lists which ONE extra value would do it. It also tells you when two answers fit, or when your values contradict each other.")
+        pad.heading("Ask by voice")
+        pad.muted("On the Ask page, hold the microphone and say your question, then let go. Say equations naturally (“x squared plus three equals twelve”) or whole word problems. Everything runs on this device.")
+        pad.heading("Privacy")
+        pad.muted("SketchSolve works offline. Your voice, writing and questions never leave the device. The only internet use is the one-time model download.")
+        pad.heading("Open-source parts")
+        pad.muted("Gemma 4 E2B by Google — Apache License 2.0.\nLiteRT-LM by Google — Apache License 2.0.\nwhisper.cpp and ggml by the ggml authors — MIT License.\nWhisper speech models by OpenAI — MIT License.\nFull license texts are in the app's source repository (THIRD_PARTY_NOTICES.md).")
         pad.heading("Stylus")
         pad.muted("When you use a stylus, touches from your palm are ignored. The eraser end of a stylus erases.")
     }

@@ -39,7 +39,7 @@ class PocketActivity : Activity(), RadioHost {
         if (Build.VERSION.SDK_INT >= 33) {
             onBackInvokedDispatcher.registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT) { goBack() }
         }
-        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+        requestedOrientation = upright
         root = FrameLayout(this)
         setContentView(root)
         openNotebook()
@@ -49,6 +49,9 @@ class PocketActivity : Activity(), RadioHost {
         Radio.onChange = { runOnUiThread { keys.radioOn = Radio.playing; keys.radioRec = Radio.recording } }
         root.addView(keys, FrameLayout.LayoutParams(TopKeys.WIDTH.toInt(), TopKeys.HEIGHT.toInt(), Gravity.TOP or Gravity.END).apply { topMargin = Px.dp(4); rightMargin = Px.dp(4) })
     }
+
+    /** Held upright on a phone; a tablet can stay however it's held (no letterboxing). */
+    private val upright get() = if (resources.configuration.smallestScreenWidthDp >= 600) ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED else ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
 
     private fun openNotebook() {
         // "Close" on the pad tucks the app away (the radio keeps playing)
@@ -62,7 +65,7 @@ class PocketActivity : Activity(), RadioHost {
         val v = SketchEditor(this, s) {
             sketch?.let { root.removeView(it) }
             sketch = null
-            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+            requestedOrientation = upright
             notebook?.refresh()
         }
         sketch = v

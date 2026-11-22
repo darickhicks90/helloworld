@@ -257,7 +257,7 @@ class StudioScreen(c: Context, private val host: Host) : FrameLayout(c) {
         if (sig == chipSig) return
         chipSig = sig
         chips.removeAllViews()
-        if (clips.isEmpty()) chips.addView(Btn(context, if (jam) "No loops yet: ● Loop records one, then switch blocks and layer more" else "No clips for ${e.title} yet: ● Record clip", Pal.BROWN), lp(WRAP, Px.dp(44)))
+        if (clips.isEmpty()) chips.addView(Btn(context, if (jam) "No loops yet: tap ● Loop" else "No clips yet: ● Record clip", Pal.BROWN), lp(WRAP, Px.dp(44)))
         clips.forEach { clip ->
             val playing = Studio.isPlaying(clip)
             val label = (if (playing) "▶ " else "") + clip.name + " · ${fmtBars(clip)}" + (if (!jam && clip.inClibbins) " ✓" else "") + (if (!jam && clip === sel) " ◀" else "")

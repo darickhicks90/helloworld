@@ -87,7 +87,7 @@ class KidsView(c: Context, private val host: Host) : View(c) {
         }
         when (page) {
             0 -> {
-                val g = min((ph - inner * 2 - 6 * d) / 2, 70 * d)
+                val g = min((ph - inner * 2 - 6 * d) / 2, min(96 * d, panel.width() * 0.14f))
                 for (i in 0 until 4) {
                     val x = panel.left + inner + (i % 2) * (g + 6 * d); val y = panel.top + inner + (i / 2) * (g + 6 * d) + (ph - inner * 2 - 2 * g - 6 * d) / 2
                     waves[i].set(x, y, x + g, y + g)

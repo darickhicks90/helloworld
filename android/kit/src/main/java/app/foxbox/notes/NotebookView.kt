@@ -244,8 +244,11 @@ class NotebookView(private val a: Activity, private val close: () -> Unit, priva
             else -> if (reading) "reading…" else null
         }
         if (status != null) {
+            // just above the tool row (not over its labels), shrunk to fit the page
             toolP.textSize = g.lineH * 0.42f; toolP.color = 0xFF9A7A50.toInt()
-            c.drawText(status, pad.centerX(), g.toolTop - g.lineH * 0.05f + toolP.textSize, toolP)
+            val room = pad.width() * 0.9f
+            if (toolP.measureText(status) > room) toolP.textSize *= room / toolP.measureText(status)
+            c.drawText(status, pad.centerX(), g.toolTop - g.lineH * 0.14f, toolP)
         }
     }
 

@@ -70,7 +70,9 @@ class KidsView(c: Context, private val host: Host) : View(c) {
         rootUp.set(w - pad - 56 * d, pad, w - pad, pad + topH)
         rootBox.set(rootUp.left - 6 * d - 78 * d, pad, rootUp.left - 6 * d, pad + topH)
         rootDown.set(rootBox.left - 6 * d - 56 * d, pad, rootBox.left - 6 * d, pad + topH)
-        val keysH = (h * 0.27f).coerceIn(80 * d, 150 * d)
+        // on phones (under ~480 dp tall) the keys are a little shorter, still easy for small fingers,
+        // so the XY screen above them gets more room; tablets keep the taller keys
+        val keysH = if (h / d < 480f) (h * 0.2f).coerceIn(68 * d, 96 * d) else (h * 0.27f).coerceIn(80 * d, 150 * d)
         keysR.set(pad, h - pad - keysH, w - pad, h - pad)
         val kw = (keysR.width() - 7 * 6 * d) / 8
         for (i in 0 until 8) keys[i].set(keysR.left + i * (kw + 6 * d), keysR.top, keysR.left + i * (kw + 6 * d) + kw, keysR.bottom)

@@ -22,6 +22,8 @@ data class UnitInfo(val dim: Dim, val family: String)
 object Units {
     private val L = Dim.of("length" to 1); private val T = Dim.of("time" to 1); private val M = Dim.of("mass" to 1)
     private val MONEY = Dim.of("money" to 1); private val COUNT = Dim.of("count" to 1); private val TEMP = Dim.of("temperature" to 1)
+    /** Percent is its own "unit" until it's divided by 100, so 15% can't be used as 15 by mistake. */
+    val PERCENT = Dim.of("percent" to 1)
     private val VOLT = Dim.of("voltage" to 1); private val AMP = Dim.of("current" to 1); private val ANGLE = Dim.of("angle" to 1)
 
     private val BASE: Map<String, UnitInfo> = buildMap {
@@ -69,7 +71,7 @@ object Units {
         put(listOf("kwh"), VOLT * AMP * T, "kWh")
         put(listOf("n", "newton", "newtons"), M * L / T.pow(2), "N")
         put(listOf("hz", "hertz"), T.pow(-1), "Hz")
-        put(listOf("%", "percent", "pct"), Dim.NONE, "%")
+        put(listOf("%", "percent", "pct"), PERCENT, "%")
         // counted things
         for (w in listOf("item", "items", "people", "person", "persons", "student", "students", "ticket", "tickets", "book", "books",
             "apple", "apples", "car", "cars", "coin", "coins", "page", "pages", "worker", "workers", "box", "boxes", "unit", "units",
@@ -129,7 +131,12 @@ object Units {
             is Node.Op -> when (n.op) {
                 '+', '-' -> sum(of(n.a), of(n.b))
                 '*' -> { val a = of(n.a); val b = of(n.b); if (a == null || b == null) null else UnitInfo(a.dim * b.dim, "") }
-                '/' -> { val a = of(n.a); val b = of(n.b); if (a == null || b == null) null else UnitInfo(a.dim / b.dim, "") }
+                '/' -> {
+                    val a = of(n.a)
+                    val bNum = (n.b as? Node.Num)?.v
+                    if (bNum == 100.0 && a != null && (a.dim.e["percent"] ?: 0) > 0) UnitInfo(a.dim / PERCENT, "")   // 15% / 100 = 0.15
+                    else { val b = of(n.b); if (a == null || b == null) null else UnitInfo(a.dim / b.dim, "") }
+                }
                 else -> { val a = of(n.a); val k = (n.b as? Node.Num)?.v; if (a != null && k != null && k == Math.floor(k)) UnitInfo(a.dim.pow(k.toInt()), "") else if (a?.dim?.isNone == true) a else null }
             }
         }

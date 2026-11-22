@@ -173,8 +173,45 @@ object WordSolver {
     }
 
     /** Check a setup against the problem and solve it. */
-    fun check(problem: String, s: Setup, deg: Boolean = true): WordAnswer {
-        val issues = ArrayList<Issue>()
+    /** Facts everyone knows, which a setup may use without them being in the problem. */
+    private val KNOWN_FACTS = mapOf(180.0 to "angles in a triangle add to 180°", 360.0 to "a full turn is 360°", 90.0 to "a right angle is 90°",
+        60.0 to "60 minutes in an hour / 60 seconds in a minute", 24.0 to "24 hours in a day", 7.0 to "7 days in a week", 12.0 to "12 months in a year / 12 inches in a foot",
+        52.0 to "52 weeks in a year", 365.0 to "365 days in a year", 3600.0 to "3600 seconds in an hour", 100.0 to "100 per cent / 100 cm in a metre",
+        1000.0 to "1000 in a kilo-", 9.81 to "gravity 9.81 m/s²", 9.8 to "gravity 9.8 m/s²", 5280.0 to "5280 feet in a mile", 3.0 to "3 feet in a yard", 16.0 to "16 ounces in a pound")
+
+    /**
+     * Small, safe fixes for common slips by the language model, each reported
+     * as a note: the asked-for quantity listed as known with a dummy value,
+     * helper letters used without being listed, comments inside equations.
+     */
+    fun repair(problem: String, s0: Setup): Pair<Setup, List<Issue>> {
+        var s = s0
+        val notes = ArrayList<Issue>()
+        // comments written inside an equation: "a = b (Wait, let's re-read…)"
+        val cleaned = s.equations.map { e ->
+            val m = Regex("\\s*[(\\[][^()\\[\\]]*?\\b(?:wait|note|assume|let's|this|since|because|where|the|implies)\\b.*$", RegexOption.IGNORE_CASE).find(e)
+            if (m != null && Expr.tryParse(e.substring(0, m.range.first), words = true) is Node.Eq) e.substring(0, m.range.first).trim() else e
+        }
+        if (cleaned != s.equations) s = s.copy(equations = cleaned)
+        val mentions = numbersIn(problem)
+        val asked = s.givens.firstOrNull { it.name == s.ask }
+        if (asked != null && (asked.value == null || mentions.none { near(it.value, asked.value) })) {
+            s = s.copy(givens = s.givens - asked, unknowns = s.unknowns + asked.copy(value = null))
+            notes += Issue(Issue.Severity.NOTE, "Treated ${asked.name} as the unknown being asked for.")
+        }
+        val names = s.all.map { it.name }.toSet()
+        val extra = s.equations.mapNotNull { Expr.tryParse(it, words = true) }.flatMap { Expr.vars(it) }.distinct().filter { it !in names }
+        if (extra.isNotEmpty()) {
+            s = s.copy(unknowns = s.unknowns + extra.map { Quantity(it, null, "", "a helper unknown", null) })
+            for (x in extra) notes += Issue(Issue.Severity.WARNING, "The letter $x wasn't explained, so it's treated as an extra unknown.")
+        }
+        // a rate given as plain "%" with time in the same formula is a rate per period
+        return s to notes
+    }
+
+    fun check(problem: String, s0: Setup, deg: Boolean = true): WordAnswer {
+        val (s, repairNotes) = repair(problem, s0)
+        val issues = ArrayList<Issue>(repairNotes)
         fun err(m: String) { issues += Issue(Issue.Severity.ERROR, m) }
         fun warn(m: String) { issues += Issue(Issue.Severity.WARNING, m) }
 
@@ -202,6 +239,10 @@ object WordSolver {
             val v = g.value
             if (v == null) { err("${g.name} (${g.meaning}) has no value."); continue }
             if (g.constant) continue
+            val quoteFound = g.quote.isNullOrBlank() || problem.contains(g.quote.trim(), ignoreCase = true)
+            val plainUnit = Units.parse(g.unit)?.let { it.dim.isNone || it.dim == Dim.of("angle" to 1) || it.dim == Dim.of("time" to 1) || it.dim == Dim.of("time" to -1) } ?: g.unit.isBlank()
+            val fact = KNOWN_FACTS.entries.firstOrNull { near(it.key, v) }
+            if (fact != null && quoteFound && plainUnit && mentions.none { near(it.value, v) }) { issues += Issue(Issue.Severity.NOTE, "Uses the known fact: ${fact.value}."); continue }
             fun matches(x: Double) = near(x, v) || near(x / 100, v) || near(x * 100, v)
             // the value must be a number in the problem, or a number inside a quote that really is in the problem
             val inText = mentions.any { matches(it.value) } ||
@@ -220,8 +261,27 @@ object WordSolver {
             if (!isUsed) warn("The ${m.text} in the problem wasn't used. Check that's right.")
         }
 
+        // Every given should be used by an equation.
+        val usedNames = parsed.flatMap { Expr.vars(it) }.toSet()
+        val literalValues = ArrayList<Double>().also { l -> parsed.forEach { literals(it, l) } }
+        for (g in s.givens) if (g.name !in usedNames && literalValues.none { g.value != null && near(it, g.value) }) warn("${g.name} = ${Expr.fmt(g.value ?: Double.NaN)} (${g.meaning}) was written down but never used.")
+        // One number in the problem shouldn't stand for two different things.
+        for (m in mentions.filter { !it.soft }) {
+            // count givens that equations actually use by name; a given only typed in as a number is the same use as that number
+            val sameGivens = s.givens.filter { g -> g.value != null && near(g.value, m.value) && !g.constant && g.name in usedNames }
+            val countInText = mentions.count { near(it.value, m.value) }
+            val literal = ArrayList<Double>().also { l -> parsed.forEach { literals(it, l) } }.count { near(it, m.value) }
+            if (sameGivens.size + literal > countInText && sameGivens.size + literal > 1)
+                warn("The ${m.text} in the problem is used for more than one thing (${(sameGivens.map { it.name } + if (literal > 0) listOf("a number in an equation") else emptyList()).joinToString(", ")}).")
+        }
+
         // Units must make sense.
-        val unitMap = s.all.associate { it.name to Units.parse(it.unit) }
+        // A percentage rate "per year" works like %/time: p·(r/100)·t comes out in money.
+        val unitMap = s.all.associate { q ->
+            val rate = q.unit.trim().replace(" ", "").lowercase().let { it == "%/year" || it == "%/yr" || it == "%peryear" || it == "%/month" } ||
+                q.unit.trim() == "%" && Regex("rate|interest|per (year|annum|month)|annual|growth|apr", RegexOption.IGNORE_CASE).containsMatchIn(q.meaning + " " + q.name)
+            q.name to if (rate) UnitInfo(Units.PERCENT / Dim.of("time" to 1), "%/time") else Units.parse(q.unit)
+        }
         val an = Units.Analyzer(unitMap)
         for (eq in parsed) an.of(eq)
         for (p in an.problems.distinct()) when (p) {
@@ -275,7 +335,8 @@ object WordSolver {
         val best = groups[0].minByOrNull { a -> a.issues.size }!!
         if (groups.size == 1) {
             // a reading that failed its checks lowers confidence a notch
-            val conf = if (good.size < checked.size && best.confidence == Confidence.HIGH) Confidence.MEDIUM else best.confidence
+            // CHECKED needs at least two independent readings that agree, and no reading that failed its checks
+            val conf = if ((good.size < checked.size || groups[0].size < 2) && best.confidence == Confidence.HIGH) Confidence.MEDIUM else best.confidence
             return best.copy(confidence = conf)
         }
         val alts = groups.drop(1).map { it[0].setup to it[0].result!!.value }

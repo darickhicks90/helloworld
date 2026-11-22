@@ -5,7 +5,7 @@ package app.sketchsolve.word
  * the problem as JSON; the app checks the setup and does the maths itself.
  */
 object Prompt {
-    const val VERSION = 2
+    const val VERSION = 3
 
     private const val RULES = """You turn maths word problems into equations. You do NOT solve them.
 Reply with ONE JSON object and nothing else, in this form:
@@ -24,7 +24,10 @@ Rules:
 - Every number you use must come from the problem, with "quote" showing the exact words. Well-known constants (g = 9.81) get "constant": true.
 - Put each quantity in the unit the problem uses. If the problem mixes units (minutes and hours), add a given for the converted value and say so in "meaning".
 - Write equations with * / + - ^ ( ) and =, one fact per equation, using the names. Use as many unknowns as you need.
-- Percentages: write 15% as 15 with unit "%", and use name/100 in equations.
+- Percentages: write 15% as 15 with unit "%", and ALWAYS use name/100 in equations (sale = price*(1 - off/100)).
+- A yearly rate (interest, growth) has unit "%/year": simple interest is I = P*(r/100)*t.
+- Ages: use one unknown per person's age NOW; "in 12 years" is (age + 12), "5 years ago" is (age - 5).
+- Every name used in an equation must be listed in givens or unknowns.
 - The quantity the question asks for goes in "unknowns" (never in "givens"), and "ask" names it.
 - Write each FACT the problem states as an equation. Do not rearrange to get the answer, and never write an equation that is true for any value (like x = x).
 - When something happens "later", "earlier", "ago" or "in N years", use separate unknowns or (t - 1)-style terms so each person's own time or age is right.

@@ -55,7 +55,7 @@ class WordEval {
                 else -> { wrong++; if (a.confidence == Confidence.HIGH) wrongConfident += id; "WRONG got $got want $expected (${a.confidence})" }
             }
             report.append("$id: $verdict\n")
-            if (!verdict.startsWith("RIGHT")) {
+            if (!verdict.startsWith("RIGHT") || a?.confidence != Confidence.HIGH) {
                 a?.issues?.forEach { report.append("     - ${it.severity}: ${it.message}\n") }
                 setups.firstOrNull()?.let { report.append("     eqs: ${it.equations}  ask=${it.ask}\n") }
             }

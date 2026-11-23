@@ -13,6 +13,11 @@ on:
       - "android/settings.gradle.kts"
       - ".github/workflows/ios.yml"
   workflow_dispatch:
+    inputs:
+      simulators:
+        description: "Also run the simulator check (screenshots on three devices)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -48,6 +53,7 @@ jobs:
           test -d build/Build/Products/Debug-iphonesimulator/FiveEyeYeti.app
 
       - name: Run it in simulators and take screenshots (beta check)
+        if: inputs.simulators == true
         run: |
           # a big phone, the smallest current phone and an iPad
           python3 - > devices.txt <<'PY'
@@ -76,7 +82,7 @@ jobs:
           done < devices.txt
 
       - name: Screenshots and problems in the log
-        if: always()
+        if: always() && inputs.simulators == true
         run: |
           cat devices.txt || true
           for f in shots/*.txt; do echo "===== $f"; cat "$f"; done

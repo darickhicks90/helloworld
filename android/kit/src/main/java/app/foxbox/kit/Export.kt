@@ -39,6 +39,24 @@ object Export {
         }.getOrNull()
     }
 
+    /** Like [save], from a file (for big exports: a 4K animation doesn't fit in memory at once). */
+    fun saveFile(kind: String, name: String, mime: String, file: File): Uri? {
+        handler?.let { h -> return h(kind, name, mime, file.readBytes()) }
+        val ctx = app ?: return null
+        return runCatching {
+            val video = mime.startsWith("video"); val audio = mime.startsWith("audio")
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+                put(MediaStore.MediaColumns.MIME_TYPE, mime)
+                put(MediaStore.MediaColumns.RELATIVE_PATH, (when { audio -> Environment.DIRECTORY_MUSIC; video -> Environment.DIRECTORY_MOVIES; else -> Environment.DIRECTORY_DOWNLOADS }) + "/$root/$kind")
+            }
+            val col = when { audio -> MediaStore.Audio.Media.EXTERNAL_CONTENT_URI; video -> MediaStore.Video.Media.EXTERNAL_CONTENT_URI; else -> MediaStore.Downloads.EXTERNAL_CONTENT_URI }
+            val uri = ctx.contentResolver.insert(col, values) ?: return null
+            ctx.contentResolver.openOutputStream(uri)?.use { out -> file.inputStream().use { it.copyTo(out) } }
+            uri
+        }.getOrNull()
+    }
+
     fun safe(s: String) = s.replace(Regex("[^A-Za-z0-9 ._-]"), "_").trim().ifEmpty { root }
 
     /** A 16-bit mono WAV. */

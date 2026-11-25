@@ -355,6 +355,28 @@ class NotebookView(private val a: Activity, private val close: () -> Unit, priva
         invalidate()
     }
 
+    /** Extra items for the memo-book menu (5IY Pocket adds pictures and drawing boards there). */
+    var extraMenu: ((SnesDialog) -> Unit)? = null
+
+    /**
+     * Makes a picture window on the page: on this page's first free stretch of empty lines, or
+     * on a new page right after it. Returns the new window (already saved).
+     */
+    fun placeWindow(square: Boolean): Notes.Sketch {
+        flushPending()
+        val want = if (square) 6 else 5
+        fun fits(p: Notes.Page, l0: Int, n: Int) = (l0 until l0 + n).all { p.lines[it].isBlank() } && p.sketches.none { l0 < it.line + it.lines && it.line < l0 + n }
+        var p = page; var line0 = -1; var n = want
+        search@ for (nn in want downTo 4) for (l in 0..Notes.LINES - nn) if (fits(p, l, nn)) { line0 = l; n = nn; break@search }
+        pushUndo()
+        if (line0 < 0) { val np = Notes.Page(); book.pages.add(book.current + 1, np); goTo(book, book.current + 1); p = np; line0 = 0; n = want }
+        val ratio = if (square) 1f else 0.75f
+        val wf = if (g.textW > 0f) minOf(1f, (n * g.lineH - g.lineH * 0.24f) / ratio / g.textW) else 0.8f
+        val s = Notes.Sketch(Notes.newId(), line0, 0f, wf, n, square)
+        p.sketches += s; Notes.save(); invalidate()
+        return s
+    }
+
     private fun goTo(b: Notes.Book, idx: Int) {
         flushPending()
         if (b !== book) Notes.select(b)
@@ -652,6 +674,7 @@ class NotebookView(private val a: Activity, private val close: () -> Unit, priva
         }
         d.item("Rename \"${book.name}\"", Snes.YELLOW) { SnesDialog.text(a, "Rename", book.name) { name -> if (name.isNotBlank()) { book.name = name; Notes.save(); invalidate() } } }
         d.item("Export \"${book.name}\"…", Snes.PURPLE) { exportMenu() }
+        extraMenu?.invoke(d)
         d.item("Delete \"${book.name}\"", Snes.RED) {
             SnesDialog.ask(a, "Delete \"${book.name}\"?", "Every page and sketch in it goes. This can't be undone.",
                 "Keep it" to null, "Delete" to { Notes.delete(book); caretLine = -1; undo.clear(); invalidate() })

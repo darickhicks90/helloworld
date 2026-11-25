@@ -401,9 +401,119 @@ class NotebookView(private val a: Activity, private val close: () -> Unit, priva
         while (i + 1 < s.size) { len += hypot(s[i] - s[i - 3], s[i + 1] - s[i - 2]); i += 3 }
         val dur = s[s.size - 1] - s[2]
         if (pending.isEmpty() && len < Px.dp(10f) && dur < 350) { placeCaret(s[0] + g.paper.left, s[1] + g.paper.top); return }
+        if (crossOut(s)) return
+        if (isCheck(s)) { writeCheck(s); return }
         box(s)?.let { makeSketch(it); return }
         pending += s
         removeCallbacks(recognize); postDelayed(recognize, 750)
+    }
+
+    // ---- crossing out: a line through words (or a scribble over them) takes them out
+
+    /**
+     * True if the stroke crossed out typed words (they're removed) or scribbled over handwriting
+     * that hasn't been read yet (those strokes are dropped). A straight strike-through only counts
+     * over typed words, so writing a t's crossbar or a dash next to your words still writes.
+     */
+    private fun crossOut(s: FloatArray): Boolean {
+        val n = s.size / 3
+        if (n < 3) return false
+        var minX = Float.MAX_VALUE; var maxX = -Float.MAX_VALUE; var minY = Float.MAX_VALUE; var maxY = -Float.MAX_VALUE
+        var len = 0f; var turns = 0; var lastDir = 0
+        for (k in 0 until n) {
+            val x = s[k * 3]; val y = s[k * 3 + 1]
+            minX = minOf(minX, x); maxX = maxOf(maxX, x); minY = minOf(minY, y); maxY = maxOf(maxY, y)
+            if (k > 0) {
+                val dx = x - s[k * 3 - 3]; len += hypot(dx, y - s[k * 3 - 2])
+                val dir = if (dx > 1.5f) 1 else if (dx < -1.5f) -1 else 0
+                if (dir != 0 && lastDir != 0 && dir != lastDir) turns++
+                if (dir != 0) lastDir = dir
+            }
+        }
+        val w = maxX - minX; val h = maxY - minY
+        val lh = g.lineH
+        if (w < Px.dp(12f)) return false
+        val straight = h <= lh * 0.55f && len <= w * 1.35f
+        val scribble = turns >= 3 && len >= w * 2.2f && h <= lh * 1.3f
+        if (!straight && !scribble) return false
+        // which line: the stroke's middle, on screen
+        val cy = g.paper.top + (minY + maxY) / 2
+        if (cy < g.firstRule || cy >= g.toolTop) return false
+        val line = g.lineAt(cy)
+        val l0 = g.paper.left + minX; val l1 = g.paper.left + maxX
+        // typed words it covers (at least half of each word)
+        var hit = false
+        if (page.sketches.none { it.covers(line) }) {
+            val text = page.lines[line]
+            val keep = StringBuilder(); var i = 0; var removed = false
+            while (i < text.length) {
+                val st = i
+                while (i < text.length && text[i] == ' ') i++
+                val ws = i
+                while (i < text.length && text[i] != ' ') i++
+                if (ws >= i) { keep.append(text, st, i); break }
+                val x0 = g.textL + art.width(text, ws); val x1 = g.textL + art.width(text, i)
+                val cover = (minOf(x1, l1) - maxOf(x0, l0)) / (x1 - x0).coerceAtLeast(1f)
+                if (cover >= 0.5f) removed = true else keep.append(text, st, i)
+            }
+            if (removed) {
+                pushUndo()
+                page.lines[line] = keep.toString().replace(Regex("(?<=\\S) {2,}"), " ").trimEnd().let { if (text.startsWith(" ")) it else it.trimStart() }
+                if (caretPage == pageNo && caretLine == line) caretIdx = caretIdx.coerceAtMost(page.lines[line].length)
+                hit = true
+            }
+        }
+        // a scribble over handwriting still waiting to be read wipes those strokes
+        if (scribble) {
+            val before = pending.size
+            pending.removeAll { p ->
+                var a = Float.MAX_VALUE; var b = -Float.MAX_VALUE; var t = Float.MAX_VALUE; var bt = -Float.MAX_VALUE; var k = 0
+                while (k + 1 < p.size) { a = minOf(a, p[k]); b = maxOf(b, p[k]); t = minOf(t, p[k + 1]); bt = maxOf(bt, p[k + 1]); k += 3 }
+                val ox = minOf(b, maxX) - maxOf(a, minX); val oy = minOf(bt, maxY) - maxOf(t, minY)
+                ox > (b - a) * 0.5f && oy > 0f
+            }
+            if (pending.size != before) hit = true
+        }
+        if (hit) { Notes.save(); invalidate() }
+        return hit
+    }
+
+    // ---- checkmarks: written as one stroke, a short dip then a long rise to the right
+
+    /**
+     * A tick, told apart from an "r" or a "v": it dips down (a little to the right), then rises
+     * further than it fell, to the right, ending well above where it started.
+     */
+    private fun isCheck(s: FloatArray): Boolean {
+        val n = s.size / 3
+        if (n < 4) return false
+        var low = 0
+        for (k in 1 until n) if (s[k * 3 + 1] > s[low * 3 + 1]) low = k
+        if (low == 0 || low == n - 1) return false
+        val sx = s[0]; val sy = s[1]; val lx = s[low * 3]; val ly = s[low * 3 + 1]; val ex = s[(n - 1) * 3]; val ey = s[(n - 1) * 3 + 1]
+        val down = hypot(lx - sx, ly - sy); val up = hypot(ex - lx, ey - ly)
+        val h = maxOf(ly - minOf(sy, ey), 1f)
+        if (h < g.lineH * 0.3f || h > g.lineH * 2.2f) return false
+        // the dip: downwards, not backwards much
+        if (ly - sy < h * 0.2f || lx - sx < -h * 0.25f) return false
+        // the rise: longer than the dip, clearly to the right and steep
+        if (up < down * 1.3f || ex - lx < h * 0.25f || ly - ey < h * 0.6f) return false
+        // ends well above where it began (an "r" comes back to about its starting height)
+        if (sy - ey < h * 0.35f) return false
+        // and the rise is fairly straight (an r's shoulder curves over)
+        var path = 0f
+        for (k in low + 1 until n) path += hypot(s[k * 3] - s[k * 3 - 3], s[k * 3 + 1] - s[k * 3 - 2])
+        return path <= up * 1.3f
+    }
+
+    private fun writeCheck(s: FloatArray) {
+        flushPending()
+        var minX = Float.MAX_VALUE; var minY = Float.MAX_VALUE; var maxY = -Float.MAX_VALUE; var k = 0
+        while (k + 1 < s.size) { minX = minOf(minX, s[k]); minY = minOf(minY, s[k + 1]); maxY = maxOf(maxY, s[k + 1]); k += 3 }
+        val line = g.lineAt(g.paper.top + (minY + maxY) / 2)
+        pushUndo()
+        insert(pageNo, line, g.paper.left + minX, "✓")
+        Notes.save(); invalidate()
     }
 
     /** If this stroke is a drawn box (closed, four corners, hugging its edges), its bounds on screen. */

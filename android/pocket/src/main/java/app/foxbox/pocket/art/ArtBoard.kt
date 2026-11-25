@@ -862,7 +862,7 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
         if (l.animated) { val keep = ArrayList(l.cel(frame)); l.cels.clear(); l.animated = false; l.cel(0).addAll(keep) }
         else { val base = ArrayList(l.cel(0)); l.cels.clear(); l.animated = true; for (f in 0 until doc.frames) l.cel(f).addAll(base) }
         val newCels = l.cels.map { ArrayList(it) }; val nowAnimated = l.animated
-        fun put(c: List<List<Op>>, an: Boolean) { l.cels.clear(); l.animated = an; c.forEach { l.cels += ArrayList(it) }; rebuild(l); thumbs.clear() }
+        fun put(c: List<List<Op>>, an: Boolean) { l.cels.clear(); l.animated = an; c.forEach { l.cels.add(ArrayList(it)) }; rebuild(l); thumbs.clear() }
         rebuild(l); thumbs.clear()
         did(object : Act() { override fun undo() { put(oldCels, wasAnimated) }; override fun redo() { put(newCels, nowAnimated) } })
         invalidate()

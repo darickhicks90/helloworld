@@ -51,7 +51,7 @@ class Layer(var name: String, var animated: Boolean) {
     val cels = ArrayList<MutableList<Op>>()
     fun cel(frame: Int): MutableList<Op> {
         val i = if (animated) frame else 0
-        while (cels.size <= i) cels += ArrayList()
+        while (cels.size <= i) cels.add(ArrayList())
         return cels[i]
     }
 }
@@ -89,7 +89,7 @@ class ArtDoc(val dir: File) {
     // ---------------------------------------------------------------- frames
     fun insertFrame(at: Int, copyOf: Int?) {
         for (l in layers) if (l.animated) {
-            while (l.cels.size < frames) l.cels += ArrayList()
+            while (l.cels.size < frames) l.cels.add(ArrayList())
             val src = copyOf?.let { ArrayList(l.cel(it)) } ?: ArrayList()
             l.cels.add(at.coerceIn(0, l.cels.size), src)
         }
@@ -257,7 +257,7 @@ class ArtDoc(val dir: File) {
             val cels = lo.optJSONArray("cels") ?: JSONArray()
             for (k in 0 until cels.length()) {
                 val ca = cels.getJSONArray(k)
-                l.cels += (0 until ca.length()).mapNotNull { opFrom(ca.getJSONObject(it)) }.toMutableList()
+                l.cels.add((0 until ca.length()).mapNotNull { opFrom(ca.getJSONObject(it)) }.toMutableList())
             }
             layers += l
         }

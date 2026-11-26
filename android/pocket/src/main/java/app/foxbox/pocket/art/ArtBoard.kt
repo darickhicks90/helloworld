@@ -1263,35 +1263,64 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
     // ---- export
     private fun exportMenu() {
         val opts = mutableListOf("This frame as a PNG${if (doc.bg == 0) " (see-through)" else ""}")
-        if (doc.frames > 1) { opts += "Video (MP4)"; opts += "PNG sequence (a zip of numbered frames)"; opts += "Sprite sheet (all frames in one PNG)" }
+        if (doc.frames > 1) {
+            opts += "Animated GIF…"; opts += "Video: MP4…"; opts += "Video: WebM…"
+            opts += "PNG sequence (a zip of numbered frames)"; opts += "Sprite sheet (all frames in one PNG)"
+        }
         SnesDialog.choose(a, "Export ${doc.w} × ${doc.h}", opts) { i ->
-            stopPlay()
-            busy = "Exporting…"; invalidate()
-            val name = ArtDocNames.safe(doc.title)
-            Thread {
-                val msg = runCatching {
-                    val cache = File(a.cacheDir, "art-export").apply { mkdirs() }
-                    when (i) {
-                        0 -> { val f = File(cache, "$name.png"); Exporter.png(doc, frame, f); save(f, "$name frame ${frame + 1}.png", "image/png") }
-                        1 -> {
-                            val f = File(cache, "$name.mp4")
-                            // short animations loop for at least three seconds
-                            val loops = max(1, (3 * doc.fps + doc.frames - 1) / doc.frames)
-                            val size = Exporter.mp4(doc, f, loops) { k, n -> main.post { busy = "Encoding video… $k/$n"; invalidate() } } ?: return@runCatching "This phone can't encode video at that size"
-                            save(f, "$name.mp4", "video/mp4") + if (size.first != doc.w) " (at ${size.first} × ${size.second}, the most this phone's encoder allows)" else ""
-                        }
-                        2 -> { val f = File(cache, "$name frames.zip"); Exporter.pngSequence(doc, f) { k -> main.post { busy = "Frame $k of ${doc.frames}…"; invalidate() } }; save(f, "$name frames.zip", "application/zip") }
-                        else -> {
-                            val sheet = Exporter.spriteSheet(doc) ?: return@runCatching "Too big for one sheet (over 8192 px): use the PNG sequence"
-                            val f = File(cache, "$name sheet.png"); f.outputStream().use { sheet.compress(Bitmap.CompressFormat.PNG, 100, it) }; sheet.recycle()
-                            save(f, "$name sheet.png", "image/png")
-                        }
-                    }
-                }.getOrElse { "Couldn't export (${it.message})" }
-                main.post { busy = null; toast(msg); invalidate() }
-            }.start()
+            when (i) {
+                0 -> runExport { cache, name -> val f = File(cache, "$name.png"); Exporter.png(doc, frame, f); save(f, "$name frame ${frame + 1}.png", "image/png") }
+                1 -> SnesDialog.choose(a, "Animated GIF", listOf("Loop forever", "Play once, straight through")) { k -> exportGif(loop = k == 0) }
+                2, 3 -> videoMenu(webm = i == 3)
+                4 -> runExport { cache, name -> val f = File(cache, "$name frames.zip"); Exporter.pngSequence(doc, f) { k -> main.post { busy = "Frame $k of ${doc.frames}…"; invalidate() } }; save(f, "$name frames.zip", "application/zip") }
+                else -> runExport { cache, name ->
+                    val sheet = Exporter.spriteSheet(doc) ?: return@runExport "Too big for one sheet (over 8192 px): use the PNG sequence"
+                    val f = File(cache, "$name sheet.png"); f.outputStream().use { sheet.compress(Bitmap.CompressFormat.PNG, 100, it) }; sheet.recycle()
+                    save(f, "$name sheet.png", "image/png")
+                }
+            }
         }
     }
+
+    /** Length of the animation once through, for the menus. */
+    private fun lengthText(): String { val s = doc.frames / doc.fps.toFloat(); return if (s < 10) "%.1f s".format(s) else "${s.roundToInt()} s" }
+
+    private fun videoMenu(webm: Boolean) {
+        val once = doc.frames / doc.fps.toFloat()
+        val choices = listOf("Straight through, once (${lengthText()})" to 1) + listOf(10, 30, 60).filter { it > once }.map { sec ->
+            "Looped for ${if (sec == 60) "1 minute" else "$sec seconds"}" to max(2, ((sec * doc.fps) + doc.frames - 1) / doc.frames)
+        }
+        SnesDialog.choose(a, if (webm) "Video: WebM" else "Video: MP4", choices.map { it.first }) { k ->
+            val loops = choices[k].second
+            val ext = if (webm) "webm" else "mp4"
+            runExport { cache, name ->
+                val f = File(cache, "$name.$ext")
+                val size = Exporter.video(doc, f, loops, webm) { n, t -> main.post { busy = "Encoding video… $n/$t"; invalidate() } }
+                    ?: return@runExport "This phone can't encode ${ext.uppercase()} video at that size"
+                save(f, "$name.$ext", if (webm) "video/webm" else "video/mp4") + if (size.first != doc.w) " (at ${size.first} × ${size.second}, the most this phone's encoder allows)" else ""
+            }
+        }
+    }
+
+    private fun exportGif(loop: Boolean) {
+        runExport { cache, name ->
+            val f = File(cache, "$name.gif")
+            val size = Exporter.gif(doc, f, loop, 960) { n, t -> main.post { busy = "Making the GIF… ${n * 100 / t}%"; invalidate() } }
+            save(f, "$name.gif", "image/gif") + if (size.first != doc.w) " (${size.first} × ${size.second})" else ""
+        }
+    }
+
+    /** Runs an export off the screen's thread, with a progress note and a message at the end. */
+    private fun runExport(job: (File, String) -> String) {
+        stopPlay()
+        busy = "Exporting…"; invalidate()
+        val name = ArtDocNames.safe(doc.title)
+        Thread {
+            val msg = runCatching { job(File(a.cacheDir, "art-export").apply { mkdirs() }, name) }.getOrElse { "Couldn't export (${it.message})" }
+            main.post { busy = null; toast(msg); invalidate() }
+        }.start()
+    }
+
     private fun save(f: File, name: String, mime: String): String {
         val uri = app.foxbox.kit.Export.saveFile("Drawings", name, mime, f)
         f.delete()

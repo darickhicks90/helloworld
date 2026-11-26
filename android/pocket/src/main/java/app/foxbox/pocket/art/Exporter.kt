@@ -69,13 +69,18 @@ object Exporter {
      * An H.264 MP4 at the drawing's size (4K where the phone's encoder can; otherwise the largest
      * size it can, same shape). Returns the size used, or null if no encoder would take it.
      */
-    fun mp4(doc: ArtDoc, out: File, loops: Int, progress: (Int, Int) -> Unit): Pair<Int, Int>? {
+    fun mp4(doc: ArtDoc, out: File, loops: Int, progress: (Int, Int) -> Unit): Pair<Int, Int>? = video(doc, out, loops, false, progress)
+
+    /** Video: H.264 in MP4, or VP9/VP8 in WebM. `loops` = how many times through (1 = straight through once). */
+    fun video(doc: ArtDoc, out: File, loops: Int, webm: Boolean, progress: (Int, Int) -> Unit): Pair<Int, Int>? {
         var vw = doc.w and 1.inv(); var vh = doc.h and 1.inv()
         val codecs = MediaCodecList(MediaCodecList.REGULAR_CODECS)
         var name: String? = null
         var fmt: MediaFormat? = null
-        while (vw >= 320 && vh >= 2) {
-            val f = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, vw, vh).apply {
+        val mimes = if (webm) listOf(MediaFormat.MIMETYPE_VIDEO_VP9, MediaFormat.MIMETYPE_VIDEO_VP8) else listOf(MediaFormat.MIMETYPE_VIDEO_AVC)
+        while (vw >= 320 && vh >= 2 && name == null) {
+          for (mime in mimes) {
+            val f = MediaFormat.createVideoFormat(mime, vw, vh).apply {
                 setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible)
                 setInteger(MediaFormat.KEY_BIT_RATE, (vw.toLong() * vh * doc.fps / 8).coerceIn(2_000_000L, 60_000_000L).toInt())
                 setInteger(MediaFormat.KEY_FRAME_RATE, doc.fps)
@@ -83,14 +88,15 @@ object Exporter {
             }
             name = codecs.findEncoderForFormat(f)
             if (name != null) { fmt = f; break }
+          }
             // step down a size, keeping the shape (and even sides)
-            vw = ((vw * 0.75f).toInt()) and 1.inv(); vh = ((vh * 0.75f).toInt()) and 1.inv()
+            if (name == null) { vw = ((vw * 0.75f).toInt()) and 1.inv(); vh = ((vh * 0.75f).toInt()) and 1.inv() }
         }
         if (name == null || fmt == null) return null
         val codec = MediaCodec.createByCodecName(name)
         codec.configure(fmt, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
         codec.start()
-        val mux = MediaMuxer(out.path, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+        val mux = MediaMuxer(out.path, if (webm) MediaMuxer.OutputFormat.MUXER_OUTPUT_WEBM else MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
         var track = -1; var started = false
         val info = MediaCodec.BufferInfo()
         fun drain(end: Boolean) {
@@ -166,6 +172,26 @@ object Exporter {
             vb.put(y * vP.rowStride + x * vP.pixelStride, v)
         }
     }
+}
+
+/** Animated GIFs: up to `maxSide` px across (GIFs are for sharing, not 4K), looping forever or playing once. */
+fun Exporter.gif(doc: ArtDoc, out: File, loop: Boolean, maxSide: Int, progress: (Int, Int) -> Unit): Pair<Int, Int> {
+    val scale = minOf(1f, maxSide / maxOf(doc.w, doc.h).toFloat())
+    val transparent = doc.bg == 0
+    val frames = ArrayList<IntArray>()
+    var w = 0; var h = 0
+    for (f in 0 until doc.frames) {
+        val b = frame(doc, f, scale, transparent)
+        w = b.width; h = b.height
+        val px = IntArray(w * h); b.getPixels(px, 0, w, 0, 0, w, h); b.recycle()
+        frames += px
+        progress(f + 1, doc.frames * 2)
+    }
+    val g = GifEncoder(out, w, h, 1000 / doc.fps, loop, transparent)
+    g.buildPalette(frames)
+    for ((i, px) in frames.withIndex()) { g.addFrame(px); progress(doc.frames + i + 1, doc.frames * 2) }
+    g.finish()
+    return w to h
 }
 
 object ArtDocNames {

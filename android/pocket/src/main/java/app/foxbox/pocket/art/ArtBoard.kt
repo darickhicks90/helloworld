@@ -154,7 +154,9 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
 
     private fun arrange(w: Float, h: Float) {
         topBar.set(0f, 0f, w, 50 * d)
-        val tlH = if (timeline) 62 * d else 0f
+        val upright = w <= h
+        // upright, the timeline takes two rows (buttons above, frames below) so nothing is pushed off the edge
+        val tlH = if (!timeline) 0f else if (upright) 104 * d else 62 * d
         if (w > h) {
             rail.set(0f, topBar.bottom, 112 * d, h)
             panel.set(w - 170 * d, topBar.bottom, w, h)
@@ -187,16 +189,27 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
             opBar.set(w * 0.5f + 8 * d, panel.top + 100 * d, w - 12 * d, panel.top + 126 * d)
             smoothBar.set(panel.left + 90 * d + w * 0.45f, panel.top + 30 * d, w - 12 * d, panel.top + 56 * d)
         }
-        // the timeline: ◀ ▶ ▷ | frames | + onion fps
-        val k = tl.height() - 12 * d
-        tPrev.set(tl.left + 6 * d, tl.top + 6 * d, tl.left + 6 * d + k, tl.bottom - 6 * d)
-        tPlay.set(tPrev.right + 4 * d, tPrev.top, tPrev.right + 4 * d + k * 1.2f, tPrev.bottom)
-        tNext.set(tPlay.right + 4 * d, tPrev.top, tPlay.right + 4 * d + k, tPrev.bottom)
-        tFps.set(tl.right - 6 * d - k * 1.4f, tPrev.top, tl.right - 6 * d, tPrev.bottom)
-        tOnion.set(tFps.left - 4 * d - k * 1.4f, tPrev.top, tFps.left - 4 * d, tPrev.bottom)
-        tAdd.set(tOnion.left - 4 * d - k, tPrev.top, tOnion.left - 4 * d, tPrev.bottom)
-        tDel.set(tAdd.left - 4 * d - k, tPrev.top, tAdd.left - 4 * d, tPrev.bottom)
-        tStrip.set(tNext.right + 8 * d, tPrev.top, tDel.left - 8 * d, tPrev.bottom)
+        // the timeline: ◀ ▶ ▷ | frames | − + onion fps
+        if (upright && timeline) {
+            val rowH = (tl.height() - 18 * d) / 2
+            val keys = arrayOf(tPrev, tPlay, tNext, tDel, tAdd, tOnion, tFps)
+            val weights = floatArrayOf(1f, 1.1f, 1f, 1.3f, 1.3f, 1.3f, 1.3f)
+            val total = weights.sum(); val gap = 4 * d
+            var x = tl.left + 6 * d
+            val avail = tl.width() - 12 * d - gap * (keys.size - 1)
+            for (i in keys.indices) { val bw = avail * weights[i] / total; keys[i].set(x, tl.top + 6 * d, x + bw, tl.top + 6 * d + rowH); x += bw + gap }
+            tStrip.set(tl.left + 6 * d, tl.top + 12 * d + rowH, tl.right - 6 * d, tl.bottom - 6 * d)
+        } else {
+            val k = tl.height() - 12 * d
+            tPrev.set(tl.left + 6 * d, tl.top + 6 * d, tl.left + 6 * d + k, tl.bottom - 6 * d)
+            tPlay.set(tPrev.right + 4 * d, tPrev.top, tPrev.right + 4 * d + k * 1.2f, tPrev.bottom)
+            tNext.set(tPlay.right + 4 * d, tPrev.top, tPlay.right + 4 * d + k, tPrev.bottom)
+            tFps.set(tl.right - 6 * d - k * 1.4f, tPrev.top, tl.right - 6 * d, tPrev.bottom)
+            tOnion.set(tFps.left - 4 * d - k * 1.4f, tPrev.top, tFps.left - 4 * d, tPrev.bottom)
+            tAdd.set(tOnion.left - 4 * d - k, tPrev.top, tOnion.left - 4 * d, tPrev.bottom)
+            tDel.set(tAdd.left - 4 * d - k, tPrev.top, tAdd.left - 4 * d, tPrev.bottom)
+            tStrip.set(tNext.right + 8 * d, tPrev.top, tDel.left - 8 * d, tPrev.bottom)
+        }
         // the top bar (the right corner is left for the radio and notebook keys)
         val bw = min(88 * d, (w - app.foxbox.ui.TopKeys.WIDTH) / 7.4f)
         bDone.set(6 * d, 6 * d, 6 * d + bw, topBar.bottom - 6 * d)

@@ -123,7 +123,16 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
     private val toolRects = Array(Tool.NAMES.size) { RectF() }
     private val bColor = RectF(); private val sizeBar = RectF(); private val opBar = RectF(); private val smoothBar = RectF()
     private val swatchRects = Array(12) { RectF() }
-    private val tPrev = RectF(); private val tPlay = RectF(); private val tNext = RectF(); private val tAdd = RectF(); private val tDel = RectF(); private val tOnion = RectF(); private val tFps = RectF(); private val tStrip = RectF()
+    // the timeline's controls (all the same size), and the strip of frames under them
+    private val T_JB = 0; private val T_PREV = 1; private val T_PLAY = 2; private val T_NEXT = 3; private val T_JF = 4; private val T_STEP = 5
+    private val T_ADD = 6; private val T_DEL = 7; private val T_COPY = 8; private val T_PASTE = 9; private val T_ONION = 10; private val T_FPS = 11
+    private val tKeys = Array(12) { RectF() }
+    private val tStrip = RectF()
+    /** Jumps along the timeline: 1 s, 5 s, 30 s or 1 min of frames at a time. */
+    private val STEPS = intArrayOf(1, 5, 30, 60); private var stepIdx = 0
+    private fun stepLabel() = when (val sec = STEPS[stepIdx]) { 60 -> "1m"; else -> "${sec}s" }
+    /** A copied frame: each animated layer's steps. */
+    private var clip: Map<Layer, List<Op>>? = null; private var clipFrom = 0
     private val ctxKeys = Array(7) { RectF() }
     private var ctxLabels: List<String> = emptyList()
 
@@ -156,7 +165,9 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
         topBar.set(0f, 0f, w, 50 * d)
         val upright = w <= h
         // upright, the timeline takes two rows (buttons above, frames below) so nothing is pushed off the edge
-        val tlH = if (!timeline) 0f else if (upright) 104 * d else 62 * d
+        // the timeline: one row of controls sideways, two rows upright, then the frames
+        val ctlH = 38 * d; val stripH = 54 * d
+        val tlH = if (!timeline) 0f else if (upright) 6 * d + ctlH * 2 + 4 * d + 6 * d + stripH + 6 * d else 6 * d + ctlH + 6 * d + stripH + 6 * d
         if (w > h) {
             rail.set(0f, topBar.bottom, 112 * d, h)
             panel.set(w - 170 * d, topBar.bottom, w, h)
@@ -189,26 +200,19 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
             opBar.set(w * 0.5f + 8 * d, panel.top + 100 * d, w - 12 * d, panel.top + 126 * d)
             smoothBar.set(panel.left + 90 * d + w * 0.45f, panel.top + 30 * d, w - 12 * d, panel.top + 56 * d)
         }
-        // the timeline: ◀ ▶ ▷ | frames | − + onion fps
-        if (upright && timeline) {
-            val rowH = (tl.height() - 18 * d) / 2
-            val keys = arrayOf(tPrev, tPlay, tNext, tDel, tAdd, tOnion, tFps)
-            val weights = floatArrayOf(1f, 1.1f, 1f, 1.9f, 1.4f, 1.3f, 1.3f)
-            val total = weights.sum(); val gap = 4 * d
-            var x = tl.left + 6 * d
-            val avail = tl.width() - 12 * d - gap * (keys.size - 1)
-            for (i in keys.indices) { val bw = avail * weights[i] / total; keys[i].set(x, tl.top + 6 * d, x + bw, tl.top + 6 * d + rowH); x += bw + gap }
-            tStrip.set(tl.left + 6 * d, tl.top + 12 * d + rowH, tl.right - 6 * d, tl.bottom - 6 * d)
-        } else {
-            val k = tl.height() - 12 * d
-            tPrev.set(tl.left + 6 * d, tl.top + 6 * d, tl.left + 6 * d + k, tl.bottom - 6 * d)
-            tPlay.set(tPrev.right + 4 * d, tPrev.top, tPrev.right + 4 * d + k * 1.2f, tPrev.bottom)
-            tNext.set(tPlay.right + 4 * d, tPrev.top, tPlay.right + 4 * d + k, tPrev.bottom)
-            tFps.set(tl.right - 6 * d - k * 1.4f, tPrev.top, tl.right - 6 * d, tPrev.bottom)
-            tOnion.set(tFps.left - 4 * d - k * 1.4f, tPrev.top, tFps.left - 4 * d, tPrev.bottom)
-            tAdd.set(tOnion.left - 4 * d - k, tPrev.top, tOnion.left - 4 * d, tPrev.bottom)
-            tDel.set(tAdd.left - 4 * d - k * 1.9f, tPrev.top, tAdd.left - 4 * d, tPrev.bottom)
-            tStrip.set(tNext.right + 8 * d, tPrev.top, tDel.left - 8 * d, tPrev.bottom)
+        // the timeline's controls, all the same size
+        run {
+            val perRow = if (upright) 6 else 12
+            val gap = 4 * d
+            val bw = (tl.width() - 12 * d - gap * (perRow - 1)) / perRow
+            for (i in tKeys.indices) {
+                val row = i / perRow; val col = i % perRow
+                val x = tl.left + 6 * d + col * (bw + gap); val y = tl.top + 6 * d + row * (ctlH + 4 * d)
+                tKeys[i].set(x, y, x + bw, y + ctlH)
+            }
+            val rows = if (upright) 2 else 1
+            val top = tl.top + 6 * d + rows * ctlH + (rows - 1) * 4 * d + 6 * d
+            tStrip.set(tl.left + 6 * d, top, tl.right - 6 * d, tl.bottom - 6 * d)
         }
         // the top bar (the right corner is left for the radio and notebook keys)
         val bw = min(88 * d, (w - app.foxbox.ui.TopKeys.WIDTH) / 7.4f)
@@ -406,8 +410,11 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
 
     private fun drawTimeline(c: Canvas) {
         p.color = 0xFF2B2830.toInt(); c.drawRect(tl, p)
-        key(c, tPrev, "◀"); key(c, tPlay, if (playing) "■" else "▶", playing, Snes.GREEN); key(c, tNext, "▶|")
-        key(c, tDel, "✕ Delete frame", doc.frames > 1, 0xFFC0392B.toInt()); key(c, tAdd, "+ frame"); key(c, tOnion, "Onion", onion, 0xFFD84040.toInt()); key(c, tFps, "${doc.fps} fps")
+        key(c, tKeys[T_JB], "« ${stepLabel()}"); key(c, tKeys[T_PREV], "‹"); key(c, tKeys[T_PLAY], if (playing) "■" else "▶", playing, Snes.GREEN)
+        key(c, tKeys[T_NEXT], "›"); key(c, tKeys[T_JF], "${stepLabel()} »"); key(c, tKeys[T_STEP], "Step ${stepLabel()}", true, Snes.PURPLE)
+        key(c, tKeys[T_ADD], "+ Add", true, Snes.GREEN); key(c, tKeys[T_DEL], "✕ Delete", doc.frames > 1, 0xFFC0392B.toInt())
+        key(c, tKeys[T_COPY], "Copy", false); key(c, tKeys[T_PASTE], "Paste", clip != null, Snes.YELLOW)
+        key(c, tKeys[T_ONION], "Onion", onion, 0xFFD84040.toInt()); key(c, tKeys[T_FPS], "${doc.fps} fps")
         thumbRects.clear(); delBadge.setEmpty()
         val th = tStrip.height(); val tw = th * doc.w / doc.h.toFloat()
         val per = max(1, ((tStrip.width() + 4 * d) / (tw + 4 * d)).toInt())
@@ -479,7 +486,7 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
                     board.contains(x, y) && tool == Tool.MOVE && placing == null && sel == null -> { startLayerXf(); if (xf != null) { xfDown(x, y); Mode.XF } else Mode.NONE }
                     board.contains(x, y) && placing != null -> { gX = x; gY = y; Mode.PLACE }
                     board.contains(x, y) -> { startDraw(e); Mode.DRAW }
-                    else -> { uiTarget = (listOf(bDone, bUndo, bRedo, bZoom, bLayers, bMore, bColor, tPrev, tPlay, tNext, tAdd, tDel, tOnion, tFps, delBadge) + toolRects + swatchRects + thumbRects.map { it.first }).firstOrNull { it.contains(x, y) }; Mode.UI }
+                    else -> { uiTarget = (listOf(bDone, bUndo, bRedo, bZoom, bLayers, bMore, bColor, delBadge) + tKeys.toList() + toolRects + swatchRects + thumbRects.map { it.first }).firstOrNull { it.contains(x, y) }; Mode.UI }
                 }
                 invalidate()
             }
@@ -922,6 +929,8 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
             else when (ci) { 6 -> { sel = null; selLoop = null; invalidate() }; else -> selAction(ci) }
             return
         }
+        val tk = tKeys.indexOfFirst { it === t }
+        if (tk >= 0) { timelineKey(tk); return }
         thumbRects.firstOrNull { it.first === t }?.let { (_, f) -> if (long) frameMenu(f) else goFrame(f); return }
         when (t) {
             bDone -> finish()
@@ -931,14 +940,7 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
             bLayers -> layersMenu()
             bMore -> moreMenu()
             bColor -> colorPicker()
-            tPrev -> goFrame((frame - 1 + doc.frames) % doc.frames)
-            tNext -> goFrame((frame + 1) % doc.frames)
-            tPlay -> if (playing) stopPlay() else startPlay()
-            tAdd -> addFrame(copy = long)
-            tDel -> deleteFrameAt(frame)
             delBadge -> deleteFrameAt(frame)
-            tOnion -> { onion = !onion; invalidate() }
-            tFps -> fpsMenu()
             else -> {
                 val ti = toolRects.indexOf(t)
                 if (ti >= 0) { tool = ti; if (ti != Tool.MOVE) xf = null; if (ti != Tool.LASSO && ti != Tool.MAGIC) { sel = null; selLoop = null }; if (ti == Tool.MOVE) startLayerXf(); return }
@@ -1104,7 +1106,7 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
         })
         goFrame(at)
         if (!timeline) { timeline = true; arrange(width.toFloat(), height.toFloat()) }
-        toast(if (copy) "Frame ${at + 1}: a copy of frame ${from + 1}" else "Frame ${at + 1} (hold + frame for a copy)")
+        toast(if (copy) "Frame ${at + 1}: a copy of frame ${from + 1}" else "New frame ${at + 1}, after frame ${from + 1}")
     }
 
     private fun frameMenu(f: Int) {
@@ -1115,6 +1117,47 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
         if (f < doc.frames - 1) dlg.item("Move later", Snes.YELLOW) { moveFrame(f, f + 1) }
         if (doc.frames > 1) dlg.item("Delete", Snes.RED) { deleteFrameAt(f) }
         dlg.key("Close", Snes.PURPLE, then = null).show()
+    }
+
+    private fun timelineKey(k: Int) {
+        val jump = max(1, STEPS[stepIdx] * doc.fps)
+        when (k) {
+            T_JB -> goFrame((frame - jump).coerceAtLeast(0))
+            T_PREV -> goFrame((frame - 1 + doc.frames) % doc.frames)
+            T_PLAY -> if (playing) stopPlay() else startPlay()
+            T_NEXT -> goFrame((frame + 1) % doc.frames)
+            T_JF -> goFrame((frame + jump).coerceAtMost(doc.frames - 1))
+            T_STEP -> { stepIdx = (stepIdx + 1) % STEPS.size; toast("Jumps of ${stepLabel()} (${STEPS[stepIdx] * doc.fps} frames at ${doc.fps} fps)") }
+            T_ADD -> addFrame(copy = false)
+            T_DEL -> deleteFrameAt(frame)
+            T_COPY -> copyFrame()
+            T_PASTE -> pasteFrame()
+            T_ONION -> onion = !onion
+            T_FPS -> fpsMenu()
+        }
+        invalidate()
+    }
+
+    /** Remembers the frame on screen (every animated layer's drawing on it). */
+    private fun copyFrame() {
+        clip = doc.layers.filter { it.animated }.associateWith { ArrayList(it.cel(frame)) }
+        clipFrom = frame
+        toast("Frame ${frame + 1} copied: Paste puts it after the frame on screen")
+    }
+
+    /** Puts the copied frame in, right after the frame on screen. */
+    private fun pasteFrame() {
+        val c = clip ?: return toast("Copy a frame first")
+        stopPlay()
+        val at = frame + 1
+        fun put() { doc.insertFrame(at, null); for ((l, ops) in c) if (l in doc.layers) l.cel(at).addAll(ops); thumbs.clear(); onionDirty = true }
+        put()
+        did(object : Act() {
+            override fun undo() { doc.deleteFrame(at); thumbs.clear(); if (frame >= doc.frames) frame = doc.frames - 1; for (l in doc.layers) if (l.animated) rebuild(l); onionDirty = true }
+            override fun redo() { put() }
+        })
+        goFrame(at)
+        toast("Frame ${clipFrom + 1} pasted as frame ${at + 1}")
     }
 
     /** Takes out frame `f` (undo brings it back); the last frame can't go. */

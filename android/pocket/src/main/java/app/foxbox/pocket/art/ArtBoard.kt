@@ -123,7 +123,7 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
     private val toolRects = Array(Tool.NAMES.size) { RectF() }
     private val bColor = RectF(); private val sizeBar = RectF(); private val opBar = RectF(); private val smoothBar = RectF()
     private val swatchRects = Array(12) { RectF() }
-    private val tPrev = RectF(); private val tPlay = RectF(); private val tNext = RectF(); private val tAdd = RectF(); private val tOnion = RectF(); private val tFps = RectF(); private val tStrip = RectF()
+    private val tPrev = RectF(); private val tPlay = RectF(); private val tNext = RectF(); private val tAdd = RectF(); private val tDel = RectF(); private val tOnion = RectF(); private val tFps = RectF(); private val tStrip = RectF()
     private val ctxKeys = Array(7) { RectF() }
     private var ctxLabels: List<String> = emptyList()
 
@@ -195,7 +195,8 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
         tFps.set(tl.right - 6 * d - k * 1.4f, tPrev.top, tl.right - 6 * d, tPrev.bottom)
         tOnion.set(tFps.left - 4 * d - k * 1.4f, tPrev.top, tFps.left - 4 * d, tPrev.bottom)
         tAdd.set(tOnion.left - 4 * d - k, tPrev.top, tOnion.left - 4 * d, tPrev.bottom)
-        tStrip.set(tNext.right + 8 * d, tPrev.top, tAdd.left - 8 * d, tPrev.bottom)
+        tDel.set(tAdd.left - 4 * d - k, tPrev.top, tAdd.left - 4 * d, tPrev.bottom)
+        tStrip.set(tNext.right + 8 * d, tPrev.top, tDel.left - 8 * d, tPrev.bottom)
         // the top bar (the right corner is left for the radio and notebook keys)
         val bw = min(88 * d, (w - app.foxbox.ui.TopKeys.WIDTH) / 7.4f)
         bDone.set(6 * d, 6 * d, 6 * d + bw, topBar.bottom - 6 * d)
@@ -392,7 +393,7 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
     private fun drawTimeline(c: Canvas) {
         p.color = 0xFF2B2830.toInt(); c.drawRect(tl, p)
         key(c, tPrev, "◀"); key(c, tPlay, if (playing) "■" else "▶", playing, Snes.GREEN); key(c, tNext, "▶|")
-        key(c, tAdd, "+ frame"); key(c, tOnion, "Onion", onion, 0xFFD84040.toInt()); key(c, tFps, "${doc.fps} fps")
+        key(c, tDel, "− frame", false); key(c, tAdd, "+ frame"); key(c, tOnion, "Onion", onion, 0xFFD84040.toInt()); key(c, tFps, "${doc.fps} fps")
         thumbRects.clear()
         val th = tStrip.height(); val tw = th * doc.w / doc.h.toFloat()
         val per = max(1, ((tStrip.width() + 4 * d) / (tw + 4 * d)).toInt())
@@ -456,7 +457,7 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
                     board.contains(x, y) && tool == Tool.MOVE && placing == null && sel == null -> { startLayerXf(); if (xf != null) { xfDown(x, y); Mode.XF } else Mode.NONE }
                     board.contains(x, y) && placing != null -> { gX = x; gY = y; Mode.PLACE }
                     board.contains(x, y) -> { startDraw(e); Mode.DRAW }
-                    else -> { uiTarget = (listOf(bDone, bUndo, bRedo, bZoom, bLayers, bMore, bColor, tPrev, tPlay, tNext, tAdd, tOnion, tFps) + toolRects + swatchRects + thumbRects.map { it.first }).firstOrNull { it.contains(x, y) }; Mode.UI }
+                    else -> { uiTarget = (listOf(bDone, bUndo, bRedo, bZoom, bLayers, bMore, bColor, tPrev, tPlay, tNext, tAdd, tDel, tOnion, tFps) + toolRects + swatchRects + thumbRects.map { it.first }).firstOrNull { it.contains(x, y) }; Mode.UI }
                 }
                 invalidate()
             }
@@ -912,6 +913,7 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
             tNext -> goFrame((frame + 1) % doc.frames)
             tPlay -> if (playing) stopPlay() else startPlay()
             tAdd -> addFrame(copy = long)
+            tDel -> deleteFrameAt(frame)
             tOnion -> { onion = !onion; invalidate() }
             tFps -> fpsMenu()
             else -> {
@@ -1088,16 +1090,23 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
         dlg.item("New blank frame after it", Snes.GREEN) { goFrame(f); addFrame(copy = false) }
         if (f > 0) dlg.item("Move earlier", Snes.YELLOW) { moveFrame(f, f - 1) }
         if (f < doc.frames - 1) dlg.item("Move later", Snes.YELLOW) { moveFrame(f, f + 1) }
-        if (doc.frames > 1) dlg.item("Delete", Snes.RED) {
-            val removed = doc.deleteFrame(f)
-            thumbs.clear(); frame = frame.coerceAtMost(doc.frames - 1); for (l in doc.layers) if (l.animated) rebuild(l); onionDirty = true
-            did(object : Act() {
-                override fun undo() { doc.frames++; for ((l, cel) in removed) l.cels.add(f.coerceAtMost(l.cels.size), cel); thumbs.clear(); for (l in doc.layers) if (l.animated) rebuild(l); onionDirty = true }
-                override fun redo() { doc.deleteFrame(f); thumbs.clear(); frame = frame.coerceAtMost(doc.frames - 1); for (l in doc.layers) if (l.animated) rebuild(l); onionDirty = true }
-            })
-            invalidate()
-        }
+        if (doc.frames > 1) dlg.item("Delete", Snes.RED) { deleteFrameAt(f) }
         dlg.key("Close", Snes.PURPLE, then = null).show()
+    }
+
+    /** Takes out frame `f` (undo brings it back); the last frame can't go. */
+    private fun deleteFrameAt(f: Int) {
+        if (doc.frames < 2) { toast("An animation needs at least one frame"); return }
+        stopPlay()
+        var removed = doc.deleteFrame(f)
+        fun after() { thumbs.clear(); frame = frame.coerceAtMost(doc.frames - 1); for (l in doc.layers) if (l.animated) rebuild(l); onionDirty = true }
+        after()
+        did(object : Act() {
+            override fun undo() { doc.frames++; for ((l, cel) in removed) l.cels.add(f.coerceAtMost(l.cels.size), cel); frame = f; after() }
+            override fun redo() { removed = doc.deleteFrame(f); after() }
+        })
+        toast("Frame ${f + 1} deleted (Undo brings it back)")
+        invalidate()
     }
 
     private fun moveFrame(i: Int, j: Int) {

@@ -42,13 +42,13 @@ class Assistant(private val model: LanguageModel) {
  "entries":{"type":"array","items":{"type":"object","properties":{
    "date":{"type":"string"},"description":{"type":"string"},"amount":{"type":"number"},
    "direction":{"type":"string","enum":["out","in"]},"category":{"type":"string"},"account":{"type":"string"}},
-   "required":["date","description","amount","direction","category"]}},
+   "required":["date","description","amount","direction","category"],"additionalProperties":false}},
  "event":{"type":"object","properties":{
    "title":{"type":"string"},"date":{"type":"string"},"start":{"type":"string"},"minutes":{"type":"integer"},
-   "place":{"type":"string"},"remind_minutes":{"type":"integer"}},"required":["title","date","start"]},
- "query":{"type":"object","properties":{"from":{"type":"string"},"to":{"type":"string"},"category":{"type":"string"},"search":{"type":"string"}},"required":["from","to"]},
+   "place":{"type":"string"},"remind_minutes":{"type":"integer"}},"required":["title","date","start"],"additionalProperties":false},
+ "query":{"type":"object","properties":{"from":{"type":"string"},"to":{"type":"string"},"category":{"type":"string"},"search":{"type":"string"}},"required":["from","to"],"additionalProperties":false},
  "reply":{"type":"string"}},
-"required":["action","reply"]}
+"required":["action","reply"],"additionalProperties":false}
 """.trimIndent()
 
         private val DAY = DateTimeFormatter.ofPattern("EEE yyyy-MM-dd", Locale.US)
@@ -80,6 +80,9 @@ User: $text
         return check(text, o, ledger, calendar, today)
     }
 
+    /** Does the message say when at all ("last week", "on the 3rd", "a few days ago")? */
+    private fun saysWhen(t: String) = Regex("\\b(week|month|ago|last|yesterday|today|tomorrow|day|morning|night|monday|tuesday|wednesday|thursday|friday|saturday|sunday|\\d{1,2}(st|nd|rd|th))\\b|\\d{1,2}/\\d{1,2}", RegexOption.IGNORE_CASE).containsMatchIn(t)
+
     /** Check what Gemma proposed against what the user actually wrote. */
     fun check(text: String, o: JSONObject, ledger: Ledger, calendar: Calendar, today: LocalDate): Proposal {
         val reply = o.optString("reply")
@@ -98,7 +101,7 @@ User: $text
                     if (cents !in written) notes += "${money(cents)} isn't in what you wrote. Please check the amount."
                     var d = date(e.optString("date"), today)
                     if (codeDate != null && d != codeDate) { notes += "Date set to ${codeDate} from your words."; d = codeDate }
-                    if (codeDate == null && d != today && d.isAfter(today)) { notes += "You didn't say a date, so it's set to today."; d = today }
+                    if (codeDate == null && d != today && !saysWhen(text)) { notes += "You didn't say a date, so it's set to today."; d = today }
                     val out = e.optString("direction", "out") != "in"
                     list += Entry(date = d, description = e.optString("description").ifBlank { text.take(40) }.take(80),
                         cents = if (out) -cents else cents, category = e.optString("category").trim().take(30),
@@ -125,8 +128,12 @@ User: $text
                     notes += "You didn't give a time, so it's all day."; t = null
                 }
                 if (d.isBefore(today)) notes += "That date is in the past."
+                // a place Gemma made up (none of its words are in the message) is left out
+                // (words that only repeat the title, like "Dentist office" for a dentist visit, don't count)
+                val titleWords = e.optString("title").lowercase().split(Regex("[^a-z0-9]+")).toSet()
+                val place = e.optString("place").trim().takeIf { pl -> pl.isNotEmpty() && pl.lowercase().split(Regex("[^a-z0-9]+")).any { w -> w.length > 2 && w !in titleWords && text.lowercase().contains(w) } } ?: ""
                 val ev = Event(title = e.optString("title").ifBlank { text.take(40) }.take(80), date = d, start = t,
-                    minutes = e.optInt("minutes", 60).coerceIn(5, 24 * 60), place = e.optString("place").take(80),
+                    minutes = e.optInt("minutes", 60).coerceIn(5, 24 * 60), place = place.take(80),
                     remind = e.optInt("remind_minutes", 30).coerceIn(0, 7 * 24 * 60))
                 Proposal.AddEvent(ev, calendar.clashes(ev), notes)
             }

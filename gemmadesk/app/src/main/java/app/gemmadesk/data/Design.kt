@@ -70,12 +70,21 @@ data class Page(
     val frame: Frame = Frame.PHONE,
     val background: String = "#FFFFFF",
     val items: List<Item> = emptyList(),
+    /** The page Gemma built from the approved mockup (step 3), or "" if not built yet. */
+    val built: String = "",
+    /** Which version of the mockup [built] was made from. */
+    val builtFor: Int = 0,
 ) {
+    /** Changes whenever the mockup changes, so an old build can be spotted. */
+    fun mockupKey(): Int = (items.map { it.copy(id = "") }.hashCode() * 31 + background.hashCode()) * 31 + frame.w
+    fun builtIsCurrent() = built.isNotEmpty() && builtFor == mockupKey()
+
     /** The page grows to fit its lowest item. */
     fun height() = maxOf(frame.h, (items.maxOfOrNull { it.bottom() } ?: 0) + 24)
 
     fun toJson() = JSONObject().put("id", id).put("name", name).put("frame", JSONObject().put("name", frame.name).put("w", frame.w).put("h", frame.h))
         .put("background", background).put("items", JSONArray().apply { items.forEach { put(it.toJson()) } })
+        .put("built", built).put("builtFor", builtFor)
 
     companion object {
         fun fromJson(o: JSONObject): Page {
@@ -83,7 +92,8 @@ data class Page(
             val frame = if (f == null) Frame.PHONE else Frame(f.optString("name", "Custom"), f.optInt("w", 390), f.optInt("h", 844))
             val a = o.optJSONArray("items") ?: JSONArray()
             return Page(o.optString("id").ifEmpty { newId() }, o.optString("name", "Page"), frame, o.optString("background", "#FFFFFF"),
-                (0 until a.length()).mapNotNull { runCatching { Item.fromJson(a.getJSONObject(it)) }.getOrNull() })
+                (0 until a.length()).mapNotNull { runCatching { Item.fromJson(a.getJSONObject(it)) }.getOrNull() },
+                o.optString("built"), o.optInt("builtFor"))
         }
     }
 }

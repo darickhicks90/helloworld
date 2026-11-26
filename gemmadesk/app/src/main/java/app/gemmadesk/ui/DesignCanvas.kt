@@ -83,7 +83,8 @@ class DesignCanvas(ctx: Context) : View(ctx) {
     private val dash = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; color = 0x553D5AFE; strokeWidth = d; pathEffect = DashPathEffect(floatArrayOf(d * 6, d * 4), 0f) }
     private val guides = ArrayList<FloatArray>()  // x1,y1,x2,y2 in page px
 
-    private fun color(c: String, fallback: Int): Int = runCatching { Color.parseColor(Html.safeColor(c, "")) }.getOrDefault(fallback)
+    private val painter = PagePainter()
+    private fun color(c: String, fallback: Int) = PagePainter.color(c, fallback)
 
     override fun onDraw(c: Canvas) {
         c.drawColor(0xFFE9ECF3.toInt())
@@ -100,7 +101,7 @@ class DesignCanvas(ctx: Context) : View(ctx) {
         c.save()
         c.clipRect(x0, y0, x0 + f.w * s, y0 + ph * s)
         c.translate(x0, y0); c.scale(s, s)
-        for (i in page.items) drawItem(c, i)
+        for (i in page.items) painter.drawItem(c, i)
         c.restore()
 
         // guides while dragging
@@ -123,31 +124,6 @@ class DesignCanvas(ctx: Context) : View(ctx) {
             fill.color = C.ACCENT; c.drawRoundRect(a[0], ly - 14 * d, a[0] + tw + 12 * d, ly + 5 * d, 4 * d, 4 * d, fill)
             text.color = Color.WHITE; c.drawText(label, a[0] + 6 * d, ly, text)
         }
-    }
-
-    /** Draw an item in page pixels, matching the CSS the HTML uses. */
-    private fun drawItem(c: Canvas, i: Item) {
-        val r = RectF(i.x.toFloat(), i.y.toFloat(), i.right().toFloat(), i.bottom().toFloat())
-        val bg = if (i.background.isBlank()) Color.TRANSPARENT else color(i.background, Color.TRANSPARENT)
-        if (i.type == "divider") { fill.color = color(i.background, 0xFFD5DAE3.toInt()); c.drawRect(r, fill); return }
-        if (bg != Color.TRANSPARENT) { fill.color = bg; c.drawRoundRect(r, i.radius.toFloat(), i.radius.toFloat(), fill) }
-        if (i.type == "input") { stroke.color = 0xFFC9D0DC.toInt(); stroke.strokeWidth = 1f; c.drawRoundRect(RectF(r.left + .5f, r.top + .5f, r.right - .5f, r.bottom - .5f), i.radius.toFloat(), i.radius.toFloat(), stroke) }
-        if (i.type == "image") {
-            stroke.color = 0x33000000; stroke.strokeWidth = 1.5f
-            c.save(); c.clipRect(r); c.drawLine(r.left, r.top, r.right, r.bottom, stroke); c.drawLine(r.right, r.top, r.left, r.bottom, stroke); c.restore()
-        }
-        if (i.text.isBlank()) return
-        text.color = color(i.color, C.INK)
-        text.textSize = i.fontSize.toFloat()
-        text.typeface = if (i.bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
-        text.isUnderlineText = i.type == "link"
-        val padX = if (i.type == "input") 12f else 0f
-        val wrapW = max(1, (i.w - 2 * padX).toInt())
-        val align = when (if (i.type in setOf("button", "image")) "center" else i.align) { "center" -> Layout.Alignment.ALIGN_CENTER; "right" -> Layout.Alignment.ALIGN_OPPOSITE; else -> Layout.Alignment.ALIGN_NORMAL }
-        val lay = StaticLayout.Builder.obtain(i.text, 0, i.text.length, text, wrapW).setAlignment(align).setLineSpacing(0f, 1.3f).setIncludePad(false).build()
-        val ty = when (i.type) { "button", "image", "input" -> r.top + (i.h - lay.height) / 2f; else -> r.top + i.fontSize * 0.15f }
-        c.save(); c.translate(r.left + padX, ty); lay.draw(c); c.restore()
-        text.isUnderlineText = false
     }
 
     private fun handles(i: Item): List<Pair<Float, Float>> {

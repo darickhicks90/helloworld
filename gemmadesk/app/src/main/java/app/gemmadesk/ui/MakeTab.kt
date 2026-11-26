@@ -23,6 +23,7 @@ import app.gemmadesk.MainActivity
 import app.gemmadesk.assist.Designer
 import app.gemmadesk.data.ExportProvider
 import app.gemmadesk.data.Frame
+import app.gemmadesk.data.Handoff
 import app.gemmadesk.data.Html
 import app.gemmadesk.data.Item
 import app.gemmadesk.data.Page
@@ -49,6 +50,8 @@ class MakeTab(private val a: MainActivity) : FrameLayout(a) {
     private lateinit var pageBtn: TextView
     private lateinit var undoBtn: TextView
     private lateinit var redoBtn: TextView
+    private lateinit var buildBtn: TextView
+    private lateinit var steps: TextView
     /** On phones the properties panel shows only while an item is selected. */
     private var propsScroll: ScrollView? = null
 
@@ -72,9 +75,11 @@ class MakeTab(private val a: MainActivity) : FrameLayout(a) {
         val body = a.column(16)
         val head = a.row()
         head.add(a.label("Websites & apps", 20f, C.INK, true), 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        head.add(a.button("Import", small = true) { importMockup() }, LinearLayout.LayoutParams.WRAP_CONTENT, right = 6)
         head.add(a.button("+ New", primary = true, small = true) { newProject() }, LinearLayout.LayoutParams.WRAP_CONTENT)
         body.add(head)
-        body.add(a.label("Describe a page and Gemma lays it out. Then drag items to move them, drag the corner dots to resize, and export real HTML.", 13.5f, C.MUTED), top = 4)
+        body.add(a.label("1 Describe a page and Gemma draws a mockup.  2 Move and resize anything.  3 Tap ✓ Build and Gemma writes the real page from your mockup. " +
+            "Share ▾ can also send a mockup to Claude, and Import opens a mockup Claude sends back.", 13.5f, C.MUTED), top = 4)
         val list = a.projects.all()
         if (list.isEmpty()) body.add(a.card().apply {
             add(a.label("No projects yet", 16f, C.INK, true))
@@ -143,16 +148,20 @@ class MakeTab(private val a: MainActivity) : FrameLayout(a) {
         undoBtn = a.button("Undo", small = true) { doUndo() }; redoBtn = a.button("Redo", small = true) { doRedo() }
         bar.add(undoBtn, LinearLayout.LayoutParams.WRAP_CONTENT); bar.add(redoBtn, LinearLayout.LayoutParams.WRAP_CONTENT, left = 4)
         bar.add(a.button("Preview", small = true) { preview() }, LinearLayout.LayoutParams.WRAP_CONTENT, left = 6)
-        bar.add(a.button("Export", primary = true, small = true) { export() }, LinearLayout.LayoutParams.WRAP_CONTENT, left = 6)
+        buildBtn = a.button("✓ Build", primary = true, small = true) { build() }
+        bar.add(buildBtn, LinearLayout.LayoutParams.WRAP_CONTENT, left = 6)
+        bar.add(a.button("Share ▾", small = true) { export() }, LinearLayout.LayoutParams.WRAP_CONTENT, left = 6)
         root.add(HorizontalScrollView(a).apply { isFillViewport = true; isHorizontalScrollBarEnabled = false; addView(bar); setBackgroundColor(C.CARD) })
 
         // Gemma
         val g = a.row().apply { setPadding(a.dp(8), a.dp(4), a.dp(8), a.dp(6)); setBackgroundColor(C.CARD) }
-        prompt = a.field("Describe the page, or what to change…").apply { maxLines = 3 }
+        prompt = a.field("Describe the page for a mockup, or what to change…").apply { maxLines = 3 }
         g.add(prompt, 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-        askBtn = a.button("✦ Design", primary = true, small = true) { runGemma(fresh = page().items.isEmpty()) }
+        askBtn = a.button("✦ Mockup", primary = true, small = true) { runGemma(fresh = page().items.isEmpty()) }
         g.add(askBtn, LinearLayout.LayoutParams.WRAP_CONTENT, left = 6)
         root.add(g)
+        steps = a.label("", 12.5f, C.MUTED).apply { setPadding(a.dp(12), 0, a.dp(12), a.dp(6)); setBackgroundColor(C.CARD) }
+        root.add(steps)
         root.add(View(a).apply { setBackgroundColor(C.LINE) }, h = 1)
 
         val palette = palette()
@@ -227,8 +236,16 @@ class MakeTab(private val a: MainActivity) : FrameLayout(a) {
     private fun updateButtons() {
         if (!::undoBtn.isInitialized) return
         undoBtn.alpha = if (undo.isEmpty()) 0.4f else 1f; redoBtn.alpha = if (redo.isEmpty()) 0.4f else 1f
-        askBtn.text = if (page().items.isEmpty()) "✦ Design" else "✦ Change"
+        askBtn.text = if (page().items.isEmpty()) "✦ Mockup" else "✦ Change"
         pageBtn.text = "${page().name} ▾"
+        // where you are: 1 mockup, 2 adjust, 3 build
+        val p = page()
+        val stage = when { p.items.isEmpty() -> 1; p.builtIsCurrent() -> 4; else -> 2 }
+        fun st(n: Int, t: String) = (if (stage > n) "✓ " else if (stage == n) "● " else "○ ") + t
+        steps.text = listOf(st(1, "1 Mockup"), st(2, "2 Adjust it"), st(3, "3 Build with Gemma")).joinToString("   →   ") +
+            when (stage) { 1 -> "  ·  describe the page above"; 2 -> "  ·  move things around, then tap ✓ Build"; else -> "  ·  built; Share ▾ to export" }
+        buildBtn.alpha = if (p.items.isEmpty()) 0.4f else 1f
+        buildBtn.text = if (p.builtIsCurrent()) "✓ Built" else "✓ Build"
     }
 
     private val saver = Runnable { saveNow() }
@@ -241,7 +258,7 @@ class MakeTab(private val a: MainActivity) : FrameLayout(a) {
         val text = prompt.text.toString().trim()
         if (text.isEmpty()) { prompt.error = if (fresh) "Describe the page first" else "Say what to change"; return }
         val before = page()
-        a.withModel(if (fresh) "Gemma is laying out the page… (this can take a minute or two)" else "Gemma is changing the page…", { m ->
+        a.withModel(if (fresh) "Gemma is drawing a mockup… (this can take a minute or two)" else "Gemma is changing the mockup…", { m ->
             val d = Designer(m)
             if (fresh) d.design(text, before.copy(items = emptyList())) else d.edit(text, before)
         }) { result, err ->
@@ -250,7 +267,7 @@ class MakeTab(private val a: MainActivity) : FrameLayout(a) {
             commit(result.copy(name = before.name, frame = before.frame))
             canvas.select(null); canvas.resetView()
             prompt.setText("")
-            a.toast("Gemma placed ${result.items.size} items. Drag to adjust, or tap Undo to go back.")
+            a.toast("Here's the mockup: ${result.items.size} items. Move and resize anything, then tap ✓ Build.")
         }
     }
 
@@ -360,7 +377,7 @@ class MakeTab(private val a: MainActivity) : FrameLayout(a) {
         props.add(Segments(a, Frame.ALL.map { it.name }, Frame.ALL.indexOfFirst { it.w == p.frame.w }.coerceAtLeast(0)) { i -> resizeFrame(Frame.ALL[i]) }, top = 2)
         props.add(a.label("Page background", 12f, C.MUTED), top = 10)
         props.add(swatchRow(p.background, allowNone = false) { c -> commit(page().copy(background = c)) }, top = 2)
-        props.add(a.label(if (p.items.isEmpty()) "Describe the page above and tap ✦ Design, or add items with the buttons." else
+        props.add(a.label(if (p.items.isEmpty()) "Describe the page above and tap ✦ Mockup, or add items with the buttons." else
             "Tap an item to select it. Drag to move; drag the dots to resize. Pinch to zoom, drag empty space to scroll.", 13f, C.MUTED), top = 12)
     }
 
@@ -431,6 +448,108 @@ class MakeTab(private val a: MainActivity) : FrameLayout(a) {
         }.setOnDismissListener { a.immersive() }.show()
     }
 
+    /* ----- step 3: Gemma builds the real page ----- */
+
+    private fun build(notes: String = "") {
+        val p = page()
+        if (p.items.isEmpty()) { a.toast("Make a mockup first."); return }
+        saveNow()
+        a.withModel("Gemma is building the page from your mockup… (a few minutes; keep the app open)", { m -> app.gemmadesk.assist.Builder.build(m, p, notes) }) { r, err ->
+            if (r == null) { a.toast("Gemma couldn't build it: ${err?.message}"); return@withModel }
+            if (project == null || page().id != p.id) return@withModel
+            review(p, r)
+        }
+    }
+
+    /** Show Gemma's page next to the mockup, with the app's checks, before accepting it. */
+    private fun review(p: Page, r: app.gemmadesk.assist.Builder.Result) {
+        val dlg = Dialog(a, android.R.style.Theme_Material_Light_NoActionBar)
+        val col = a.column()
+        val bar = a.row().apply { setPadding(a.dp(10), a.dp(8), a.dp(10), a.dp(8)); setBackgroundColor(C.NAVY) }
+        bar.add(a.label("Gemma's build of “${p.name}”", 15f, Color.WHITE, true), 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        bar.add(a.button("Close", small = true) { dlg.dismiss() }, LinearLayout.LayoutParams.WRAP_CONTENT)
+        col.add(bar)
+
+        val checks = a.column(12).apply { setBackgroundColor(if (r.ok) 0xFFE9F7EF.toInt() else C.WARN_SOFT) }
+        val nTexts = p.items.filter { it.text.isNotBlank() && it.type != "box" }.sumOf { it.text.split('\n').count { l -> l.isNotBlank() } }
+        fun line(ok: Boolean, t: String) = checks.add(a.label((if (ok) "✓ " else "⚠ ") + t, 13.5f, if (ok) C.GOOD else C.WARN))
+        line(r.complete, if (r.complete) "Complete page" else "The page was cut off: Gemma ran out of room. Try again, or ask for a simpler page.")
+        line(r.missingText.isEmpty(), if (r.missingText.isEmpty()) "All $nTexts pieces of text from the mockup are there" else "Missing text: ${r.missingText.joinToString("; ") { "“${it.take(40)}”" }}")
+        if (p.items.any { it.link.isNotBlank() && it.link != "#" }) line(r.missingLinks.isEmpty(), if (r.missingLinks.isEmpty()) "All links are there" else "Missing links: ${r.missingLinks.joinToString()}")
+        line(r.missingColours.isEmpty(), if (r.missingColours.isEmpty()) "Same colours as the mockup" else "Colours not used: ${r.missingColours.joinToString()}")
+        if (r.removed.isNotEmpty()) checks.add(a.label("Removed for safety: ${r.removed.joinToString()}.", 12.5f, C.MUTED))
+        col.add(checks)
+
+        val tabs = Segments(a, listOf("Built page", "Mockup", "Code"), 0) {}
+        col.add(tabs.apply { setPadding(a.dp(6), a.dp(6), a.dp(6), a.dp(6)) })
+        val built = WebView(a).apply { settings.javaScriptEnabled = false; loadDataWithBaseURL(null, r.html, "text/html", "utf-8", null) }
+        val mock = WebView(a).apply { settings.javaScriptEnabled = true; loadDataWithBaseURL(null, Html.page(p, project), "text/html", "utf-8", null); visibility = View.GONE }
+        val code = ScrollView(a).apply {
+            addView(TextView(a).apply { text = r.html; typeface = android.graphics.Typeface.MONOSPACE; textSize = 11f; setTextColor(C.INK); setPadding(a.dp(12), a.dp(12), a.dp(12), a.dp(12)); setTextIsSelectable(true) })
+            visibility = View.GONE; setBackgroundColor(0xFFF6F7FA.toInt())
+        }
+        val views = listOf(built, mock, code)
+        val holder = FrameLayout(a).apply { views.forEach { addView(it) } }
+        val pick = Segments(a, listOf("Built page", "Mockup", "Code"), 0) { i -> views.forEachIndexed { k, v -> v.visibility = if (k == i) View.VISIBLE else View.GONE } }
+        col.removeView(tabs); col.add(pick.apply { setPadding(a.dp(6), a.dp(6), a.dp(6), a.dp(6)) })
+        col.add(holder, h = 0, weight = 1f)
+
+        val acts = a.row().apply { setPadding(a.dp(10), a.dp(8), a.dp(10), a.dp(8)); setBackgroundColor(C.CARD) }
+        acts.add(a.button("Accept", primary = true, small = true) {
+            commit(page().copy(built = r.html, builtFor = p.mockupKey())); dlg.dismiss(); a.toast("Built. Share ▾ to export it, or keep adjusting and build again.")
+        }, LinearLayout.LayoutParams.WRAP_CONTENT)
+        acts.add(a.button("Try again", small = true) { dlg.dismiss(); build() }, LinearLayout.LayoutParams.WRAP_CONTENT, left = 6)
+        val fixes = listOfNotNull(
+            r.missingText.takeIf { it.isNotEmpty() }?.let { m -> "include this text exactly: ${m.joinToString("; ") { "\"$it\"" }}" },
+            r.missingLinks.takeIf { it.isNotEmpty() }?.let { m -> "include these links: ${m.joinToString()}" },
+            r.missingColours.takeIf { it.isNotEmpty() }?.let { m -> "use these colours from the mockup: ${m.joinToString()}" }).joinToString("; ")
+        acts.add(a.button("Ask for changes…", small = true) { askText("What should Gemma change in the code?", fixes) { t -> dlg.dismiss(); build(t) } }, LinearLayout.LayoutParams.WRAP_CONTENT, left = 6)
+        acts.add(a.button("Use the exact mockup", small = true) {
+            commit(page().copy(built = Html.page(page(), project), builtFor = page().mockupKey())); dlg.dismiss(); a.toast("Using the mockup's exact layout as the page.")
+        }, LinearLayout.LayoutParams.WRAP_CONTENT, left = 6)
+        col.add(HorizontalScrollView(a).apply { isHorizontalScrollBarEnabled = false; addView(acts); setBackgroundColor(C.CARD) })
+        dlg.setContentView(col)
+        dlg.setOnDismissListener { a.immersive() }
+        dlg.show()
+    }
+
+    /** The page to export: Gemma's accepted build if it matches the mockup, otherwise the exact layout. */
+    private fun finalHtml(p: Page) = if (p.builtIsCurrent()) p.built else Html.page(p, project)
+
+    /* ----- working with Claude ----- */
+
+    private fun sendToClaude() {
+        val pr = project ?: return
+        val p = page()
+        val f = a.column(18)
+        f.add(a.label("Shares a picture of the mockup and a brief with its exact layout. Pick the Claude app (or anything else) in the share sheet.", 13.5f, C.MUTED))
+        val req = a.field("What should Claude do?", Handoff.defaultRequest(p), InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES).apply { minLines = 3; gravity = Gravity.TOP }
+        f.add(req, top = 8)
+        AlertDialog.Builder(a).setTitle("Send this mockup to Claude").setView(f).setPositiveButton("Share") { _, _ ->
+            val files = handoffFiles(pr, p, req.text.toString())
+            a.shareMany(files, req.text.toString() + "\n\n(The attached brief has the exact layout as JSON.)", "${pr.name} – ${p.name} mockup")
+        }.setNegativeButton("Cancel", null).setOnDismissListener { a.immersive() }.show()
+    }
+
+    /** The mockup picture and the brief, written to the export folder. */
+    fun handoffFiles(pr: Project, p: Page, request: String): List<File> {
+        val base = Html.pageFile(p).removeSuffix(".html")
+        val png = File(ExportProvider.dir(a), "$base-mockup.png")
+        png.outputStream().use { PagePainter.render(p, if (p.frame.w > 600) 1.5f else 2f).compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+        val md = File(ExportProvider.dir(a), "$base-brief.md")
+        md.writeText(Handoff.brief(pr, p, request))
+        return listOf(png, md)
+    }
+
+    private fun importMockup() {
+        a.pickFile { uri ->
+            val text = runCatching { a.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() } }.getOrNull()
+            val pr = text?.let { Handoff.parse(it) }
+            if (pr == null) { a.toast("That file doesn't contain a Gemma Desk mockup."); return@pickFile }
+            a.projects.save(pr); open(pr); a.toast("Imported “${pr.name}”: ${pr.pages.sumOf { it.items.size }} items.")
+        }
+    }
+
     /* ----- preview and export ----- */
 
     private fun preview() {
@@ -460,11 +579,20 @@ class MakeTab(private val a: MainActivity) : FrameLayout(a) {
     private fun export() {
         saveNow()
         val pr = project ?: return
-        AlertDialog.Builder(a).setTitle("Export").setItems(arrayOf("Share this page (.html)", "Share the whole ${if (pr.pages.size > 1) "site" else "project"} (.zip)", "Copy this page's HTML")) { _, w ->
+        val p = page()
+        val what = if (p.builtIsCurrent()) "Gemma's build" else if (p.built.isNotEmpty()) "the exact mockup (the build is out of date: tap ✓ Build)" else "the exact mockup (not built yet)"
+        AlertDialog.Builder(a).setTitle("Share").setItems(arrayOf(
+            "Send the mockup to Claude (picture + brief)",
+            "Share this page (.html) — $what",
+            "Share the whole ${if (pr.pages.size > 1) "site" else "project"} (.zip)",
+            "Copy this page's HTML",
+            "Save the mockup file (.json)")) { _, w ->
             when (w) {
-                0 -> { val f = File(ExportProvider.dir(a), Html.pageFile(page())); f.writeText(Html.page(page(), pr)); a.share(f, "text/html", "${pr.name}: ${page().name}") }
-                1 -> { val f = zip(pr); a.share(f, "application/zip", pr.name) }
-                else -> { (a.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("HTML", Html.page(page(), pr))); a.toast("HTML copied.") }
+                0 -> sendToClaude()
+                1 -> { val f = File(ExportProvider.dir(a), Html.pageFile(p)); f.writeText(finalHtml(p)); a.share(f, "text/html", "${pr.name}: ${p.name}") }
+                2 -> { val f = zip(pr); a.share(f, "application/zip", pr.name) }
+                3 -> { (a.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("HTML", finalHtml(p))); a.toast("HTML copied.") }
+                else -> { val f = File(ExportProvider.dir(a), Html.pageFile(p).removeSuffix(".html") + ".mockup.json"); f.writeText(Handoff.json(pr, p).toString(1)); a.share(f, "application/json", "${pr.name} mockup") }
             }
         }.setOnDismissListener { a.immersive() }.show()
     }
@@ -477,7 +605,7 @@ class MakeTab(private val a: MainActivity) : FrameLayout(a) {
             val used = HashSet<String>()
             fun put(n: String, b: ByteArray) { if (used.add(n)) { z.putNextEntry(ZipEntry(n)); z.write(b); z.closeEntry() } }
             pr.pages.forEachIndexed { i, p ->
-                val html = Html.page(p, pr).toByteArray()
+                val html = (if (p.builtIsCurrent()) p.built else Html.page(p, pr)).toByteArray()
                 if (i == 0) put("index.html", html)
                 var fn = Html.pageFile(p); var k = 2
                 while (fn in used && fn != "index.html") fn = Html.pageFile(p).removeSuffix(".html") + "-${k++}.html"

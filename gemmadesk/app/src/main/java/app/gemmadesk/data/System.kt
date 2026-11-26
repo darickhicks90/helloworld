@@ -85,7 +85,7 @@ class ExportProvider : ContentProvider() {
         return f.takeIf { it.parentFile == dir(context!!) && it.exists() }
     }
     override fun onCreate() = true
-    override fun getType(uri: Uri) = when (file(uri)?.extension) { "html" -> "text/html"; "csv" -> "text/csv"; "zip" -> "application/zip"; else -> "application/octet-stream" }
+    override fun getType(uri: Uri) = when (file(uri)?.extension) { "html" -> "text/html"; "csv" -> "text/csv"; "zip" -> "application/zip"; "png" -> "image/png"; "md" -> "text/markdown"; "json" -> "application/json"; "txt" -> "text/plain"; else -> "application/octet-stream" }
     override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor? = file(uri)?.let { ParcelFileDescriptor.open(it, ParcelFileDescriptor.MODE_READ_ONLY) }
     override fun query(uri: Uri, projection: Array<out String>?, selection: String?, args: Array<out String>?, sort: String?): Cursor? {
         val f = file(uri) ?: return null

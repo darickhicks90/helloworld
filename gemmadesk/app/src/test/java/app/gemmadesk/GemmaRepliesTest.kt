@@ -40,6 +40,21 @@ class GemmaRepliesTest {
         for (line in File(path!!).readLines()) {
             val o = JSONObject(line); val id = o.getString("id"); val text = o.getString("text")
             report.append("=== $id (${o.optDouble("seconds")} s)\n")
+            if (id.startsWith("build")) {
+                val page = Designer.tidy(JSONObject(AppTest.BAKERY), Page(name = "Home", frame = Frame.PHONE))
+                val r = app.gemmadesk.assist.Builder.check(page, text)
+                report.append("complete=${r.complete} missingText=${r.missingText} missingLinks=${r.missingLinks} missingColours=${r.missingColours} removed=${r.removed} length=${r.html.length}\n")
+                File(out, "$id.html").writeText(r.html)
+                continue
+            }
+            if (id.startsWith("lib")) {
+                val lib = Library(kotlin.io.path.createTempDirectory("lib").toFile())
+                lib.addText("NEC sample.pdf", "pdf", GemmaPromptsTest.LIBRARY)
+                val q = GemmaPromptsTest.QUESTIONS[id.removePrefix("lib-").toInt()]
+                val ans = app.gemmadesk.assist.Reader(FakeModel(text), lib).ask(q)
+                report.append("Q: $q\nraw: ${text.replace("\n", " ").take(500)}\n-> found=${ans.found} sources=${ans.sources.map { "${it.passage.where()} quoteFound=${it.quoteFound}" }} notes=${ans.notes}\n")
+                continue
+            }
             if (id.startsWith("design") || id.startsWith("edit")) {
                 val frame = if (id.contains("plumber")) Frame.DESKTOP else Frame.PHONE
                 val base = if (id.startsWith("edit")) Designer.tidy(JSONObject(AppTest.BAKERY), Page(name = "Home", frame = frame)) else Page(name = "Home", frame = frame)

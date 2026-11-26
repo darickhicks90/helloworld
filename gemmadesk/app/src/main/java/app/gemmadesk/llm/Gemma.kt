@@ -14,6 +14,8 @@ import java.io.File
 interface LanguageModel {
     /** [schema] is a JSON Schema; the reply always parses as JSON that fits it. */
     fun generateJson(prompt: String, schema: String, maxTokens: Int = 1200, temperature: Float = 0f): String
+    /** Free text (used to write web page code). */
+    fun generateText(prompt: String, maxTokens: Int = 3000, temperature: Float = 0f): String
     fun close() {}
 }
 
@@ -32,8 +34,8 @@ class GemmaModel(private val modelFile: File, private val cacheDir: File) : Lang
         var lastError: Throwable? = null
         for (backend in listOf<Backend>(Backend.GPU(), Backend.CPU())) {
             try {
-                // room for a long design (prompt + up to ~3000 tokens of layout)
-                val e = Engine(EngineConfig(modelPath = modelFile.absolutePath, backend = backend, maxNumTokens = 6144, cacheDir = cacheDir.absolutePath))
+                // room for a long page: the mockup spec plus up to ~5000 tokens of code
+                val e = Engine(EngineConfig(modelPath = modelFile.absolutePath, backend = backend, maxNumTokens = 8192, cacheDir = cacheDir.absolutePath))
                 e.initialize()
                 engine = e
                 backendUsed = if (backend is Backend.GPU) "GPU" else "CPU"
@@ -55,6 +57,18 @@ class GemmaModel(private val modelFile: File, private val cacheDir: File) : Lang
             maxOutputToken = maxTokens))
         try {
             val reply = conv.sendMessage(prompt, responseFormat = ResponseFormat.json(schema))
+            return reply.contents.contents.filterIsInstance<Content.Text>().joinToString("") { it.text }
+        } finally {
+            conv.close()
+        }
+    }
+
+    override fun generateText(prompt: String, maxTokens: Int, temperature: Float): String {
+        val conv = engine().createConversation(ConversationConfig(
+            samplerConfig = SamplerConfig(40, 0.95, temperature.toDouble(), 1234),
+            maxOutputToken = maxTokens))
+        try {
+            val reply = conv.sendMessage(prompt)
             return reply.contents.contents.filterIsInstance<Content.Text>().joinToString("") { it.text }
         } finally {
             conv.close()

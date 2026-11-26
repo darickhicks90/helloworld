@@ -33,6 +33,8 @@ kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarg
 dependencies {
     // Gemma on the phone (the same runtime SketchSolve uses)
     implementation("com.google.ai.edge.litertlm:litertlm-android:0.19.1")
+    // reading PDFs for the library (Apache 2.0)
+    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
     testImplementation("org.robolectric:robolectric:4.14.1")

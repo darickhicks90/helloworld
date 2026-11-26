@@ -33,9 +33,11 @@ class MainActivity : Activity() {
     val ledger by lazy { Ledger(File(filesDir, "ledger.json")) }
     val calendar by lazy { Calendar(File(filesDir, "calendar.json")) }
     val projects by lazy { Projects(File(filesDir, "projects")) }
+    val library by lazy { app.gemmadesk.data.Library(File(filesDir, "library")) }
 
     lateinit var everyday: EverydayTab
     lateinit var make: MakeTab
+    lateinit var libraryTab: LibraryTab
     private lateinit var content: FrameLayout
     private lateinit var tabs: Segments
     private lateinit var modelChip: TextView
@@ -84,10 +86,10 @@ class MainActivity : Activity() {
         val head = column().apply { setBackgroundColor(C.NAVY); setPadding(dp(16), dp(10), dp(12), dp(10)) }
         val bar = row()
         bar.add(label("Gemma Desk", 19f, 0xFFFFFFFF.toInt(), true), android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
-        tabs = Segments(this, listOf("Everyday", "Make"), 0, dark = true) { show(it) }
+        tabs = Segments(this, listOf("Everyday", "Make", "Library"), 0, dark = true) { show(it) }
         tabs.background = rounded(0x33FFFFFF, dpf(10f))
         bar.add(View(this), 0, 1, 1f)
-        if (!narrow) { bar.add(tabs, dp(240)); bar.add(View(this), 0, 1, 1f) }
+        if (!narrow) { bar.add(tabs, dp(330)); bar.add(View(this), 0, 1, 1f) }
         modelChip = label("", 12f, 0xFFFFFFFF.toInt(), true).apply {
             setPadding(dp(10), dp(6), dp(10), dp(6)); background = rounded(0x33FFFFFF, dpf(14f))
             setOnClickListener { showModelSetup() }
@@ -111,17 +113,40 @@ class MainActivity : Activity() {
 
         everyday = EverydayTab(this)
         make = MakeTab(this)
+        libraryTab = LibraryTab(this)
         show(getSharedPreferences("gemmadesk", MODE_PRIVATE).getInt("tab", 0))
         updateChip()
         Thread { runCatching { app.gemmadesk.data.Reminders.scheduleAll(this) } }.start()
         if (models.current() == null && !getSharedPreferences("gemmadesk", MODE_PRIVATE).getBoolean("setupSeen", false)) main.post { showModelSetup() }
+        handleShare(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); handleShare(intent) }
+
+    /** A file shared from another app goes into the library. */
+    private fun handleShare(i: Intent?) {
+        val uris = when (i?.action) {
+            Intent.ACTION_SEND -> listOfNotNull(if (android.os.Build.VERSION.SDK_INT >= 33) i.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java) else @Suppress("DEPRECATION") i.getParcelableExtra(Intent.EXTRA_STREAM))
+            Intent.ACTION_SEND_MULTIPLE -> (if (android.os.Build.VERSION.SDK_INT >= 33) i.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java) else @Suppress("DEPRECATION") i.getParcelableArrayListExtra(Intent.EXTRA_STREAM)).orEmpty()
+            else -> return
+        }
+        if (uris.isEmpty()) {
+            // shared text (e.g. a web page's words) becomes a small document
+            val text = i.getStringExtra(Intent.EXTRA_TEXT) ?: return
+            val title = i.getStringExtra(Intent.EXTRA_SUBJECT) ?: "Shared note ${java.time.LocalDate.now()}"
+            runCatching { library.addText(title, "text", listOf(text)) }.onSuccess { toast("Added “$title” to the library.") }
+            show(2); return
+        }
+        show(2)
+        libraryTab.add(uris)
+        setIntent(Intent())
     }
 
     fun show(i: Int) {
         tabs.select(i)
         content.removeAllViews()
-        content.addView(if (i == 0) everyday else make)
-        if (i == 0) everyday.refresh() else make.refresh()
+        content.addView(when (i) { 0 -> everyday; 1 -> make; else -> libraryTab })
+        when (i) { 0 -> everyday.refresh(); 1 -> make.refresh(); else -> { libraryTab.refresh(); Thread { library.warm() }.start() } }
         getSharedPreferences("gemmadesk", MODE_PRIVATE).edit().putInt("tab", i).apply()
     }
 
@@ -142,18 +167,40 @@ class MainActivity : Activity() {
         try { startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType(type), 21) }
         catch (e: Exception) { toast("This phone can't pick files.") }
     }
+    private var pickManyCallback: ((List<Uri>) -> Unit)? = null
+    /** Pick one or more documents for the library. */
+    fun pickFiles(then: (List<Uri>) -> Unit) {
+        pickManyCallback = then
+        val types = arrayOf("application/pdf", "text/*", "application/epub+zip", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+        try { startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*")
+            .putExtra(Intent.EXTRA_MIME_TYPES, types).putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true), 22) }
+        catch (e: Exception) { toast("This phone can't pick files.") }
+    }
+
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         val uri = data?.data
-        if (requestCode == 21 && resultCode == RESULT_OK && uri != null) pickCallback?.invoke(uri)
-        pickCallback = null
+        if (requestCode == 21) { if (resultCode == RESULT_OK && uri != null) pickCallback?.invoke(uri); pickCallback = null }
+        if (requestCode == 22 && resultCode == RESULT_OK && data != null) {
+            val list = data.clipData?.let { c -> (0 until c.itemCount).map { c.getItemAt(it).uri } } ?: listOfNotNull(data.data)
+            pickManyCallback?.invoke(list)
+        }
     }
 
     /** Share a file made in cache/export with another app (email, Drive, Files…). */
     fun share(f: File, mime: String, subject: String) {
         val i = Intent(Intent.ACTION_SEND).setType(mime).putExtra(Intent.EXTRA_STREAM, app.gemmadesk.data.ExportProvider.uri(f))
             .putExtra(Intent.EXTRA_SUBJECT, subject).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        startActivity(Intent.createChooser(i, subject))
+    }
+
+    /** Share several files at once (e.g. a mockup picture and its brief), with a message. */
+    fun shareMany(files: List<File>, text: String, subject: String) {
+        val uris = ArrayList(files.map { app.gemmadesk.data.ExportProvider.uri(it) })
+        val i = Intent(Intent.ACTION_SEND_MULTIPLE).setType("*/*").putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+            .putExtra(Intent.EXTRA_TEXT, text).putExtra(Intent.EXTRA_SUBJECT, subject).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        i.clipData = android.content.ClipData.newRawUri(subject, uris[0]).apply { uris.drop(1).forEach { addItem(android.content.ClipData.Item(it)) } }
         startActivity(Intent.createChooser(i, subject))
     }
 

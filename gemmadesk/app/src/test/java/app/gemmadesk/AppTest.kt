@@ -153,4 +153,76 @@ class AppTest {
         val b = Bitmap.createBitmap(v.width, v.height, Bitmap.Config.ARGB_8888); v.draw(Canvas(b))
         FileOutputStream(File(out, "tablet-3-model.png")).use { b.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
+
+    private fun dialogShot(name: String) {
+        val d = org.robolectric.shadows.ShadowDialog.getLatestDialog()
+        val v = d.window!!.decorView
+        val b = Bitmap.createBitmap(v.width, v.height, Bitmap.Config.ARGB_8888); v.draw(Canvas(b))
+        FileOutputStream(File(out, "$name.png")).use { b.compress(Bitmap.CompressFormat.PNG, 100, it) }
+    }
+
+    @Test @Config(qualifiers = "w412dp-h915dp-port-xxhdpi") fun phoneBuildFromTheApprovedMockup() {
+        val a = launch()
+        val page = Designer.tidy(JSONObject(BAKERY), Page(name = "Home", frame = Frame.PHONE))
+        val proj = Project(name = "Rosa's Bakery", pages = listOf(page))
+        a.projects.save(proj)
+        a.show(1); settle(); a.make.open(proj); settle()
+        // Gemma's code (one line of text missing, plus a script that must be removed)
+        val texts = page.items.filter { it.text.isNotBlank() && it.type != "box" }.flatMap { it.text.split('\n') }.filter { it != "Cakes" }
+        a.testModel = FakeModel("", text = "<!doctype html><html><head><style>body{background:#FFF8F0}</style></head><body>" +
+            texts.joinToString("") { "<p>${it.replace("'", "&#39;")}</p>" } + "<script>x()</script></body></html>")
+        click(a.make, "✓ Build"); repeat(20) { settle() }
+        dialogShot("phone-6-build-review")
+        val dlg = org.robolectric.shadows.ShadowDialog.getLatestDialog()
+        val all = views(dlg.window!!.decorView).filterIsInstance<TextView>().joinToString("\n") { it.text.toString() }
+        assertTrue(all, all.contains("Missing text: “Cakes”"))
+        assertTrue(all, all.contains("Removed for safety: scripts"))
+        click(dlg.window!!.decorView, "Accept"); settle()
+        assertTrue(a.projects.all().first().pages[0].let { true })
+        a.make.saveNow()
+        val saved = a.projects.all().first().pages[0]
+        assertTrue("build accepted and matches the mockup", saved.builtIsCurrent())
+        assertFalse(saved.built.contains("<script"))
+        // moving something makes the build out of date
+        assertTrue(a.make.canvas.page.builtIsCurrent())
+        // the hand-off for Claude: a picture and a brief with the exact layout
+        val files = a.make.handoffFiles(proj, page, "Please build this.")
+        assertTrue(files[0].length() > 10_000)
+        assertNotNull(app.gemmadesk.data.Handoff.parse(files[1].readText()))
+        files[0].copyTo(File(out, "phone-7-mockup-for-claude.png"), overwrite = true)
+    }
+
+    @Test @Config(qualifiers = "w412dp-h915dp-port-xxhdpi") fun phoneLibraryReadsAPdfAndAnswers() {
+        val a = launch()
+        // make a small PDF, as if downloaded
+        com.tom_roush.pdfbox.android.PDFBoxResourceLoader.init(a)
+        val pdf = File(a.cacheDir, "Code sample.pdf")
+        com.tom_roush.pdfbox.pdmodel.PDDocument().use { doc ->
+            val pages = listOf(
+                listOf("210.8 Ground-Fault Circuit-Interrupter Protection.", "(A) Dwelling Units. Receptacles in bathrooms, garages,", "kitchens serving countertops and within 6 ft of sinks", "shall have GFCI protection."),
+                listOf("240.4(D) Small Conductors.", "14 AWG copper: 15 amperes.", "12 AWG copper: 20 amperes.", "10 AWG copper: 30 amperes."))
+            for (lines in pages) {
+                val pg = com.tom_roush.pdfbox.pdmodel.PDPage(); doc.addPage(pg)
+                com.tom_roush.pdfbox.pdmodel.PDPageContentStream(doc, pg).use { cs ->
+                    cs.beginText(); cs.setFont(com.tom_roush.pdfbox.pdmodel.font.PDType1Font.HELVETICA, 12f); cs.newLineAtOffset(72f, 700f)
+                    for (l in lines) { cs.showText(l); cs.newLineAtOffset(0f, -16f) }
+                    cs.endText()
+                }
+            }
+            doc.save(pdf)
+        }
+        a.library.add(a, android.net.Uri.fromFile(pdf))
+        val d = a.library.docs.single()
+        assertEquals(2, d.pages)
+        assertEquals(2, a.library.search("breaker for 12 AWG copper", 1)[0].page)
+        a.testModel = FakeModel("""{"found":true,"answer":"20 amperes. Section 240.4(D) limits 12 AWG copper to a 20 A overcurrent device.","sources":[{"n":1,"quote":"12 AWG copper: 20 amperes."}],"search_terms":[]}""")
+        a.show(2); settle()
+        val q = views(a.libraryTab).first { it is android.widget.EditText } as android.widget.EditText
+        q.setText("What's the biggest breaker for 12 gauge copper?")
+        click(a.libraryTab, "Ask"); repeat(20) { settle() }
+        val all = views(a.libraryTab).filterIsInstance<TextView>().joinToString("\n") { it.text.toString() }
+        assertTrue(all, all.contains("[1] Code sample.pdf, page 2"))
+        assertTrue(all, all.contains("✓ “12 AWG copper: 20 amperes.”"))
+        shot(a, "phone-8-library")
+    }
 }

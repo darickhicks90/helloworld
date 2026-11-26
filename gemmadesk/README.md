@@ -1,8 +1,8 @@
 # Gemma Desk for Android
 
-An everyday helper and a web page designer, both powered by Gemma running
-**on the phone**. No account, no server: your ledger, calendar and designs
-never leave the device. Internet is only used once, to download the model.
+An everyday helper, a web page designer and a reference library, all powered by Gemma running
+**on the phone**. No account, no server: your ledger, calendar, designs and
+documents never leave the device. Internet is only used once, to download the model.
 
 ## Everyday tab
 
@@ -25,42 +25,64 @@ never leave the device. Internet is only used once, to download the model.
   to my phone's calendar”.
 * Voice: use the microphone on the phone's keyboard.
 
-## Make tab (websites and app screens)
+## Make tab (websites and app screens): mockup, adjust, build
 
-* Start a project (phone app, website or tablet). Describe a page and
-  **Gemma lays it out**: the target design.
-* The **design screen** shows every item on the page at its real position
-  and size. Tap to select, **drag to move**, **drag a corner or edge dot to
-  resize**. Items snap to a 4 px grid and to each other's edges and centres,
-  with pink guide lines. Pinch to zoom; drag empty space to scroll.
-* Edit words (double-tap), size, bold, alignment, colours, corners, links,
-  and exact X/Y/W/H. Duplicate, delete, bring to front or send to back
-  (long-press). Undo and Redo.
-* Ask Gemma for changes (“make the button green and put it under the
-  photo”); it returns the whole page, keeping unchanged items as they were.
-  One Undo takes the change back.
-* Several pages per project; buttons and links can go to another page.
-* **Preview** shows the real HTML in the phone's web engine, with a “HTML”
-  view of the code. **Export** shares a page (.html), the whole site (.zip
-  with index.html), or copies the HTML.
+1. **Mockup.** Describe a page and Gemma draws a mockup: a list of items
+   (type, position, size, words, colours). The app tidies it: items inside
+   the screen, nothing stacked on top of anything else, no big empty gaps,
+   and text always readable against what's behind it.
+2. **Adjust.** The design screen shows every item at its real position and
+   size. Tap to select, **drag to move**, **drag a corner or edge dot to
+   resize**; items snap to a 4 px grid and to each other (pink guide lines).
+   Pinch to zoom. Edit words (double-tap), size, bold, alignment, colours,
+   corners, links and exact X/Y/W/H; long-press for duplicate, delete, front
+   and back. Undo and Redo. Or ask Gemma for a change to the mockup.
+3. **Build.** Tap **✓ Build** and Gemma writes the real page from the
+   approved mockup: responsive HTML and CSS with proper headings, sections and
+   form fields. The app checks the code before you accept it:
+   * every piece of text from the mockup must be there (short labels such as
+     “Cakes” must be their own element, not just a word in another sentence),
+   * every link, and the mockup's colours,
+   * the page must be complete (not cut off),
+   * scripts, event handlers, embedded frames and anything loaded from the
+     internet are removed.
 
-### How the design becomes HTML
+   You see **Built page**, **Mockup** and **Code** side by side, then choose
+   **Accept**, **Try again**, **Ask for changes** (pre-filled with anything
+   the check found missing), or **Use the exact mockup**, which uses the
+   app's own pixel-exact page. Changing the mockup marks the build out of
+   date.
 
-Gemma never writes HTML. It returns a list of items (type, x, y, w, h, words,
-colours), the same list the design screen edits. The app tidies that list
-(known item types only, valid colours, everything inside the frame, text
-boxes tall enough for their words) and generates the HTML itself:
+**Share ▾** exports the page (.html), the whole site (.zip with index.html)
+or the HTML, and can save the mockup file (.json).
 
-* each item is absolutely positioned at its exact pixel position and size
-  inside a page as wide as the frame, so the browser shows the layout you made,
-* on a narrower screen a tiny script scales the whole page down to fit,
-  so the layout never breaks,
-* words are escaped and only plain web, page or e-mail links are allowed,
-  so nothing in a design can run code.
+### Working with Claude
 
-The trade-off: the page is a faithful fixed layout, not a "responsive" one
-that rearranges itself into a different layout on different screens. Make a
-Phone page and a Desktop page if you want both.
+**Share ▾ → Send the mockup to Claude** shares two files to the Claude app
+(or anywhere): a picture of the mockup, and a brief with your request, a plain
+outline and the exact layout as JSON. Claude can build from it directly.
+Claude can also send a design back in the same format, which **Make → Import**
+opens as a project you can adjust and build. The format is described in
+[docs/mockup-format.md](docs/mockup-format.md).
+
+## Library tab
+
+* Add manuals, code books, data sheets and notes: PDF, Word (.docx), EPUB,
+  HTML, Markdown or text. Use **+ Add documents**, or share a file to Gemma
+  Desk from Chrome, Files or Gmail.
+* The text is extracted once and split into passages, all on the phone.
+* **Ask** in plain words. The app finds the best passages (keyword ranking
+  that handles section numbers like 210.8(A)). Gemma answers **only from
+  those passages**, and must quote the words it used. The app checks every
+  quote really is in its passage and shows the sources with document and
+  page. Tap a source to read the whole passage with the quote highlighted.
+* If the passages don't answer the question, Gemma suggests better search
+  words and the app searches once more. If it still can't find an answer, it
+  says your library doesn't cover it rather than guessing.
+* **Just search** finds passages instantly without Gemma.
+* Limits: copy-protected (DRM) PDFs, such as many publishers' code book
+  apps, can't be read by other apps. Scanned pages with no text can't be
+  read yet.
 
 ## The model
 

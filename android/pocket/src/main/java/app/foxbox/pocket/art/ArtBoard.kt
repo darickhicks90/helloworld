@@ -193,7 +193,7 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
         if (upright && timeline) {
             val rowH = (tl.height() - 18 * d) / 2
             val keys = arrayOf(tPrev, tPlay, tNext, tDel, tAdd, tOnion, tFps)
-            val weights = floatArrayOf(1f, 1.1f, 1f, 1.3f, 1.3f, 1.3f, 1.3f)
+            val weights = floatArrayOf(1f, 1.1f, 1f, 1.9f, 1.4f, 1.3f, 1.3f)
             val total = weights.sum(); val gap = 4 * d
             var x = tl.left + 6 * d
             val avail = tl.width() - 12 * d - gap * (keys.size - 1)
@@ -207,7 +207,7 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
             tFps.set(tl.right - 6 * d - k * 1.4f, tPrev.top, tl.right - 6 * d, tPrev.bottom)
             tOnion.set(tFps.left - 4 * d - k * 1.4f, tPrev.top, tFps.left - 4 * d, tPrev.bottom)
             tAdd.set(tOnion.left - 4 * d - k, tPrev.top, tOnion.left - 4 * d, tPrev.bottom)
-            tDel.set(tAdd.left - 4 * d - k, tPrev.top, tAdd.left - 4 * d, tPrev.bottom)
+            tDel.set(tAdd.left - 4 * d - k * 1.9f, tPrev.top, tAdd.left - 4 * d, tPrev.bottom)
             tStrip.set(tNext.right + 8 * d, tPrev.top, tDel.left - 8 * d, tPrev.bottom)
         }
         // the top bar (the right corner is left for the radio and notebook keys)
@@ -401,13 +401,14 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
     // ---- the timeline
     private val thumbs = HashMap<Int, Bitmap>()
     private val thumbRects = ArrayList<Pair<RectF, Int>>()
+    private val delBadge = RectF()
     private fun thumb(f: Int): Bitmap = thumbs.getOrPut(f) { Exporter.frame(doc, f, 72 * d / max(doc.w, doc.h), transparent = false) }
 
     private fun drawTimeline(c: Canvas) {
         p.color = 0xFF2B2830.toInt(); c.drawRect(tl, p)
         key(c, tPrev, "◀"); key(c, tPlay, if (playing) "■" else "▶", playing, Snes.GREEN); key(c, tNext, "▶|")
-        key(c, tDel, "− frame", false); key(c, tAdd, "+ frame"); key(c, tOnion, "Onion", onion, 0xFFD84040.toInt()); key(c, tFps, "${doc.fps} fps")
-        thumbRects.clear()
+        key(c, tDel, "✕ Delete frame", doc.frames > 1, 0xFFC0392B.toInt()); key(c, tAdd, "+ frame"); key(c, tOnion, "Onion", onion, 0xFFD84040.toInt()); key(c, tFps, "${doc.fps} fps")
+        thumbRects.clear(); delBadge.setEmpty()
         val th = tStrip.height(); val tw = th * doc.w / doc.h.toFloat()
         val per = max(1, ((tStrip.width() + 4 * d) / (tw + 4 * d)).toInt())
         val first = (frame - per / 2).coerceIn(0, max(0, doc.frames - per))
@@ -419,6 +420,14 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
             p.style = Paint.Style.STROKE; p.strokeWidth = if (f == frame) 3 * d else 1 * d; p.color = if (f == frame) Snes.YELLOW else 0xFF6E6C78.toInt(); c.drawRect(r, p); p.style = Paint.Style.FILL
             txt.textSize = 9 * d; txt.color = Snes.INK; c.drawText("${f + 1}", r.left + 8 * d, r.bottom - 4 * d, txt)
             thumbRects += r to f
+            if (f == frame && doc.frames > 1) {
+                // a red ✕ in the corner of the frame you're on: tap it to delete that frame
+                val br = min(11 * d, r.height() * 0.3f)
+                delBadge.set(r.right - br * 2 - 2 * d, r.top + 2 * d, r.right - 2 * d, r.top + 2 * d + br * 2)
+                p.color = Snes.INK; c.drawCircle(delBadge.centerX(), delBadge.centerY(), br, p)
+                p.color = 0xFFC0392B.toInt(); c.drawCircle(delBadge.centerX(), delBadge.centerY(), br - 1.5f * d, p)
+                txt.color = Color.WHITE; txt.textSize = br * 1.3f; c.drawText("✕", delBadge.centerX(), delBadge.centerY() + br * 0.45f, txt)
+            }
         }
         c.restore()
     }
@@ -470,7 +479,7 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
                     board.contains(x, y) && tool == Tool.MOVE && placing == null && sel == null -> { startLayerXf(); if (xf != null) { xfDown(x, y); Mode.XF } else Mode.NONE }
                     board.contains(x, y) && placing != null -> { gX = x; gY = y; Mode.PLACE }
                     board.contains(x, y) -> { startDraw(e); Mode.DRAW }
-                    else -> { uiTarget = (listOf(bDone, bUndo, bRedo, bZoom, bLayers, bMore, bColor, tPrev, tPlay, tNext, tAdd, tDel, tOnion, tFps) + toolRects + swatchRects + thumbRects.map { it.first }).firstOrNull { it.contains(x, y) }; Mode.UI }
+                    else -> { uiTarget = (listOf(bDone, bUndo, bRedo, bZoom, bLayers, bMore, bColor, tPrev, tPlay, tNext, tAdd, tDel, tOnion, tFps, delBadge) + toolRects + swatchRects + thumbRects.map { it.first }).firstOrNull { it.contains(x, y) }; Mode.UI }
                 }
                 invalidate()
             }
@@ -927,6 +936,7 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
             tPlay -> if (playing) stopPlay() else startPlay()
             tAdd -> addFrame(copy = long)
             tDel -> deleteFrameAt(frame)
+            delBadge -> deleteFrameAt(frame)
             tOnion -> { onion = !onion; invalidate() }
             tFps -> fpsMenu()
             else -> {

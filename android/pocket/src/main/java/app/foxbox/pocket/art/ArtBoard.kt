@@ -131,8 +131,11 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
     /** Jumps along the timeline: 1 s, 5 s, 30 s or 1 min of frames at a time. */
     private val STEPS = intArrayOf(1, 5, 30, 60); private var stepIdx = 0
     private fun stepLabel() = when (val sec = STEPS[stepIdx]) { 60 -> "1m"; else -> "${sec}s" }
-    /** A copied frame: each animated layer's steps. */
-    private var clip: Map<Layer, List<Op>>? = null; private var clipFrom = 0
+    /** Copied frames, in the order they'll be pasted (each: every animated layer's steps). */
+    private var clip: List<Map<Layer, List<Op>>>? = null
+    private var clipLabel = ""
+    /** Choosing frames to copy: 0 not choosing, 1 waiting for the first frame, 2 for the last. */
+    private var copyStage = 0; private var copyFirst = -1
     private val ctxKeys = Array(7) { RectF() }
     private var ctxLabels: List<String> = emptyList()
 
@@ -306,6 +309,12 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
         txt.textAlign = Paint.Align.CENTER
         drawContextBar(c)
         xf?.let { drawXfHandles(c, it) }
+        if (copyStage > 0 && timeline) {
+            val msg = if (copyStage == 1) "Copy: tap the FIRST frame (or Set first)" else "Copy: now tap the LAST frame (earlier = backwards)"
+            txt.textSize = 13 * d; val tw2 = txt.measureText(msg) + 24 * d
+            p.color = 0xE02E86C1.toInt(); c.drawRoundRect(board.centerX() - tw2 / 2, board.bottom - 40 * d, board.centerX() + tw2 / 2, board.bottom - 12 * d, 8 * d, 8 * d, p)
+            txt.color = Color.WHITE; c.drawText(msg, board.centerX(), board.bottom - 21 * d, txt)
+        }
     }
 
     private fun android.graphics.Rect.toRectF() = RectF(this)
@@ -413,7 +422,7 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
         key(c, tKeys[T_JB], "« ${stepLabel()}"); key(c, tKeys[T_PREV], "‹"); key(c, tKeys[T_PLAY], if (playing) "■" else "▶", playing, Snes.GREEN)
         key(c, tKeys[T_NEXT], "›"); key(c, tKeys[T_JF], "${stepLabel()} »"); key(c, tKeys[T_STEP], "Step ${stepLabel()}", true, Snes.PURPLE)
         key(c, tKeys[T_ADD], "+ Add", true, Snes.GREEN); key(c, tKeys[T_DEL], "✕ Delete", doc.frames > 1, 0xFFC0392B.toInt())
-        key(c, tKeys[T_COPY], "Copy", false); key(c, tKeys[T_PASTE], "Paste", clip != null, Snes.YELLOW)
+        key(c, tKeys[T_COPY], when (copyStage) { 1 -> "Set first"; 2 -> "Set last"; else -> "Copy" }, copyStage > 0, 0xFF2E86C1.toInt()); key(c, tKeys[T_PASTE], "Paste", clip != null, Snes.YELLOW)
         key(c, tKeys[T_ONION], "Onion", onion, 0xFFD84040.toInt()); key(c, tKeys[T_FPS], "${doc.fps} fps")
         thumbRects.clear(); delBadge.setEmpty()
         val th = tStrip.height(); val tw = th * doc.w / doc.h.toFloat()
@@ -427,6 +436,11 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
             p.style = Paint.Style.STROKE; p.strokeWidth = if (f == frame) 3 * d else 1 * d; p.color = if (f == frame) Snes.YELLOW else 0xFF6E6C78.toInt(); c.drawRect(r, p); p.style = Paint.Style.FILL
             txt.textSize = 9 * d; txt.color = Snes.INK; c.drawText("${f + 1}", r.left + 8 * d, r.bottom - 4 * d, txt)
             thumbRects += r to f
+            if (copyStage == 2 && f == copyFirst) {
+                // the first frame of the stretch being copied
+                p.style = Paint.Style.STROKE; p.strokeWidth = 4 * d; p.color = 0xFF2E86C1.toInt(); c.drawRect(r, p); p.style = Paint.Style.FILL
+                txt.textSize = 9 * d; txt.color = Color.WHITE; p.color = 0xFF2E86C1.toInt(); c.drawRect(r.left, r.top, r.left + 30 * d, r.top + 13 * d, p); c.drawText("first", r.left + 15 * d, r.top + 10 * d, txt)
+            }
             if (f == frame && doc.frames > 1) {
                 // a red ✕ in the corner of the frame you're on: tap it to delete that frame
                 val br = min(11 * d, r.height() * 0.3f)
@@ -931,7 +945,7 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
         }
         val tk = tKeys.indexOfFirst { it === t }
         if (tk >= 0) { timelineKey(tk); return }
-        thumbRects.firstOrNull { it.first === t }?.let { (_, f) -> if (long) frameMenu(f) else goFrame(f); return }
+        thumbRects.firstOrNull { it.first === t }?.let { (_, f) -> if (copyStage > 0) markCopy(f) else if (long) frameMenu(f) else goFrame(f); return }
         when (t) {
             bDone -> finish()
             bUndo -> { history.removeLastOrNull()?.let { it.undo(); redos += it }; onionDirty = true }
@@ -1138,26 +1152,47 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
         invalidate()
     }
 
-    /** Remembers the frame on screen (every animated layer's drawing on it). */
+    /** Copy: choose the first frame, then the last (tap a thumbnail, or Set first / Set last for the frame on screen). */
     private fun copyFrame() {
-        clip = doc.layers.filter { it.animated }.associateWith { ArrayList(it.cel(frame)) }
-        clipFrom = frame
-        toast("Frame ${frame + 1} copied: Paste puts it after the frame on screen")
+        when (copyStage) {
+            0 -> { copyStage = 1; toast("Copy: tap the first frame (or Set first for the frame on screen)") }
+            else -> markCopy(frame)
+        }
     }
 
-    /** Puts the copied frame in, right after the frame on screen. */
+    private fun markCopy(f: Int) {
+        if (copyStage == 1) {
+            copyFirst = f; copyStage = 2
+            toast("First: frame ${f + 1}. Now the last frame (an earlier one copies them backwards)")
+            return
+        }
+        val a = copyFirst; val b = f
+        copyStage = 0; copyFirst = -1
+        // first → last, in that order: picking an earlier frame as the last runs them backwards
+        val order = if (a <= b) (a..b).toList() else (a downTo b).toList()
+        clip = order.map { fr -> doc.layers.filter { it.animated }.associateWith { l -> ArrayList(l.cel(fr)) as List<Op> } }
+        clipLabel = if (order.size == 1) "frame ${a + 1}" else "frames ${a + 1}–${b + 1}${if (a > b) " (backwards)" else ""}"
+        toast("Copied $clipLabel: Paste puts ${if (order.size == 1) "it" else "them"} after the frame on screen")
+        invalidate()
+    }
+
+    /** Puts the copied frames in, in order, right after the frame on screen. */
     private fun pasteFrame() {
-        val c = clip ?: return toast("Copy a frame first")
+        copyStage = 0; copyFirst = -1
+        val c = clip ?: return toast("Copy some frames first")
         stopPlay()
         val at = frame + 1
-        fun put() { doc.insertFrame(at, null); for ((l, ops) in c) if (l in doc.layers) l.cel(at).addAll(ops); thumbs.clear(); onionDirty = true }
+        fun put() {
+            for ((k, fr) in c.withIndex()) { doc.insertFrame(at + k, null); for ((l, ops) in fr) if (l in doc.layers) l.cel(at + k).addAll(ops) }
+            thumbs.clear(); onionDirty = true
+        }
         put()
         did(object : Act() {
-            override fun undo() { doc.deleteFrame(at); thumbs.clear(); if (frame >= doc.frames) frame = doc.frames - 1; for (l in doc.layers) if (l.animated) rebuild(l); onionDirty = true }
+            override fun undo() { repeat(c.size) { doc.deleteFrame(at) }; thumbs.clear(); if (frame >= doc.frames) frame = doc.frames - 1; for (l in doc.layers) if (l.animated) rebuild(l); onionDirty = true }
             override fun redo() { put() }
         })
         goFrame(at)
-        toast("Frame ${clipFrom + 1} pasted as frame ${at + 1}")
+        toast("Pasted $clipLabel as frame${if (c.size > 1) "s ${at + 1}–${at + c.size}" else " ${at + 1}"}")
     }
 
     /** Takes out frame `f` (undo brings it back); the last frame can't go. */
@@ -1285,6 +1320,7 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
     fun back() {
         when {
             playing -> stopPlay()
+            copyStage > 0 -> { copyStage = 0; copyFirst = -1; invalidate() }
             xf != null -> { xf = null; invalidate() }
             placing != null -> { placing = null; invalidate() }
             sel != null -> { sel = null; selLoop = null; invalidate() }

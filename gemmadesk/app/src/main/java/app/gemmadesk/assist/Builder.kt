@@ -47,7 +47,9 @@ object Builder {
     private fun overlapY(a: Item, b: Item) = minOf(a.bottom(), b.bottom()) - maxOf(a.y, b.y)
 
     fun describe(i: Item): String {
-        val t = i.text.replace("\"", "'").replace("\n", " / ")
+        val lines = i.text.split('\n').map { it.trim().replace("\"", "'") }.filter { it.isNotEmpty() }
+        // several lines are listed separately, so they're kept as separate lines (never joined with symbols)
+        val t = if (lines.size <= 1) lines.firstOrNull() ?: "" else lines.mapIndexed { k, l -> "line ${k + 1}: \"$l\"" }.joinToString(", ")
         val style = buildList {
             if (i.type != "divider") add("${i.fontSize}px${if (i.bold) " bold" else ""}")
             if (i.type != "divider" && i.color.isNotBlank()) add("text ${i.color}")
@@ -57,8 +59,8 @@ object Builder {
         }.joinToString(", ")
         val size = "${i.w}×${i.h}px at x=${i.x}"
         return when (i.type) {
-            "heading" -> "heading \"$t\" ($style)"
-            "text" -> "paragraph \"$t\" ($style)"
+            "heading" -> if (lines.size > 1) "heading in ${lines.size} lines — $t ($style)" else "heading \"$t\" ($style)"
+            "text" -> if (lines.size > 1) "text block in ${lines.size} separate lines (the first is a short title) — $t ($style)" else "paragraph \"$t\" ($style)"
             "button" -> "button \"$t\" ($style${if (i.link.isNotBlank()) ", goes to ${i.link}" else ""}, $size)"
             "link" -> "link \"$t\" to ${i.link.ifBlank { "#" }} ($style)"
             "image" -> "image placeholder showing \"$t\" ($size, $style)"

@@ -124,7 +124,7 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
     private val bColor = RectF(); private val sizeBar = RectF(); private val opBar = RectF(); private val smoothBar = RectF()
     private val swatchRects = Array(12) { RectF() }
     private val tPrev = RectF(); private val tPlay = RectF(); private val tNext = RectF(); private val tAdd = RectF(); private val tOnion = RectF(); private val tFps = RectF(); private val tStrip = RectF()
-    private val ctxKeys = Array(6) { RectF() }
+    private val ctxKeys = Array(7) { RectF() }
     private var ctxLabels: List<String> = emptyList()
 
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -252,7 +252,8 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
         for ((i, l) in doc.layers.withIndex()) {
             if (!l.visible) continue
             val b = bmpOf(l)
-            if (i == active && tool == Tool.MOVE && (moveDx != 0f || moveDy != 0f)) { bmpP.alpha = (l.opacity * 255).toInt(); c.drawBitmap(b, moveDx, moveDy, bmpP); bmpP.alpha = 255; continue }
+            val x = xf
+            if (x != null && x.layer === l) { drawXfLayer(c, l, b, x); continue }
             if (i == active && liveN > 0 && (Tool.isBrush(tool) || Tool.isShape(tool))) {
                 c.saveLayerAlpha(0f, 0f, doc.w.toFloat(), doc.h.toFloat(), (l.opacity * 255).toInt())
                 c.drawBitmap(b, 0f, 0f, bmpP)
@@ -286,6 +287,7 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
         c.drawText(label, board.left + 10 * d, board.bottom - 8 * d, txt)
         txt.textAlign = Paint.Align.CENTER
         drawContextBar(c)
+        xf?.let { drawXfHandles(c, it) }
     }
 
     private fun android.graphics.Rect.toRectF() = RectF(this)
@@ -354,7 +356,7 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
         when (tool) {
             Tool.FILL -> { c.drawText("Fill reaches: ${tolName(fillTol)}", sizeBar.left, sizeBar.top - 8 * d, txt); slider(c, sizeBar, fillTol / 120f) }
             Tool.MAGIC -> { c.drawText("Magic: ${tolName(magicTol)}", sizeBar.left, sizeBar.top - 8 * d, txt); slider(c, sizeBar, magicTol / 120f) }
-            Tool.LASSO, Tool.MOVE, Tool.PICK -> { c.drawText(when (tool) { Tool.LASSO -> "Draw round what to select"; Tool.MOVE -> "Drag to move this layer"; else -> "Tap to pick a colour" }, sizeBar.left, sizeBar.top - 8 * d, txt) }
+            Tool.LASSO, Tool.MOVE, Tool.PICK -> { c.drawText(when (tool) { Tool.LASSO -> "Draw round what to select"; Tool.MOVE -> "Drag to move · corners resize · ⟳ knob turns"; else -> "Tap to pick a colour" }, sizeBar.left, sizeBar.top - 8 * d, txt) }
             else -> {
                 val size = toolSize[tool]
                 c.drawText("Size: ${size.toInt()} px", sizeBar.left, sizeBar.top - 8 * d, txt)
@@ -410,8 +412,9 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
     // ---- the context bar: selection or placing actions
     private fun drawContextBar(c: Canvas) {
         ctxLabels = when {
+            xf != null -> listOf("Apply", "Reset", "", "", "", "", "Cancel")
             placing != null -> listOf("Place", "Size…", "Shape…", "Fit", "Fill", "Cancel")
-            sel != null -> listOf("Remove", "Keep only", "To new layer", if (selLoop != null) "Tighter" else "", if (selLoop != null) "Looser" else "", "Cancel")
+            sel != null -> listOf("Remove", "Keep only", "To new layer", "Turn / size", if (selLoop != null) "Tighter" else "", if (selLoop != null) "Looser" else "", "Cancel")
             else -> emptyList()
         }
         if (ctxLabels.isEmpty()) { ctxKeys.forEach { it.setEmpty() }; return }
@@ -426,7 +429,7 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
     // Touch
     // =====================================================================================
 
-    private enum class Mode { NONE, DRAW, GESTURE, UI, SLIDER, PLACE }
+    private enum class Mode { NONE, DRAW, GESTURE, UI, SLIDER, PLACE, XF }
     private var mode = Mode.NONE
     private var dragBar: RectF? = null
     private var downT = 0L
@@ -449,13 +452,15 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
                 mode = when {
                     ctxHit != null -> { uiTarget = ctxHit; Mode.UI }
                     dragBar != null -> { setSlider(x); Mode.SLIDER }
+                    board.contains(x, y) && xf != null -> { xfDown(x, y); Mode.XF }
+                    board.contains(x, y) && tool == Tool.MOVE && placing == null && sel == null -> { startLayerXf(); if (xf != null) { xfDown(x, y); Mode.XF } else Mode.NONE }
                     board.contains(x, y) && placing != null -> { gX = x; gY = y; Mode.PLACE }
                     board.contains(x, y) -> { startDraw(e); Mode.DRAW }
                     else -> { uiTarget = (listOf(bDone, bUndo, bRedo, bZoom, bLayers, bMore, bColor, tPrev, tPlay, tNext, tAdd, tOnion, tFps) + toolRects + swatchRects + thumbRects.map { it.first }).firstOrNull { it.contains(x, y) }; Mode.UI }
                 }
                 invalidate()
             }
-            MotionEvent.ACTION_POINTER_DOWN -> if (e.pointerCount == 2 && (mode == Mode.DRAW || mode == Mode.NONE || mode == Mode.PLACE)) {
+            MotionEvent.ACTION_POINTER_DOWN -> if (e.pointerCount == 2 && mode == Mode.XF) { xfTwoStart(e) } else if (e.pointerCount == 2 && (mode == Mode.DRAW || mode == Mode.NONE || mode == Mode.PLACE)) {
                 if (mode == Mode.DRAW) { liveN = 0; moveDx = 0f; moveDy = 0f }
                 if (mode != Mode.PLACE) mode = Mode.GESTURE
                 gSpan = hypot(e.getX(0) - e.getX(1), e.getY(0) - e.getY(1)); gX = (e.getX(0) + e.getX(1)) / 2; gY = (e.getY(0) + e.getY(1)) / 2
@@ -465,6 +470,7 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
                 Mode.DRAW -> { moveDraw(e); invalidate() }
                 Mode.SLIDER -> { setSlider(e.x); invalidate() }
                 Mode.PLACE -> { movePlace(e); invalidate() }
+                Mode.XF -> { xfMove(e); invalidate() }
                 Mode.GESTURE -> if (e.pointerCount >= 2) {
                     val span = hypot(e.getX(0) - e.getX(1), e.getY(0) - e.getY(1)); val fx = (e.getX(0) + e.getX(1)) / 2; val fy = (e.getY(0) + e.getY(1)) / 2
                     var f = if (gSpan > 10f) span / gSpan else 1f
@@ -475,7 +481,7 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
                 }
                 else -> {}
             }
-            MotionEvent.ACTION_POINTER_UP -> if ((mode == Mode.GESTURE || mode == Mode.PLACE) && e.pointerCount == 2) {
+            MotionEvent.ACTION_POINTER_UP -> if (mode == Mode.XF && e.pointerCount == 2) { val keep = 1 - e.actionIndex; xfDrag = XF_MOVE; xfLast[0] = e.getX(keep); xfLast[1] = e.getY(keep) } else if ((mode == Mode.GESTURE || mode == Mode.PLACE) && e.pointerCount == 2) {
                 val keep = 1 - e.actionIndex; gX = e.getX(keep); gY = e.getY(keep); gSpan = 0f
             }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
@@ -682,6 +688,175 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
         thumbs.clear(); invalidate()
     }
 
+    // ---- turning and resizing (a whole layer, or what's selected)
+
+    /** What's being turned and resized: a layer (piece == null) or a selected piece of it. */
+    private class Xf(val layer: Layer, val piece: Bitmap?, val sel: Selection?, val base: RectF) {
+        var tx = 0f; var ty = 0f; var s = 1f; var rot = 0f
+    }
+    private var xf: Xf? = null
+    private var xfDrag = 0
+    private val XF_MOVE = 1; private val XF_SCALE = 2; private val XF_ROTATE = 3; private val XF_TWO = 4
+    private val xfLast = FloatArray(2)
+    private var xfStartAngle = 0f; private var xfStartRot = 0f; private var xfStartDist = 1f; private var xfStartS = 1f
+    private var xfSpan = 0f; private var xfAng = 0f; private var xfMidX = 0f; private var xfMidY = 0f
+
+    /** Art space → art space for the current turn / size / move (about the middle of the box). */
+    private fun xfMatrix(x: Xf): Matrix = Matrix().apply {
+        val cx = x.base.centerX(); val cy = x.base.centerY()
+        setTranslate(-cx, -cy); postScale(x.s, x.s); postRotate(x.rot); postTranslate(cx + x.tx, cy + x.ty)
+    }
+    /** Art point → screen point. */
+    private fun artToScreen(pts: FloatArray) { for (i in pts.indices step 2) { pts[i] += doc.ox; pts[i + 1] += doc.oy }; view.mapPoints(pts) }
+
+    private fun startLayerXf() {
+        if (xf != null) return
+        val l = doc.layers[active]
+        if (!l.visible) { toast("This layer is hidden: show it in Layers first"); return }
+        // the box hugs what's drawn on the layer
+        val b = bmpOf(l); val w = b.width; val h = b.height
+        val step = max(1, max(w, h) / 1024)
+        var minX = w; var minY = h; var maxX = -1; var maxY = -1
+        val row = IntArray(w)
+        var y = 0
+        while (y < h) {
+            b.getPixels(row, 0, w, 0, y, w, 1)
+            var x = 0
+            while (x < w) { if (row[x] ushr 24 != 0) { if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y }; x += step }
+            y += step
+        }
+        if (maxX < 0) { toast("Nothing on this layer to turn or resize"); return }
+        xf = Xf(l, null, null, RectF(minX - doc.ox, minY - doc.oy, maxX + step - doc.ox, maxY + step - doc.oy))
+        invalidate()
+    }
+
+    private fun startSelXf() {
+        val s = sel ?: return
+        val l = doc.layers[active]
+        val piece = Select.cut(bmpOf(l), s, doc.ox, doc.oy)
+        xf = Xf(l, piece, s, RectF(s.l.toFloat(), s.t.toFloat(), (s.l + s.mask.width).toFloat(), (s.t + s.mask.height).toFloat()))
+        sel = null; selLoop = null
+        invalidate()
+    }
+
+    private fun drawXfLayer(c: Canvas, l: Layer, b: Bitmap, x: Xf) {
+        val m = xfMatrix(x)
+        bmpP.alpha = (l.opacity * 255).toInt()
+        if (x.piece == null) {
+            c.save(); c.translate(doc.ox, doc.oy); c.concat(m); c.translate(-doc.ox, -doc.oy); c.drawBitmap(b, 0f, 0f, bmpP); c.restore()
+        } else {
+            val s = x.sel!!
+            // the layer with a hole where the piece came from, then the piece where it's going
+            c.saveLayerAlpha(0f, 0f, doc.w.toFloat(), doc.h.toFloat(), bmpP.alpha)
+            c.drawBitmap(b, 0f, 0f, null)
+            c.drawBitmap(s.mask, s.l + doc.ox, s.t + doc.oy, holeP)
+            c.restore()
+            c.save(); c.translate(doc.ox, doc.oy); c.concat(m); c.drawBitmap(x.piece, s.l.toFloat(), s.t.toFloat(), bmpP); c.restore()
+        }
+        bmpP.alpha = 255
+    }
+    private val holeP = Paint().apply { xfermode = android.graphics.PorterDuffXfermode(PorterDuff.Mode.DST_OUT) }
+
+    /** The box's corners, the middle of its top edge, its centre and the rotate knob, on screen. */
+    private fun xfScreen(x: Xf): FloatArray {
+        val b = x.base
+        val pts = floatArrayOf(b.left, b.top, b.right, b.top, b.right, b.bottom, b.left, b.bottom, b.centerX(), b.top, b.centerX(), b.centerY())
+        xfMatrix(x).mapPoints(pts); artToScreen(pts)
+        // the knob: out from the top edge, away from the middle
+        var dx = pts[8] - pts[10]; var dy = pts[9] - pts[11]; val len = hypot(dx, dy).coerceAtLeast(1f)
+        dx /= len; dy /= len
+        return pts + floatArrayOf(pts[8] + dx * 34 * d, pts[9] + dy * 34 * d)
+    }
+
+    private fun drawXfHandles(c: Canvas, x: Xf) {
+        val q = xfScreen(x)
+        dash.color = 0xFFFFC107.toInt(); dash.strokeWidth = 2 * d
+        val path = android.graphics.Path(); path.moveTo(q[0], q[1]); path.lineTo(q[2], q[3]); path.lineTo(q[4], q[5]); path.lineTo(q[6], q[7]); path.close()
+        c.drawPath(path, dash)
+        p.color = 0xFFFFC107.toInt(); p.strokeWidth = 2 * d; c.drawLine(q[8], q[9], q[12], q[13], p)
+        for (k in 0 until 4) { p.color = Snes.INK; c.drawRect(q[k * 2] - 9 * d, q[k * 2 + 1] - 9 * d, q[k * 2] + 9 * d, q[k * 2 + 1] + 9 * d, p); p.color = Color.WHITE; c.drawRect(q[k * 2] - 7 * d, q[k * 2 + 1] - 7 * d, q[k * 2] + 7 * d, q[k * 2 + 1] + 7 * d, p) }
+        p.color = Snes.INK; c.drawCircle(q[12], q[13], 13 * d, p); p.color = 0xFFFFC107.toInt(); c.drawCircle(q[12], q[13], 11 * d, p)
+        txt.color = Snes.INK; txt.textSize = 13 * d; c.drawText("⟳", q[12], q[13] + 5 * d, txt)
+        // how it's turned and sized, under the board's top
+        val deg = ((x.rot % 360f) + 360f) % 360f
+        txt.color = Color.WHITE; txt.textSize = 13 * d
+        c.drawText("${"%.0f".format(if (deg > 180f) deg - 360f else deg)}°  ·  ${(x.s * 100).roundToInt()}%", board.centerX(), ctx.bottom + 22 * d, txt)
+    }
+
+    private fun xfDown(sx: Float, sy: Float) {
+        val x = xf ?: return
+        val q = xfScreen(x)
+        val cx = q[10]; val cy = q[11]
+        xfLast[0] = sx; xfLast[1] = sy
+        when {
+            hypot(sx - q[12], sy - q[13]) < 28 * d -> { xfDrag = XF_ROTATE; xfStartAngle = Math.toDegrees(kotlin.math.atan2((sy - cy).toDouble(), (sx - cx).toDouble())).toFloat(); xfStartRot = x.rot }
+            (0 until 4).any { hypot(sx - q[it * 2], sy - q[it * 2 + 1]) < 28 * d } -> { xfDrag = XF_SCALE; xfStartDist = hypot(sx - cx, sy - cy).coerceAtLeast(1f); xfStartS = x.s }
+            else -> xfDrag = XF_MOVE
+        }
+    }
+
+    private fun xfTwoStart(e: MotionEvent) {
+        xfDrag = XF_TWO
+        xfSpan = hypot(e.getX(0) - e.getX(1), e.getY(0) - e.getY(1)).coerceAtLeast(1f)
+        xfAng = Math.toDegrees(kotlin.math.atan2((e.getY(1) - e.getY(0)).toDouble(), (e.getX(1) - e.getX(0)).toDouble())).toFloat()
+        xfMidX = (e.getX(0) + e.getX(1)) / 2; xfMidY = (e.getY(0) + e.getY(1)) / 2
+    }
+
+    private fun xfMove(e: MotionEvent) {
+        val x = xf ?: return
+        val k = scaleNow()
+        when (xfDrag) {
+            XF_MOVE -> { x.tx += (e.x - xfLast[0]) / k; x.ty += (e.y - xfLast[1]) / k; xfLast[0] = e.x; xfLast[1] = e.y }
+            XF_SCALE -> { val q = xfScreen(x); x.s = (xfStartS * hypot(e.x - q[10], e.y - q[11]) / xfStartDist).coerceIn(0.05f, 20f) }
+            XF_ROTATE -> {
+                val q = xfScreen(x)
+                val a = Math.toDegrees(kotlin.math.atan2((e.y - q[11]).toDouble(), (e.x - q[10]).toDouble())).toFloat()
+                var rot = xfStartRot + (a - xfStartAngle)
+                // any angle, with a gentle catch at the right angles and 45s
+                val near = (rot / 45f).roundToInt() * 45f
+                if (abs(rot - near) < 2.5f) rot = near
+                x.rot = rot
+            }
+            XF_TWO -> if (e.pointerCount >= 2) {
+                val span = hypot(e.getX(0) - e.getX(1), e.getY(0) - e.getY(1)).coerceAtLeast(1f)
+                val ang = Math.toDegrees(kotlin.math.atan2((e.getY(1) - e.getY(0)).toDouble(), (e.getX(1) - e.getX(0)).toDouble())).toFloat()
+                val mx = (e.getX(0) + e.getX(1)) / 2; val my = (e.getY(0) + e.getY(1)) / 2
+                x.s = (x.s * span / xfSpan).coerceIn(0.05f, 20f)
+                var da = ang - xfAng; if (da > 180f) da -= 360f; if (da < -180f) da += 360f
+                x.rot += da
+                x.tx += (mx - xfMidX) / k; x.ty += (my - xfMidY) / k
+                xfSpan = span; xfAng = ang; xfMidX = mx; xfMidY = my
+            }
+        }
+    }
+
+    private fun applyXf() {
+        val x = xf ?: return
+        xf = null
+        if (x.tx == 0f && x.ty == 0f && x.s == 1f && x.rot % 360f == 0f) { invalidate(); return }
+        val l = x.layer
+        if (x.piece == null) {
+            val v = FloatArray(9); xfMatrix(x).getValues(v)
+            addOp(l, Op.Transform(floatArrayOf(v[0], v[1], v[2], v[3], v[4], v[5])))
+        } else {
+            // the piece leaves its place and comes back turned and resized, all one step
+            val s = x.sel!!
+            val mid = ArtDoc.newId(); doc.saveBitmap(mid, s.mask)
+            val pid = ArtDoc.newId(); doc.saveBitmap(pid, x.piece)
+            val w = s.mask.width * x.s; val h = s.mask.height * x.s
+            val cx = x.base.centerX() + x.tx; val cy = x.base.centerY() + x.ty
+            val hole = Op.Mask(mid, s.l, s.t, false)
+            val img = Op.Image(pid, cx - w / 2, cy - h / 2, w, h, x.rot)
+            val f = frame
+            l.cel(f) += hole; l.cel(f) += img; rebuild(l)
+            did(object : Act() {
+                override fun undo() { l.cel(f).remove(img); l.cel(f).remove(hole); if (f == frame) rebuild(l) else thumbs.remove(f) }
+                override fun redo() { l.cel(f) += hole; l.cel(f) += img; if (f == frame) rebuild(l) else thumbs.remove(f) }
+            })
+        }
+        thumbs.remove(frame); onionDirty = true; invalidate()
+    }
+
     // ---- selection actions
     private fun selAction(which: Int) {
         val s = sel ?: return
@@ -705,8 +880,9 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
                     override fun redo() { liftIn() }
                 })
             }
-            3 -> { selLoop?.let { magicTol = (magicTol * 0.6f).toInt().coerceAtLeast(6); runMagic(it, magicTol) }; return }
-            4 -> { selLoop?.let { magicTol = (magicTol * 1.6f).toInt().coerceAtMost(120); runMagic(it, magicTol) }; return }
+            3 -> { startSelXf(); return }
+            4 -> { selLoop?.let { magicTol = (magicTol * 0.6f).toInt().coerceAtLeast(6); runMagic(it, magicTol) }; return }
+            5 -> { selLoop?.let { magicTol = (magicTol * 1.6f).toInt().coerceAtMost(120); runMagic(it, magicTol) }; return }
         }
         sel = null; selLoop = null; thumbs.remove(frame); invalidate()
     }
@@ -718,8 +894,9 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
     private fun press(t: RectF, long: Boolean) {
         val ci = ctxKeys.indexOf(t)
         if (ci >= 0 && !t.isEmpty) {
-            if (placing != null) when (ci) { 0 -> commitPlace(); 1 -> placeSize(); 2 -> placeShape(); 3 -> { fitPlace(true); invalidate() }; 4 -> { fitPlace(false); invalidate() }; else -> { placing = null; invalidate() } }
-            else when (ci) { 5 -> { sel = null; selLoop = null; invalidate() }; else -> selAction(ci) }
+            if (xf != null) when (ci) { 0 -> applyXf(); 1 -> { xf?.let { it.tx = 0f; it.ty = 0f; it.s = 1f; it.rot = 0f }; invalidate() }; else -> { xf = null; invalidate() } }
+            else if (placing != null) when (ci) { 0 -> commitPlace(); 1 -> placeSize(); 2 -> placeShape(); 3 -> { fitPlace(true); invalidate() }; 4 -> { fitPlace(false); invalidate() }; else -> { placing = null; invalidate() } }
+            else when (ci) { 6 -> { sel = null; selLoop = null; invalidate() }; else -> selAction(ci) }
             return
         }
         thumbRects.firstOrNull { it.first === t }?.let { (_, f) -> if (long) frameMenu(f) else goFrame(f); return }
@@ -739,7 +916,7 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
             tFps -> fpsMenu()
             else -> {
                 val ti = toolRects.indexOf(t)
-                if (ti >= 0) { tool = ti; if (ti != Tool.LASSO && ti != Tool.MAGIC) { sel = null; selLoop = null }; return }
+                if (ti >= 0) { tool = ti; if (ti != Tool.MOVE) xf = null; if (ti != Tool.LASSO && ti != Tool.MAGIC) { sel = null; selLoop = null }; if (ti == Tool.MOVE) startLayerXf(); return }
                 val si = swatchRects.indexOf(t)
                 if (si >= 0) (recent + SWATCHES.toList()).distinct().getOrNull(si)?.let { color = it; if (tool == Tool.ERASER || tool == Tool.PICK) tool = Tool.PEN }
             }
@@ -830,6 +1007,7 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
         val l = doc.layers[i]
         val dlg = SnesDialog(a, l.name)
         dlg.item("Draw on this layer", Snes.GREEN, i == active) { active = i; invalidate() }
+        dlg.item("Turn and resize this layer", Snes.accent(2)) { active = i; sel = null; selLoop = null; tool = Tool.MOVE; startLayerXf(); invalidate() }
         dlg.item(if (l.visible) "Hide" else "Show", Snes.YELLOW) { l.visible = !l.visible; thumbs.clear(); invalidate() }
         dlg.item("Opacity: ${(l.opacity * 100).toInt()}%", Snes.PURPLE) {
             val steps = listOf(1f, 0.75f, 0.5f, 0.25f)
@@ -1032,6 +1210,7 @@ class ArtBoard(private val a: Activity, val doc: ArtDoc, private val host: Host)
     fun back() {
         when {
             playing -> stopPlay()
+            xf != null -> { xf = null; invalidate() }
             placing != null -> { placing = null; invalidate() }
             sel != null -> { sel = null; selLoop = null; invalidate() }
             else -> finish()

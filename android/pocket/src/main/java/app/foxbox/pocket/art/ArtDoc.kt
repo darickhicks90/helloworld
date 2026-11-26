@@ -22,7 +22,7 @@ object Tool {
     const val PEN = 0; const val PENCIL = 1; const val MARKER = 2; const val AIR = 3; const val ERASER = 4
     const val FILL = 5; const val LINE = 6; const val BOX = 7; const val OVAL = 8; const val PICK = 9
     const val LASSO = 10; const val MAGIC = 11; const val MOVE = 12
-    val NAMES = arrayOf("Pen", "Pencil", "Marker", "Air", "Eraser", "Fill", "Line", "Box", "Oval", "Pick", "Lasso", "Magic", "Move")
+    val NAMES = arrayOf("Pen", "Pencil", "Marker", "Air", "Eraser", "Fill", "Line", "Box", "Oval", "Pick", "Lasso", "Magic", "Move ⟳")
     fun isBrush(t: Int) = t <= ERASER
     fun isShape(t: Int) = t == LINE || t == BOX || t == OVAL
 }
@@ -36,12 +36,14 @@ sealed class Op {
     class Stroke(val tool: Int, val color: Int, val size: Float, val opacity: Float, val pts: FloatArray) : Op()
     /** Flood fill from (x, y) with a colour; `tol` how different a neighbour may be (0..255). */
     class Fill(val x: Float, val y: Float, val color: Int, val tol: Int) : Op()
-    /** A picture (stored as a PNG in the drawing's folder) drawn into a rectangle. */
-    class Image(val id: String, val l: Float, val t: Float, val w: Float, val h: Float) : Op()
+    /** A picture (stored as a PNG in the drawing's folder) drawn into a rectangle, turned `rot` degrees about its middle. */
+    class Image(val id: String, val l: Float, val t: Float, val w: Float, val h: Float, val rot: Float = 0f) : Op()
     /** A selection: remove what's inside it (keep = false) or everything outside it (keep = true). */
     class Mask(val id: String, val l: Int, val t: Int, val keep: Boolean) : Op()
     /** Move everything drawn so far on this layer. */
     class Shift(val dx: Float, val dy: Float) : Op()
+    /** Move, turn and resize everything drawn so far on this layer (an art-space matrix: a, b, c, d, e, f). */
+    class Transform(val m: FloatArray) : Op()
 }
 
 class Layer(var name: String, var animated: Boolean) {
@@ -127,7 +129,10 @@ class ArtDoc(val dir: File) {
     fun apply(c: Canvas, bmp: Bitmap, op: Op, scale: Float = 1f) {
         when (op) {
             is Op.Stroke -> stroke(c, op)
-            is Op.Image -> bitmap(op.id)?.let { b -> r.set(op.l, op.t, op.l + op.w, op.t + op.h); ip.xfermode = null; c.drawBitmap(b, null, r, ip) }
+            is Op.Image -> bitmap(op.id)?.let { b ->
+                r.set(op.l, op.t, op.l + op.w, op.t + op.h); ip.xfermode = null
+                if (op.rot != 0f) { c.save(); c.rotate(op.rot, r.centerX(), r.centerY()); c.drawBitmap(b, null, r, ip); c.restore() } else c.drawBitmap(b, null, r, ip)
+            }
             is Op.Mask -> bitmap(op.id)?.let { m ->
                 r.set(op.l.toFloat(), op.t.toFloat(), (op.l + m.width).toFloat(), (op.t + m.height).toFloat())
                 if (op.keep) {
@@ -145,6 +150,16 @@ class ArtDoc(val dir: File) {
                 bmp.eraseColor(0)
                 val cc = Canvas(bmp)
                 cc.drawBitmap(copy, op.dx * scale, op.dy * scale, null)
+                copy.recycle()
+            }
+            is Op.Transform -> {
+                // the matrix works in art space; the bitmap is the canvas (art + origin), maybe scaled
+                val m = android.graphics.Matrix(); m.setValues(floatArrayOf(op.m[0], op.m[1], op.m[2], op.m[3], op.m[4], op.m[5], 0f, 0f, 1f))
+                val full = android.graphics.Matrix()
+                full.setScale(1f / scale, 1f / scale); full.postTranslate(-ox, -oy); full.postConcat(m); full.postTranslate(ox, oy); full.postScale(scale, scale)
+                val copy = bmp.copy(Bitmap.Config.ARGB_8888, false)
+                bmp.eraseColor(0)
+                Canvas(bmp).drawBitmap(copy, full, ip)
                 copy.recycle()
             }
             is Op.Fill -> fill(bmp, ((op.x + ox) * scale).toInt(), ((op.y + oy) * scale).toInt(), op.color, op.tol)
@@ -227,7 +242,8 @@ class ArtDoc(val dir: File) {
         is Op.Stroke -> JSONObject().put("k", "s").put("t", op.tool).put("c", op.color).put("s", op.size.toDouble()).put("o", op.opacity.toDouble())
             .put("p", JSONArray().apply { op.pts.forEach { v -> put((v * 10).toInt() / 10.0) } })
         is Op.Fill -> JSONObject().put("k", "f").put("x", op.x.toDouble()).put("y", op.y.toDouble()).put("c", op.color).put("tol", op.tol)
-        is Op.Image -> JSONObject().put("k", "i").put("id", op.id).put("l", op.l.toDouble()).put("t", op.t.toDouble()).put("w", op.w.toDouble()).put("h", op.h.toDouble())
+        is Op.Image -> JSONObject().put("k", "i").put("id", op.id).put("l", op.l.toDouble()).put("t", op.t.toDouble()).put("w", op.w.toDouble()).put("h", op.h.toDouble()).put("r", op.rot.toDouble())
+        is Op.Transform -> JSONObject().put("k", "tf").put("m", JSONArray().apply { op.m.forEach { put(it.toDouble()) } })
         is Op.Mask -> JSONObject().put("k", "m").put("id", op.id).put("l", op.l).put("t", op.t).put("keep", op.keep)
         is Op.Shift -> JSONObject().put("k", "sh").put("dx", op.dx.toDouble()).put("dy", op.dy.toDouble())
     }
@@ -235,7 +251,8 @@ class ArtDoc(val dir: File) {
     private fun opFrom(o: JSONObject): Op? = when (o.optString("k", "s")) {
         "s" -> o.getJSONArray("p").let { pa -> Op.Stroke(o.getInt("t"), o.getInt("c"), o.getDouble("s").toFloat(), o.getDouble("o").toFloat(), FloatArray(pa.length()) { pa.getDouble(it).toFloat() }) }
         "f" -> Op.Fill(o.getDouble("x").toFloat(), o.getDouble("y").toFloat(), o.getInt("c"), o.optInt("tol", 24))
-        "i" -> Op.Image(o.getString("id"), o.getDouble("l").toFloat(), o.getDouble("t").toFloat(), o.getDouble("w").toFloat(), o.getDouble("h").toFloat())
+        "i" -> Op.Image(o.getString("id"), o.getDouble("l").toFloat(), o.getDouble("t").toFloat(), o.getDouble("w").toFloat(), o.getDouble("h").toFloat(), o.optDouble("r", 0.0).toFloat())
+        "tf" -> o.getJSONArray("m").let { a -> Op.Transform(FloatArray(6) { a.getDouble(it).toFloat() }) }
         "m" -> Op.Mask(o.getString("id"), o.getInt("l"), o.getInt("t"), o.optBoolean("keep"))
         "sh" -> Op.Shift(o.getDouble("dx").toFloat(), o.getDouble("dy").toFloat())
         else -> null

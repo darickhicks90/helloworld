@@ -247,7 +247,7 @@ object FireEscape {
     }
 
     /** A block performance came back from the transport: keep it as a clip and lay it where it was played. */
-    fun performance(clips: List<Clip>, startTick: Double) = main.post {
+    fun performance(clips: List<Clip>, startTick: Double) { main.post {
         for (c in clips) {
             val e = Audio.engine(c.engine)
             val n = Studio.project.clips.count { it.engine == c.engine && it.arr } + 1
@@ -258,7 +258,7 @@ object FireEscape {
         }
         if (clips.isNotEmpty()) Studio.message("Laid " + clips.joinToString { it.name } + " on the Fire Escape")
         changed()
-    }
+    } }
 
     /** An audio take on the Fire Escape finished: kept whole (no rounding to bars) and laid where it started. */
     fun takeEnded(input: AudioIn, chans: List<Int>, startTick: Double) {

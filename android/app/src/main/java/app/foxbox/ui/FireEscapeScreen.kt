@@ -239,15 +239,43 @@ class FireEscapeScreen(c: Context, private val host: Host, private val fire: Fir
         }
         // only the effects added from the track's popup show here
         if (lane.isTrack && Audio.amps[lane.channel].on.on) strip.addView(AmpPanel(context, lane.channel, fire), lp(WRAP, WRAP).apply { rightMargin = Px.dp(6) })
-        val switches = setOf(fx.fOn, fx.cOn, fx.mOn, fx.wraith.on)
-        fx.effects.forEach { (name, on) ->
-            if (!on.on || name == "Wraith") return@forEach
-            val params = fx.p.sections[name]?.filter { it !in switches } ?: return@forEach
-            panel(name, params, if (params.size > 8) 5 else (params.size + 1) / 2) { on.set(0f) }
+        val hidden = setOf(fx.fOn, fx.cOn, fx.mOn, fx.wraith.on, fx.cSide, fx.mSide, fx.mBand)
+        fun knobs(name: String) = fx.p.sections[name]?.filter { it !in hidden } ?: emptyList()
+        fun box(name: String, cols: Int, remove: () -> Unit, build: (Panel, Int) -> Unit) {
+            val accent = Snes.accent(k++)
+            val pn = Panel(context, name, accent = accent)
+            build(pn, accent)
+            pn.addView(Btn(context, "Remove $name", Snes.RED).apply { onClick = { remove(); Studio.save(); buildFxAgain(); Studio.changed() } }, lp(Px.dp(74) * cols, Px.dp(34)).apply { topMargin = Px.dp(4) })
+            strip.addView(pn, lp(WRAP, WRAP).apply { rightMargin = Px.dp(6) })
+        }
+        fun flow(params: List<app.foxbox.audio.Param>, accent: Int) = Flow(context).apply { params.forEach { addView(Knob(context, it, accent)) } }
+        if (fx.fOn.on) box("Filter", 3, { fx.fOn.set(0f) }) { pn, acc -> pn.addView(flow(knobs("Filter"), acc), lp(Px.dp(74) * 3, WRAP)) }
+        if (fx.cOn.on) box("Compressor", 3, { fx.cOn.set(0f) }) { pn, acc ->
+            pn.addView(CompMeter(context, fx), lp(Px.dp(74) * 3, Px.dp(70)).apply { bottomMargin = Px.dp(4) })
+            pn.addView(Btn(context, "Sidechain: ${sidechainName(lane)}", Snes.PURPLE).apply { onClick = { chooseSidechain(lane, band = false) { buildFxAgain() } } }, lp(Px.dp(74) * 3, Px.dp(36)).apply { bottomMargin = Px.dp(4) })
+            pn.addView(flow(knobs("Compressor"), acc), lp(Px.dp(74) * 3, WRAP))
+        }
+        if (fx.mOn.on) box("Multiband", 5, { fx.mOn.set(0f) }) { pn, acc ->
+            pn.addView(BandGraph(context, fx), lp(Px.dp(74) * 5, Px.dp(110)).apply { bottomMargin = Px.dp(4) })
+            val row = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+            val bk = fx.bandKey
+            row.addView(Btn(context, "Sidechain: " + (if (bk < 0) "Off" else fx.sources.getOrElse(bk) { "?" }), Snes.PURPLE).apply { onClick = { chooseSidechain(lane, band = true) { buildFxAgain() } } }, lp(0, Px.dp(36), 1f))
+            row.addView(Btn(context, "Keyed band: " + fx.mBand.text(), Pal.AQUA).apply {
+                onClick = { fire.choose("Which band does the sidechain push down?", fx.mBand.choices, fx.mBand.index) { i -> fx.mBand.set(i.toFloat()); Studio.save(); buildFxAgain() } }
+            }, lp(0, Px.dp(36), 1f).apply { leftMargin = Px.dp(4) })
+            pn.addView(row, lp(Px.dp(74) * 5, Px.dp(38)).apply { bottomMargin = Px.dp(4) })
+            pn.addView(flow(knobs("Multiband"), acc), lp(Px.dp(74) * 5, WRAP))
         }
         if (fx.wraith.on.on) fx.wraith.p.sections.forEach { (name, params) ->
-            val ps = params.filter { it !in switches }
-            panel(name, ps, if (ps.size > 9) 5 else (ps.size + 1) / 2, if (name == "Wraith") ({ fx.wraith.on.set(0f) }) else null)
+            val ps = params.filter { it !== fx.wraith.on }
+            val cols = if (ps.size > 9) 5 else (ps.size + 1) / 2
+            if (name == "Wraith") box(name, cols, { fx.wraith.on.set(0f) }) { pn, acc -> pn.addView(flow(ps, acc), lp(Px.dp(74) * cols, WRAP)) }
+            else { val pn = Panel(context, name, accent = Snes.accent(k++)); pn.addView(flow(ps, Snes.accent(k)), lp(Px.dp(74) * cols, WRAP)); strip.addView(pn, lp(WRAP, WRAP).apply { rightMargin = Px.dp(6) }) }
+        }
+        // the Flowers effects that were added
+        fx.flowerFx.filter { it.toggle.on }.forEach { ff ->
+            val cols = maxOf(2, (ff.params.size + 1) / 2)
+            box(ff.name, cols, { ff.toggle.set(0f) }) { pn, acc -> pn.addView(flow(ff.params, acc), lp(Px.dp(74) * cols, WRAP)) }
         }
         if (strip.childCount == 0) strip.addView(Btn(context, "No effects on ${lane.title} yet: tap Track… (or the track's name) to add some", Pal.BROWN_L).apply { onClick = { openLanePopup(lane) } }, lp(WRAP, Px.dp(44)))
         box.addView(HorizontalScrollView(context).apply { addView(android.widget.ScrollView(context).apply { addView(strip) }) }, lp(MATCH, 0, 1f))
@@ -718,13 +746,15 @@ class FireEscapeScreen(c: Context, private val host: Host, private val fire: Fir
         return if (k < 0) "Off" else Audio.laneFx(lane.id).sources.getOrElse(k) { "?" }
     }
 
-    /** Pick where the lane's compressors listen (adds a compressor if it has none). */
-    private fun chooseSidechain(lane: FireEscape.Lane, then: () -> Unit = {}) {
+    /** Pick where the lane's compressor (or multiband) listens. */
+    private fun chooseSidechain(lane: FireEscape.Lane, band: Boolean = false, then: () -> Unit = {}) {
         val fx = Audio.laneFx(lane.id)
         val others = Audio.laneIds.indices.filter { Audio.laneIds[it] != lane.id && FireEscape.lane(Audio.laneIds[it]) != null }
-        fire.choose("${lane.title}: sidechain from", listOf("Off (listens to itself)") + others.map { fx.sources[it] }, if (fx.compKey < 0) 0 else others.indexOf(fx.compKey) + 1) { i ->
-            fx.setSidechain(if (i == 0) -1 else others[i - 1])
-            if (i > 0 && !fx.cOn.on && !fx.mOn.on) { fx.cOn.set(1f); Studio.message("Added a Compressor to ${lane.title}, keyed by ${fx.sources[others[i - 1]]}") }
+        val cur = if (band) fx.bandKey else fx.compKey
+        fire.choose("${lane.title} ${if (band) "multiband" else "compressor"}: sidechain from", listOf("Off (listens to itself)") + others.map { fx.sources[it] }, if (cur < 0) 0 else others.indexOf(cur) + 1) { i ->
+            val k = if (i == 0) -1 else others[i - 1]
+            if (band) fx.mSide.set((k + 1).toFloat()) else fx.cSide.set((k + 1).toFloat())
+            if (!band && k >= 0 && !fx.cOn.on) { fx.cOn.set(1f); Studio.message("Added a Compressor to ${lane.title}, keyed by ${fx.sources[k]}") }
             Studio.save(); Studio.changed(); then()
         }
     }
@@ -744,17 +774,27 @@ class FireEscapeScreen(c: Context, private val host: Host, private val fire: Fir
             box.addView(Slider(a, "Volume", { levelOf(lane) }, { setLevel(lane, it) }, { dbText(it) }), lp(MATCH, Px.dp(44)).apply { topMargin = Px.dp(6) })
             box.addView(Slider(a, "Pan", { (fx.pan.value + 1f) / 2f }, { v -> var x = v * 2f - 1f; if (abs(x) < 0.05f) x = 0f; fx.pan.set(x) },
                 { val v = fx.pan.value; if (abs(v) < 0.01f) "Centre" else (if (v < 0) "L " else "R ") + (abs(v) * 100).toInt() }), lp(MATCH, Px.dp(44)).apply { topMargin = Px.dp(4) })
-            box.addView(Btn(a, "Sidechain: ${sidechainName(lane)}", Snes.PURPLE).apply { onClick = { chooseSidechain(lane) { rebuild() } } }, lp(MATCH, Px.dp(40)).apply { topMargin = Px.dp(6) })
-            // effects: added here, then they appear in the effects panel
-            val flow = Flow(a)
-            val list = fx.effects + if (lane.isTrack) listOf("Amp (NAM)" to Audio.amps[lane.channel].on) else emptyList()
-            list.forEach { (name, on) ->
-                flow.addView(Btn(a, (if (on.on) "✓ " else "+ ") + name, if (on.on) Pal.GREEN else Pal.BROWN_L).apply {
-                    this.on = on.on
-                    onClick = { on.set(if (on.on) 0f else 1f); Studio.save(); Studio.changed(); if (drawerKind == "fx") buildFxAgain(); rebuild() }
-                })
+            // effects: chosen from a drop-down, then they appear in the effects panel
+            val all = fx.effects + if (lane.isTrack) listOf("Amp (NAM)" to Audio.amps[lane.channel].on) else emptyList()
+            val added = all.filter { it.second.on }
+            val list = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
+            if (added.isEmpty()) list.addView(Btn(a, "No effects yet", Pal.BROWN_L), lp(MATCH, Px.dp(36)))
+            added.forEach { (name, on) ->
+                val r = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+                r.addView(Btn(a, "✓ $name", Pal.GREEN).apply { this.on = true; onClick = { d.dismiss(); FireEscape.selectedLane = lane.id; if (drawerKind == "fx") buildFxAgain() else toggleDrawer("fx") } }, lp(0, Px.dp(36), 1f))
+                r.addView(Btn(a, "✕", Snes.RED, 36).apply { onClick = { on.set(0f); Studio.save(); Studio.changed(); if (drawerKind == "fx") buildFxAgain(); rebuild() } }, lp(WRAP, Px.dp(36)).apply { leftMargin = Px.dp(4) })
+                list.addView(r, lp(MATCH, Px.dp(38)))
             }
-            box.addView(Panel(a, "Effects (tap to add or remove)", accent = Snes.PURPLE).apply { addView(flow, lp(MATCH, WRAP)) }, lp(MATCH, WRAP).apply { topMargin = Px.dp(6) })
+            list.addView(Btn(a, "+ Add effect ▾", Snes.PURPLE).apply {
+                onClick = {
+                    val free = all.filter { !it.second.on }
+                    if (free.isEmpty()) Studio.message("Every effect is on ${lane.title} already")
+                    else fire.choose("Add an effect to ${lane.title}", free.map { it.first }) { i ->
+                        free[i].second.set(1f); Studio.save(); Studio.changed(); if (drawerKind == "fx") buildFxAgain(); rebuild()
+                    }
+                }
+            }, lp(MATCH, Px.dp(40)).apply { topMargin = Px.dp(4) })
+            box.addView(Panel(a, "Effects", accent = Snes.PURPLE).apply { addView(list, lp(MATCH, WRAP)) }, lp(MATCH, WRAP).apply { topMargin = Px.dp(6) })
             val row2 = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
             row2.addView(Btn(a, "Edit effects", Snes.PURPLE).apply { onClick = { d.dismiss(); FireEscape.selectedLane = lane.id; if (drawerKind == "fx") buildFxAgain() else toggleDrawer("fx") } }, lp(0, Px.dp(40), 1f))
             row2.addView(Btn(a, "Tuner", Pal.SUN).apply { onClick = { FireEscape.selectedLane = lane.id; openTuner() } }, lp(0, Px.dp(40), 1f).apply { leftMargin = Px.dp(4) })
@@ -1004,3 +1044,97 @@ fun mixColor(a: Int, b: Int, t: Float): Int {
 
 /** A touchable spot on the mixer: what kind of control, on which lane (null = master). */
 private class MixHit(val l: Float, val t: Float, val r: Float, val b: Float, val kind: Int, val lane: FireEscape.Lane?)
+
+/** The compressor's readouts: input and output level and gain reduction, in dB. */
+@SuppressLint("ViewConstructor")
+private class CompMeter(c: Context, private val fx: app.foxbox.fx.LaneFx) : PixelView(c) {
+    init { animated = true }
+    private val p = Paint()
+    private val tp = Px.text(9f, Pal.CREAM, align = Paint.Align.LEFT)
+    override fun paint(c: Canvas) {
+        c.pixelBox(0f, 0f, width.toFloat(), height.toFloat(), 0xFF16121C.toInt())
+        val rows = listOf(Triple("IN", fx.compIn, false), Triple("GR", -fx.compReduction, true), Triple("OUT", fx.compOut, false))
+        val lw = Px.dp(30f); val rw = Px.dp(56f); val rh = (height - Px.dp(8f)) / 3f
+        for ((i, row) in rows.withIndex()) {
+            val (label, db, gr) = row
+            val y = Px.dp(4f) + i * rh
+            tp.textAlign = Paint.Align.LEFT; tp.color = Pal.CREAM; tp.textSize = Px.dp(9f)
+            c.drawText(label, Px.dp(6f), y + rh * 0.65f, tp)
+            val l = lw; val r = width - rw
+            p.color = 0xFF0A080E.toInt(); c.drawRect(l, y + rh * 0.2f, r, y + rh * 0.8f, p)
+            if (gr) {
+                // reduction grows from the right, down to -24 dB
+                val k = (-db / 24f).coerceIn(0f, 1f)
+                p.color = Pal.ORANGE; c.drawRect(r - (r - l) * k, y + rh * 0.2f, r, y + rh * 0.8f, p)
+            } else {
+                val k = ((db + 60f) / 66f).coerceIn(0f, 1f)
+                p.color = if (db > -1f) Snes.RED else if (db > -12f) Snes.YELLOW else Pal.GREEN
+                c.drawRect(l, y + rh * 0.2f, l + (r - l) * k, y + rh * 0.8f, p)
+                // the threshold mark on the input meter
+                if (label == "IN") { val tx = l + (r - l) * ((fx.cThresh.value + 60f) / 66f).coerceIn(0f, 1f); p.color = Pal.CREAM; c.drawRect(tx - u * 0.5f, y + rh * 0.1f, tx + u * 0.5f, y + rh * 0.9f, p) }
+            }
+            tp.textAlign = Paint.Align.RIGHT
+            c.drawText(if (db < -99f) "-inf dB" else "%.1f dB".format(db), width - Px.dp(5f), y + rh * 0.65f, tp)
+        }
+    }
+}
+
+/**
+ * The multiband at a glance: the three bands along a frequency scale (drag the two
+ * crossover lines to move them), each band's level and how far it's being pushed down.
+ */
+@SuppressLint("ViewConstructor", "ClickableViewAccessibility")
+private class BandGraph(c: Context, private val fx: app.foxbox.fx.LaneFx) : PixelView(c) {
+    init { animated = true }
+    private val p = Paint()
+    private val tp = Px.text(9f, Pal.CREAM)
+    private val cols = intArrayOf(0xFFC8603C.toInt(), 0xFFD9A03A.toInt(), 0xFF4A8FC8.toInt())
+    private fun xOf(hz: Float) = Px.dp(6f) + (kotlin.math.ln(hz / 20f) / kotlin.math.ln(1000f)).coerceIn(0f, 1f) * (width - Px.dp(12f))
+    private fun hzOf(x: Float) = 20f * Math.pow(1000.0, ((x - Px.dp(6f)) / (width - Px.dp(12f))).toDouble().coerceIn(0.0, 1.0)).toFloat()
+    override fun paint(c: Canvas) {
+        val w = width.toFloat(); val h = height.toFloat()
+        c.pixelBox(0f, 0f, w, h, 0xFF16121C.toInt())
+        val x1 = xOf(fx.mLowX.value); val x2 = xOf(fx.mHighX.value)
+        val top = Px.dp(16f); val bot = h - Px.dp(18f)
+        val edges = floatArrayOf(Px.dp(6f), x1, x2, w - Px.dp(6f))
+        val names = listOf("LOW", "MID", "HIGH")
+        val keyed = fx.mBand.index
+        for (b in 0 until 3) {
+            val l = edges[b]; val r = edges[b + 1]
+            p.color = Pal.alpha(cols[b], 0.28f); c.drawRect(l, top, r, bot, p)
+            // the band's level (-60..+6) and its reduction hanging from the top
+            val lv = ((fx.bandIn[b] + 60f) / 66f).coerceIn(0f, 1f)
+            p.color = Pal.alpha(cols[b], 0.8f); c.drawRect(l + Px.dp(4f), bot - (bot - top) * lv, r - Px.dp(4f), bot, p)
+            val gr = (fx.bandGr[b] / 24f).coerceIn(0f, 1f)
+            p.color = Pal.alpha(Pal.CREAM, 0.75f); c.drawRect(l + Px.dp(4f), top, r - Px.dp(4f), top + (bot - top) * gr, p)
+            // threshold line
+            val th = when (b) { 0 -> fx.mLowT.value; 1 -> fx.mMidT.value; else -> fx.mHighT.value }
+            val ty = bot - (bot - top) * ((th + 60f) / 66f).coerceIn(0f, 1f)
+            p.color = Pal.CREAM; c.drawRect(l + Px.dp(2f), ty - u * 0.4f, r - Px.dp(2f), ty + u * 0.4f, p)
+            tp.color = if (keyed == b + 1 || (keyed == 0 && fx.bandKey >= 0)) Pal.ORANGE else Pal.CREAM; tp.textSize = Px.dp(9f)
+            c.textFit(names[b] + if (keyed == b + 1 || (keyed == 0 && fx.bandKey >= 0)) " ◆" else "", (l + r) / 2, Px.dp(9f), r - l - Px.dp(2f), tp)
+            tp.color = Pal.CREAM
+            c.textFit("-%.1f dB".format(fx.bandGr[b]), (l + r) / 2, top + Px.dp(9f), r - l - Px.dp(4f), tp)
+        }
+        // crossovers, with their frequencies
+        for ((x, hz) in listOf(x1 to fx.mLowX.value, x2 to fx.mHighX.value)) {
+            p.color = Pal.CREAM; c.drawRect(x - u * 0.6f, top - Px.dp(2f), x + u * 0.6f, bot + Px.dp(2f), p)
+            c.pixelBox(x - Px.dp(5f), bot - Px.dp(5f), x + Px.dp(5f), bot + Px.dp(5f), Pal.PAPER)
+            tp.textSize = Px.dp(9f)
+            c.textFit(if (hz >= 1000f) "%.1fk".format(hz / 1000f) else "${hz.toInt()} Hz", x, h - Px.dp(8f), Px.dp(60f), tp)
+        }
+    }
+    private var dragging = -1
+    override fun onTouchEvent(e: MotionEvent): Boolean {
+        parent?.requestDisallowInterceptTouchEvent(true)
+        when (e.actionMasked) {
+            MotionEvent.ACTION_DOWN -> dragging = if (abs(e.x - xOf(fx.mLowX.value)) < abs(e.x - xOf(fx.mHighX.value))) 0 else 1
+            MotionEvent.ACTION_MOVE -> {
+                val hz = hzOf(e.x)
+                if (dragging == 0) fx.mLowX.set(minOf(hz, fx.mHighX.value / 1.6f)) else if (dragging == 1) fx.mHighX.set(maxOf(hz, fx.mLowX.value * 1.6f))
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { dragging = -1; Studio.save() }
+        }
+        invalidate(); return true
+    }
+}

@@ -50,6 +50,8 @@ class LaneFx(val sources: List<String>) {
     init { p.section("Multiband") }
     val mOn = p.toggle("mOn", "Multiband")
     val mSide = p.choice("mSide", "Sidechain", keys)
+    /** Which band the sidechain pushes down (the others listen to themselves). */
+    val mBand = p.choice("mBand", "Keyed Band", listOf("All bands", "Low", "Mid", "High"))
     val mLowX = p.num("mLowX", "Low / Mid", 60f, 800f, 220f, Fmt.HZ, exp = true)
     val mHighX = p.num("mHighX", "Mid / High", 1000f, 9000f, 2800f, Fmt.HZ, exp = true)
     val mLowT = p.num("mLowT", "Low Threshold", -48f, 0f, -20f, Fmt.DB)
@@ -65,10 +67,52 @@ class LaneFx(val sources: List<String>) {
     /** The experimental scale feedback loop, with its own settings (and presets). */
     val wraith = Wraith()
 
+    // ------------------------------------------------------------------ the Flowers effects, one at a time
+    /** A copy of the Flowers engine for this lane; only the effects added to the lane sound. */
+    val flower = Flower(name = "Lane")
+    private val flowerDsp = FlowerDsp(flower)
+
+    /** One Flowers effect a lane can add: its switch, the mix that brings it in, and its knobs. */
+    class FlowerFx(val name: String, val toggle: app.foxbox.audio.Param, val mix: app.foxbox.audio.Param, val mixDefault: Float, val params: List<app.foxbox.audio.Param>)
+
+    init { p.section("Flower effects") }
+    val flowerFx: List<FlowerFx> = with(flower) {
+        fun fx(name: String, id: String, mix: app.foxbox.audio.Param, def: Float, vararg ps: app.foxbox.audio.Param) =
+            FlowerFx(name, this@LaneFx.p.toggle("ff_$id", name), mix, def, listOf(mix) + ps)
+        listOf(
+            fx("Pitch", "pitch", pitchMix, 0.5f, pitch),
+            fx("Resonators", "res", resMix, 0.5f, resNote, resChord, resDecay, resBright),
+            fx("Chorus / Flanger", "mod", modMix, 0.5f, modType, modRate, modDepth, modFb),
+            fx("Phaser", "phaser", phMix, 0.5f, phRate, phFb),
+            fx("Ring Mod", "ring", ring, 0.4f, ringFreq),
+            fx("Decimator", "decim", decim, 0.4f),
+            fx("Tremolo", "trem", tremDepth, 0.6f, tremRate),
+            fx("Auto-Pan", "autopan", panDepth, 0.6f, panRate, panShape),
+            fx("Delay", "delay", delayMix, 0.35f, delayTime, delayFb, delayTone),
+            fx("Reverb", "reverb", revMix, 0.4f, revSize, revDamp, shimmer),
+            fx("Stutter", "stutter", stMix, 0.7f, stRate, stLen, stChance, stFade),
+            fx("Gate", "gate", gateDepth, 0.8f, gateRate, gateLen, gateSwing, gateSmooth),
+            fx("Stereo Width", "width", width, 1.5f, haas),
+        )
+    }
+
+    init {
+        // nothing of the flower sounds until it's added: every mix down, no modulation slots
+        flowerFx.forEach { if (it.mix === flower.width) it.mix.set(1f) else it.mix.set(0f) }
+        flower.slots.forEach { it.third.set(0f) }
+        flowerFx.forEach { ff ->
+            ff.toggle.listeners.add {
+                if (ff.toggle.on) { if (ff.mix === flower.width) { if (ff.mix.value == 1f) ff.mix.set(ff.mixDefault) } else if (ff.mix.value <= 0.001f) ff.mix.set(ff.mixDefault) }
+                else ff.mix.set(if (ff.mix === flower.width) 1f else 0f)
+            }
+        }
+    }
+    private val flowerOn: Boolean get() { for (i in flowerFx.indices) if (flowerFx[i].toggle.on) return true; return false }
+
     /** Which lane the compressor / multiband listen to: -1 for itself, else an index into `sources`. */
     val compKey get() = cSide.index - 1
     val bandKey get() = mSide.index - 1
-    val active get() = fOn.on || cOn.on || mOn.on || wraith.on.on
+    val active get() = fOn.on || cOn.on || mOn.on || wraith.on.on || flowerOn
 
     /** Gain reduction right now, dB (compressor, and the deepest band), for meters. */
     var compReduction = 0f; private set
@@ -76,8 +120,14 @@ class LaneFx(val sources: List<String>) {
 
     fun reset() { p.all.values.forEach { it.set(it.def) }; wraith.reset() }
 
-    /** The effects that can be added to a lane, by name, with their on switches. */
-    val effects get() = listOf("Filter" to fOn, "Compressor" to cOn, "Multiband" to mOn, "Wraith" to wraith.on)
+    /** Readouts for the screen: compressor input / output peaks and reduction; each band's input and reduction (dB). */
+    var compIn = -120f; private set
+    var compOut = -120f; private set
+    val bandIn = FloatArray(3) { -120f }
+    val bandGr = FloatArray(3)
+
+    /** The effects that can be added to a lane, by name, with their on switches (Flowers' effects included). */
+    val effects get() = listOf("Filter" to fOn, "Compressor" to cOn, "Multiband" to mOn, "Wraith" to wraith.on) + flowerFx.map { it.name to it.toggle }
     /** Set where both compressors listen (-1 itself, else an index into `sources`). */
     fun setSidechain(k: Int) { cSide.set((k + 1).toFloat()); mSide.set((k + 1).toFloat()) }
 
@@ -111,7 +161,9 @@ class LaneFx(val sources: List<String>) {
         val th = cThresh.value; val ratio = cRatio.value; val mk = 10f.pow(cMakeup.value / 20f)
         val atk = coef(cAttack.value); val rel = coef(cRelease.value)
         var env = cEnv; var gr = cGr; var deepest = 0f
+        var pin = 0f; var pout = 0f
         for (i in 0 until n) {
+            pin = max(pin, max(abs(l[i]), abs(r[i])))
             val x = if (key != null) abs(key[i]) else max(abs(l[i]), abs(r[i]))
             env = if (x > env) atk * env + (1 - atk) * x else rel * env + (1 - rel) * x
             val want = reduction(toDb(env), th, ratio)
@@ -120,8 +172,10 @@ class LaneFx(val sources: List<String>) {
             if (gr > deepest) deepest = gr
             val g = fromDb(-gr) * mk
             l[i] *= g; r[i] *= g
+            pout = max(pout, max(abs(l[i]), abs(r[i])))
         }
         cEnv = env; cGr = gr; compReduction = deepest
+        compIn = max(toDb(pin), compIn - 1.2f); compOut = max(toDb(pout), compOut - 1.2f)
     }
 
     // ------------------------------------------------------------------ multiband (Linkwitz-Riley crossovers)
@@ -129,7 +183,7 @@ class LaneFx(val sources: List<String>) {
     private val xl = Split(); private val xr = Split(); private val xk = Split()
     private val bEnv = FloatArray(3); private val bGr = FloatArray(3)
     private val lo = FloatArray(3); private val ro = FloatArray(3); private val ko = FloatArray(3)
-    private val bTh = FloatArray(3); private val bGain = FloatArray(3)
+    private val bTh = FloatArray(3); private val bGain = FloatArray(3); private val bPk = FloatArray(3)
     private var xSig = Float.NaN
 
     private fun multiband(l: FloatArray, r: FloatArray, n: Int, key: FloatArray?) {
@@ -142,13 +196,17 @@ class LaneFx(val sources: List<String>) {
         val th = bTh; th[0] = mLowT.value; th[1] = mMidT.value; th[2] = mHighT.value
         val gains = bGain; gains[0] = fromDb(mLowG.value); gains[1] = fromDb(mMidG.value); gains[2] = fromDb(mHighG.value)
         val ratio = mRatio.value; val atk = coef(mAttack.value); val rel = coef(mRelease.value)
+        val keyed = mBand.index   // 0 every band, else just that one
         var deepest = 0f
+        for (b in 0 until 3) bPk[b] = 0f
         for (i in 0 until n) {
             xl.run(l[i], lo); xr.run(r[i], ro)
             if (key != null) xk.run(key[i], ko)
             var outL = 0f; var outR = 0f
             for (b in 0 until 3) {
-                val x = if (key != null) abs(ko[b]) else max(abs(lo[b]), abs(ro[b]))
+                val self = max(abs(lo[b]), abs(ro[b]))
+                if (self > bPk[b]) bPk[b] = self
+                val x = if (key != null && (keyed == 0 || keyed == b + 1)) abs(ko[b]) else self
                 var env = bEnv[b]
                 env = if (x > env) atk * env + (1 - atk) * x else rel * env + (1 - rel) * x
                 bEnv[b] = env
@@ -163,6 +221,7 @@ class LaneFx(val sources: List<String>) {
             l[i] = outL; r[i] = outR
         }
         bandReduction = deepest
+        for (b in 0 until 3) { bandIn[b] = max(toDb(bPk[b]), bandIn[b] - 1.2f); bandGr[b] = bGr[b] }
     }
 
     // ------------------------------------------------------------------
@@ -176,6 +235,7 @@ class LaneFx(val sources: List<String>) {
         if (cOn.on) compress(l, r, n, compKeyBuf) else { cEnv = 0f; cGr = 0f; compReduction = 0f }
         if (mOn.on) multiband(l, r, n, bandKeyBuf) else bandReduction = 0f
         if (wraith.on.on) wraith.process(l, r, n, bpm, tick, scaleMask) else wraith.idle()
+        if (flowerOn) flowerDsp.process(l, r, n, 1f, 1f)
     }
 
     private fun coef(sec: Float) = exp(-1f / (sec * SRF))

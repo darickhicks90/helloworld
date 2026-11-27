@@ -89,7 +89,7 @@ class Project(val dir: File) {
         put("masterFx", Audio.masterFx.p.save())
         put("arrangement", arrangement.toJson())
         // the Fire Escape's lane inserts (Wraith's settings with them), and the tracks' amps
-        put("laneFx", JSONObject().apply { Audio.laneIds.forEachIndexed { i, id -> val f = Audio.laneFx[i]; put(id, f.p.save().put("wraith", f.wraith.p.save())) } })
+        put("laneFx", JSONObject().apply { Audio.laneIds.forEachIndexed { i, id -> val f = Audio.laneFx[i]; put(id, f.p.save().put("wraith", f.wraith.p.save()).put("flower", f.flower.p.save())) } })
         put("amps", JSONArray().apply { Audio.amps.forEach { put(it.save()) } })
     }
     private var mixState: JSONObject? = null
@@ -132,6 +132,8 @@ class Project(val dir: File) {
         Audio.laneIds.forEachIndexed { i, id ->
             val f = Audio.laneFx[i]; val o = lanes?.optJSONObject(id)
             f.p.load(o); f.wraith.p.load(o?.optJSONObject("wraith"))
+            // the lane's Flowers effects: only load saved settings (a fresh lane keeps everything silent)
+            o?.optJSONObject("flower")?.let { f.flower.p.load(it) }
         }
         val amps = st.optJSONArray("amps")
         Audio.amps.forEachIndexed { ch, a -> a.load(amps?.optJSONObject(ch)) }

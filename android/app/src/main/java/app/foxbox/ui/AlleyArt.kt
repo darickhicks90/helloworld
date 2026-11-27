@@ -65,7 +65,8 @@ object AlleyArt {
         px = IntArray(W * H); shaded = BooleanArray(W * H)
         seed = 0x1234567; bulbs.clear(); catEyes = intArrayOf(-100, -100)
         bricks()
-        sunlight()
+        ivy()
+        dapple()
         vignette()
         return retro()
     }
@@ -77,6 +78,11 @@ object AlleyArt {
         rgb(84, 40, 48), rgb(104, 50, 56), rgb(126, 62, 64), rgb(150, 80, 70),
         // mortar, shadow to lit
         rgb(78, 72, 70), rgb(112, 104, 98), rgb(146, 138, 128), rgb(174, 166, 154), rgb(202, 194, 182), rgb(228, 222, 210),
+        // sunlit brick and cool shade
+        rgb(246, 186, 136), rgb(254, 214, 168), rgb(70, 40, 50), rgb(54, 44, 52),
+        // ivy greens, dark to sunlit, and its stems
+        rgb(18, 36, 24), rgb(28, 56, 32), rgb(42, 80, 40), rgb(60, 106, 48), rgb(86, 136, 58), rgb(122, 166, 74), rgb(170, 204, 104),
+        rgb(70, 54, 38), rgb(104, 82, 56),
     )
     private val BAYER = intArrayOf(0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5)
 
@@ -119,7 +125,7 @@ object AlleyArt {
      * specks and little pits that catch the light; the mortar is recessed and gritty.
      */
     private fun bricks() {
-        val bw = 180; val bh = 60; val joint = 11
+        val bw = 150; val bh = 50; val joint = 9
         val clays = intArrayOf(rgb(170, 78, 56), rgb(184, 90, 62), rgb(156, 70, 52), rgb(194, 104, 74), rgb(150, 66, 52), rgb(176, 98, 76), rgb(164, 84, 64), rgb(142, 64, 50))
         val mortarBase = rgb(186, 176, 160)
         // the mortar everywhere first: sandy, with grains, small pebbles and a darker recess
@@ -230,6 +236,77 @@ object AlleyArt {
         for (k in 0 until 6) {
             val x = rnd() % W; val y0 = rnd() % 60; val len = 60 + rnd() % 140; val w = 3 + rnd() % 6
             for (y in y0 until minOf(H, y0 + len)) for (dx in 0 until w) if (hash(x + dx, y) % 4 != 0) blend(x + dx, y, rgb(70, 50, 46), 0.09f * (1f - (y - y0) / len.toFloat()))
+        }
+    }
+
+    // ------------------------------------------------------------------ ivy
+
+    private val ivyG = intArrayOf(rgb(18, 36, 24), rgb(28, 56, 32), rgb(42, 80, 40), rgb(60, 106, 48), rgb(86, 136, 58), rgb(122, 166, 74), rgb(170, 204, 104))
+    private val stemC = rgb(78, 62, 42); private val stemHi = rgb(110, 90, 60)
+
+    /** Ivy climbing up from the lower left and hanging in from the top right: wandering stems, lobed leaves, shadows on the brick. */
+    private fun ivy() {
+        val leaves = ArrayList<FloatArray>()
+        fun grow(x0: Float, y0: Float, dir0: Float, len: Int, thick: Float, depth: Int) {
+            var x = x0; var y = y0; var dir = dir0
+            for (i in 0 until len) {
+                dir += (rf() - 0.5f) * 0.28f + kotlin.math.sin(i * 0.07f + x0) * 0.04f
+                x += kotlin.math.cos(dir) * 1.2f; y += kotlin.math.sin(dir) * 1.2f
+                val t = thick * (1f - i / len.toFloat() * 0.7f)
+                val r = t.toInt().coerceAtLeast(1)
+                for (dy in -r..r) for (dx in -r..r) if (dx * dx + dy * dy <= r * r) {
+                    val xx = (x + dx).toInt(); val yy = (y + dy).toInt()
+                    // the stem's shadow, then the stem (lit on its upper side)
+                    blend(xx + 2, yy + 3, ink, 0.25f)
+                    set(xx, yy, if (dy < 0) stemHi else stemC)
+                }
+                if (i % 13 == 4) leaves += floatArrayOf(x + (rf() - 0.5f) * 10f, y + (rf() - 0.5f) * 10f, 7f + rf() * 7f * (depth + 1) / 2f, rf() * 6.28f)
+                if (depth < 2 && i > 20 && i % 55 == 0) grow(x, y, dir + (if (rf() < 0.5f) 0.9f else -0.9f), len / 2, thick * 0.7f, depth + 1)
+                if (x < -40 || y < -40 || x > W + 40 || y > H + 40) break
+            }
+        }
+        grow(-6f, H + 4f, -1.2f, 260, 2.6f, 0)
+        grow(30f, H + 6f, -1.5f, 170, 2.2f, 0)
+        grow(W + 6f, -4f, 2.4f, 210, 2.4f, 0)
+        // shadows first, then the leaves
+        for (lf in leaves) leaf(lf[0] + 3, lf[1] + 4, lf[2], lf[3], true)
+        for (lf in leaves) leaf(lf[0], lf[1], lf[2], lf[3], false)
+    }
+
+    /** An ivy leaf: five pointed lobes, a pale midrib and veins, lit from the upper left. */
+    private fun leaf(cx: Float, cy: Float, size: Float, ang: Float, shadow: Boolean) {
+        val r = size.toInt() + 2
+        val tone = (hash(cx.toInt(), cy.toInt()) % 3)
+        val ca = kotlin.math.cos(ang); val sa = kotlin.math.sin(ang)
+        for (dy in -r..r) for (dx in -r..r) {
+            // into the leaf's own frame (tip pointing along +y)
+            val u = (dx * ca + dy * sa) / size; val v = (-dx * sa + dy * ca) / size
+            val a = kotlin.math.atan2(u, v); val rr = kotlin.math.sqrt(u * u + v * v)
+            // five lobes: the outline bulges at five angles and is pointed at each
+            val lobes = 0.62f + 0.38f * kotlin.math.abs(kotlin.math.cos(a * 2.5f)).let { it * it }
+            val edge = lobes * (if (v > 0) 1f else 0.85f)
+            if (rr > edge) continue
+            val x = (cx + dx).toInt(); val y = (cy + dy).toInt()
+            if (shadow) { blend(x, y, ink, 0.32f); continue }
+            val light = (-dx - dy) / (2f * r)    // upper left is brighter
+            var k = (2 + tone + (light * 3f).toInt() + (if (rr < edge * 0.75f) 1 else 0)).coerceIn(0, ivyG.size - 1)
+            if (rr > edge * 0.88f) k = (k - 2).coerceAtLeast(0)                         // a darker rim
+            var c = ivyG[k]
+            if (kotlin.math.abs(u) < 0.06f && v > -0.1f) c = mix(c, rgb(190, 214, 140), 0.5f)   // midrib
+            val va = kotlin.math.abs(kotlin.math.abs(a) - 1.1f); if (va < 0.05f && rr < edge * 0.8f) c = mix(c, rgb(170, 200, 120), 0.35f)
+            set(x, y, c)
+        }
+    }
+
+    /** Dappled sunlight: warm patches through leaves overhead, cooler shade between them. */
+    private fun dapple() {
+        for (y in 0 until H) for (x in 0 until W) {
+            val n = vnoise(x.toFloat(), y.toFloat(), 46f, 71) * 0.6f + vnoise(x.toFloat(), y.toFloat(), 17f, 93) * 0.3f + vnoise(x.toFloat(), y.toFloat(), 6f, 7) * 0.1f
+            val sun = ((n - 0.47f) / 0.08f).coerceIn(0f, 1f)
+            var c = get(x, y)
+            c = if (sun > 0f) mix(shade(c, 1f + 0.18f * sun), rgb(255, 226, 180), 0.16f * sun) else c
+            c = mix(c, rgb(40, 40, 70), 0.22f * (1f - sun))
+            set(x, y, shade(c, 0.9f + 0.1f * sun))
         }
     }
 

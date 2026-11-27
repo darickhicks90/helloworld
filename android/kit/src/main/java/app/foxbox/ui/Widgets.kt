@@ -37,6 +37,8 @@ class Btn(c: Context, var text: String, var accent: Int = Pal.ORANGE, private va
      * leading symbol ("● Record clip" → "●"); labels without one wrap onto two lines instead.
      */
     var short: String? = null
+    /** A width cap in dp (0 = none): a longer label wraps onto two lines. */
+    var maxW = 0
     private fun shortForm(): String? = short ?: text.substringBefore(' ', "").takeIf { it.isNotEmpty() && it.length <= 2 && it.none { ch -> ch.isLetterOrDigit() } }
     var onClick: (() -> Unit)? = null
     var onLong: (() -> Unit)? = null
@@ -57,7 +59,8 @@ class Btn(c: Context, var text: String, var accent: Int = Pal.ORANGE, private va
 
     override fun onMeasure(w: Int, h: Int) {
         val iconW = if (icon != null) Px.dp(26) else 0
-        val want = maxOf(Px.dp(minW), (textP.measureText(text) + Px.dp(22)).toInt() + iconW)
+        var want = maxOf(Px.dp(minW), (textP.measureText(text) + Px.dp(22)).toInt() + iconW)
+        if (maxW > 0) want = minOf(want, Px.dp(maxW))
         setMeasuredDimension(resolveSize(want, w), resolveSize(Px.dp(40), h))
     }
 

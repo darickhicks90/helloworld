@@ -35,7 +35,7 @@ start --es screen notebook; shot 05-notebook 6
 start --es screen studio --es page gusts; sleep 5; adb shell input tap $RX $RY; shot 06-radio 4
 adb shell input keyevent KEYCODE_BACK; sleep 1
 # the menu (top bar, just left of the radio/notebook keys)
-adb shell input tap $(( W - $(dp 104) - $(dp 50) )) $(dp 24); shot 07-menu 3
+adb shell input tap $(( W - $(dp 104) - $(dp 24) )) $(dp 24); shot 07-menu 3
 adb shell input keyevent KEYCODE_BACK
 
 # (Wildwood Hall is still in development: not part of the beta check)

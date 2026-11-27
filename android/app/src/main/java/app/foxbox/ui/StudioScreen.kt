@@ -135,19 +135,25 @@ class StudioScreen(c: Context, private val host: Host) : FrameLayout(c) {
     private lateinit var metroBtn: Btn
     private lateinit var nameBtn: Btn
 
+    /** A phone too narrow for the whole top bar: it goes compact so every button stays in view. */
+    private val narrow: Boolean get() {
+        val dm = resources.displayMetrics
+        return maxOf(dm.widthPixels, dm.heightPixels) / Px.density < 800f
+    }
+
     private fun topBar(c: Context): View {
         val t = Audio.transport
-        nameBtn = Btn(c, Studio.project.name, Pal.BROWN).apply { onClick = { Studio.save(true); host.showProjects() } }
+        nameBtn = Btn(c, Studio.project.name, Pal.BROWN).apply { if (narrow) maxW = 80 }.apply { onClick = { Studio.save(true); host.showProjects() } }
         playBtn = Btn(c, "▶", Pal.AQUA, 40).apply { onClick = { Studio.play() } }
         val stopBtn = Btn(c, "■", Pal.BROWN_L, 40).apply { onClick = { Studio.stop() } }
-        val bpm = Stepper(c, "BPM", 92, { Studio.project.bpm.toInt().toString() }) { Studio.setBpm(Studio.project.bpm + it) }
+        val bpm = Stepper(c, "BPM", if (narrow) 78 else 92, { Studio.project.bpm.toInt().toString() }) { Studio.setBpm(Studio.project.bpm + it) }
         bpm.onMiddle = { host.bpmDialog() }
         metroBtn = Btn(c, "Click", Pal.AQUA).apply { onClick = { Studio.setMetronome(!t.metronome) } }
         val left = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
         listOf(nameBtn, playBtn, stopBtn, Position(c), bpm, metroBtn).forEach { left.addView(it, lp(WRAP, Px.dp(44))) }
-        left.addView(View(c), lp(Px.dp(10), 1))
+        left.addView(View(c), lp(Px.dp(if (narrow) 4 else 10), 1))
         left.addView(instr, lp(WRAP, Px.dp(44)))
-        val menu = Btn(c, "☰ Menu", Snes.PURPLE).apply { onClick = { host.mainMenu() } }
+        val menu = Btn(c, if (narrow) "☰" else "☰ Menu", Snes.PURPLE, if (narrow) 44 else 0).apply { onClick = { host.mainMenu() } }
         return LinearLayout(c).apply {
             orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL
             addView(HorizontalScrollView(c).apply { isHorizontalScrollBarEnabled = false; addView(left) }, lp(0, Px.dp(48), 1f))
@@ -161,7 +167,7 @@ class StudioScreen(c: Context, private val host: Host) : FrameLayout(c) {
     private inner class Position(c: Context) : PixelView(c) {
         private val p = Px.text(13f, Pal.CREAM)
         init { animated = true }
-        override fun onMeasure(w: Int, h: Int) = setMeasuredDimension(Px.dp(80), Px.dp(44))
+        override fun onMeasure(w: Int, h: Int) = setMeasuredDimension(Px.dp(if (narrow) 64 else 80), Px.dp(44))
         override fun paint(c: Canvas) {
             val t = Audio.transport
             val counting = (t.rec == Transport.Rec.ARMED && t.tick < t.recStart) || t.audioRec == Transport.Rec.ARMED || (t.sampRec == Transport.Rec.ARMED && t.tick < 0)
@@ -173,7 +179,8 @@ class StudioScreen(c: Context, private val host: Host) : FrameLayout(c) {
                 !t.playing -> "stopped"
                 else -> "${t.bar + 1}.${t.beat + 1}" + if (recording) " REC" else ""
             }
-            c.textCentered(s, width / 2f, height / 2f, p)
+            p.textSize = Px.dp(13f)
+            c.textFit(s, width / 2f, height / 2f, width - Px.dp(8f), p)
         }
     }
 
@@ -224,7 +231,8 @@ class StudioScreen(c: Context, private val host: Host) : FrameLayout(c) {
         // the block's own tools, up in the top bar
         fun tool(v: View) = instr.addView(v, lp(WRAP, Px.dp(44)))
         soundBtn = Btn(c, "Sound", Pal.accent(e.id)).apply { onClick = { if (drawerOpen) closeDrawer() else openDrawer(e) } }.also { tool(it) }
-        tool(Btn(c, "Presets", Pal.accent(e.id)).apply { onClick = { host.presetMenu(e.id) } })
+        // (on narrow phones Presets lives in the Sound drawer, so the top bar fits)
+        if (!narrow) tool(Btn(c, "Presets", Pal.accent(e.id)).apply { onClick = { host.presetMenu(e.id) } })
         // (samplers' Load and Mic live on the instrument page itself, above the chords, always in view)
         // record clips for the block in front, then prepare them for Clibbins
         procRec = Btn(c, "● Record clip", Snes.RED).apply { onClick = { Studio.recordMidi() } }.also { bar(it) }
@@ -302,6 +310,7 @@ class StudioScreen(c: Context, private val host: Host) : FrameLayout(c) {
         val strip = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; setPadding(Px.dp(6), Px.dp(6), Px.dp(6), Px.dp(6)) }
         val accent = Pal.accent(e.id)
         strip.addView(Btn(context, "✕ Close", accent).apply { onClick = { closeDrawer() } }, lp(WRAP, Px.dp(44)).apply { rightMargin = Px.dp(6) })
+        strip.addView(Btn(context, "Presets", accent).apply { onClick = { host.presetMenu(e.id) } }, lp(WRAP, Px.dp(44)).apply { rightMargin = Px.dp(6) })
         var k = 0
         e.p.sections.forEach { (name, params) ->
             if (name == "XY Pad" || name.startsWith("Pad ") || (e === Audio.minds && name in app.foxbox.engines.Minds.DRUMS)) return@forEach

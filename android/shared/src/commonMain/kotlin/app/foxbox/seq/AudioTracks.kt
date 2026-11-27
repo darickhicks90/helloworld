@@ -13,6 +13,8 @@ class AudioClip(
 ) {
     /** Mono samples at the app's sample rate. Stored as a WAV next to the project. */
     @Volatile var data: FloatArray = FloatArray(0)
+    /** The right side of a stereo take (null for mono: `data` plays on both sides). */
+    @Volatile var dataR: FloatArray? = null
     @Volatile var volume = 1f
     @Volatile var muted = false
     /** Stereo position, -1 (left) .. 1 (right). */
@@ -51,9 +53,10 @@ class AudioClipPlayer(val clip: AudioClip, val startTick: Double) {
         if (clip.muted) { pos = (pos + n - first) % d.size; return }
         val g = clip.volume; val p = clip.pan
         val gl = g * minOf(1f, 1f - p); val gr = g * minOf(1f, 1f + p)
+        val dr = clip.dataR
         for (i in first until n) {
-            val v = d[pos]
-            outL[i] += v * gl; outR[i] += v * gr
+            val v = d[pos]; val w = if (dr != null && pos < dr.size) dr[pos] else v
+            outL[i] += v * gl; outR[i] += w * gr
             if (++pos >= d.size) pos = 0
         }
     }

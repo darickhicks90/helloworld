@@ -40,6 +40,10 @@ class Arrangement {
     var playhead = 0
     /** Lanes muted on the Fire Escape. */
     val muted = mutableSetOf<String>()
+    /** Lanes armed for recording. */
+    val armed = mutableSetOf<String>()
+    /** The audio tracks added to the Fire Escape (0..2): only these get lanes. */
+    val tracks = mutableSetOf<Int>()
 
     val lengthTicks get() = items.maxOfOrNull { it.end } ?: 0
 
@@ -47,15 +51,21 @@ class Arrangement {
         put("items", JSONArray().apply { items.forEach { put(it.toJson()) } })
         put("loopOn", loopOn); put("loopStart", loopStart); put("loopEnd", loopEnd); put("snap", snap); put("playhead", playhead)
         put("muted", JSONArray().apply { muted.forEach { put(it) } })
+        put("armed", JSONArray().apply { armed.forEach { put(it) } })
+        put("tracks", JSONArray().apply { tracks.forEach { put(it) } })
     }
 
     fun load(o: JSONObject?) {
-        items.clear(); muted.clear()
+        items.clear(); muted.clear(); armed.clear(); tracks.clear()
         if (o == null) { loopOn = false; loopStart = 0; loopEnd = Ticks.BAR * 4; snap = 3; playhead = 0; return }
         o.optJSONArray("items")?.let { a -> for (i in 0 until a.length()) items += ArrItem.fromJson(a.getJSONObject(i)) }
         loopOn = o.optBoolean("loopOn"); loopStart = o.optInt("loopStart"); loopEnd = o.optInt("loopEnd", Ticks.BAR * 4)
         snap = o.optInt("snap", 3); playhead = o.optInt("playhead")
         o.optJSONArray("muted")?.let { a -> for (i in 0 until a.length()) muted += a.getString(i) }
+        o.optJSONArray("armed")?.let { a -> for (i in 0 until a.length()) armed += a.getString(i) }
+        o.optJSONArray("tracks")?.let { a -> for (i in 0 until a.length()) tracks += a.getInt(i) }
+        // songs from before tracks were added by hand: keep the tracks that have something on them
+        if (!o.has("tracks")) items.forEach { if (it.lane.startsWith("track")) it.lane.removePrefix("track").toIntOrNull()?.let { ch -> tracks += ch } }
     }
 
     companion object {
@@ -140,6 +150,7 @@ class ArrangementPlayer(private val midi: Array<Midi>, private val audio: Array<
             val g = a.clip.volume; val p = a.clip.pan
             val gl = g * minOf(1f, 1f - p); val gr = g * minOf(1f, 1f + p)
             val l = busL[ch]; val r = busR[ch]
+            val dr = a.clip.dataR
             for (i in 0 until n) {
                 val t = t0 + i * ticksPerFrame
                 if (t < a.start || t >= a.end) continue
@@ -148,8 +159,8 @@ class ArrangementPlayer(private val midi: Array<Midi>, private val audio: Array<
                 // a short fade at the item's edges, so cuts never click
                 val edge = minOf(t - a.start, a.end - t) / ticksPerFrame
                 val f = if (edge < 96) (edge / 96).toFloat() else 1f
-                val v = d[pos] * f
-                l[i] += v * gl; r[i] += v * gr
+                val v = d[pos] * f; val w = if (dr != null && pos < dr.size) dr[pos] * f else v
+                l[i] += v * gl; r[i] += w * gr
             }
         }
     }

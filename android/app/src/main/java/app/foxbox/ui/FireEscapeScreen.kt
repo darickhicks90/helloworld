@@ -55,12 +55,25 @@ class FireEscapeScreen(c: Context, private val host: Host, private val fire: Fir
     private lateinit var keysBtn: Btn
     private lateinit var fxBtn: Btn
     private lateinit var crateBtn: Btn
+    private lateinit var mixBtn: Btn
+    private val mixer = MixerView(c)
+    private var mixing = false
+
+    /** Swap the timeline for the mixer (or back). */
+    private fun showMixer(on: Boolean) {
+        mixing = on
+        tl.visibility = if (on) GONE else VISIBLE
+        mixer.visibility = if (on) VISIBLE else GONE
+        refresh()
+    }
 
     init {
         addView(AlleyView(c), LayoutParams(MATCH, MATCH))
         val col = LinearLayout(c).apply { orientation = LinearLayout.VERTICAL }
         col.addView(topBar(c), lp(MATCH, Px.dp(48)))
         col.addView(tl, lp(MATCH, 0, 1f))
+        col.addView(mixer, lp(MATCH, 0, 1f))
+        mixer.visibility = GONE
         col.addView(bottomBar(c), lp(MATCH, Px.dp(48)))
         addView(col, LayoutParams(MATCH, MATCH))
         addView(drawer, LayoutParams(MATCH, MATCH).apply { topMargin = Px.dp(48) })
@@ -72,7 +85,7 @@ class FireEscapeScreen(c: Context, private val host: Host, private val fire: Fir
     private fun bar(c: Context) = LinearLayout(c).apply {
         orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL
         setPadding(Px.dp(4), 0, Px.dp(4), 0)
-        background = Tv.GrilleDrawable()
+        setBackgroundColor(0xEE1A1520.toInt())
     }
 
     private fun topBar(c: Context): View {
@@ -81,10 +94,11 @@ class FireEscapeScreen(c: Context, private val host: Host, private val fire: Fir
         add(Btn(c, if (narrow) "◀" else "◀ Studio", Pal.BROWN, 40).apply { onClick = { fire.leaveFireEscape() } })
         add(Btn(c, "|◀", Pal.AQUA, 40).apply { short = "|◀"; onClick = { FireEscape.rewind() } })
         playBtn = Btn(c, "▶", Pal.AQUA, 40).apply { onClick = { FireEscape.play() } }.also { add(it) }
-        recBtn = Btn(c, "● Rec", Snes.RED).apply { onClick = { FireEscape.selectedLaneObj()?.let { FireEscape.record(it) } ?: Studio.message("Tap a lane's name first") } }.also { add(it) }
+        recBtn = Btn(c, "● Rec", Snes.RED).apply { onClick = { FireEscape.record() } }.also { add(it) }
         if (!narrow) add(PositionView(c))
         loopBtn = Btn(c, "Loop", Snes.YELLOW).apply { onClick = { FireEscape.toggleLoop() } }.also { add(it) }
         add(Stepper(c, "Snap", if (narrow) 78 else 92, { Arrangement.SNAP_NAMES[FireEscape.arr.snap] }) { FireEscape.setSnap(FireEscape.arr.snap + it) })
+        mixBtn = Btn(c, "Mixer", Snes.GREEN).apply { onClick = { showMixer(!mixing) } }.also { add(it) }
         if (!narrow) {
             add(Btn(c, "-", Pal.BROWN_L, 36).apply { onClick = { tl.zoomBy(0.7f) } })
             add(Btn(c, "+", Pal.BROWN_L, 36).apply { onClick = { tl.zoomBy(1.4f) } })
@@ -133,7 +147,9 @@ class FireEscapeScreen(c: Context, private val host: Host, private val fire: Fir
         recBtn.text = if (FireEscape.recording) "■ Stop" else "● Rec"
         loopBtn.on = FireEscape.arr.loopOn
         crateBtn.on = drawerKind == "crate"; keysBtn.on = drawerKind == "keys"; fxBtn.on = drawerKind == "fx"
-        listOf(playBtn, recBtn, loopBtn, crateBtn, keysBtn, fxBtn).forEach { it.requestLayout(); it.invalidate() }
+        mixBtn.on = mixing
+        listOf(playBtn, recBtn, loopBtn, crateBtn, keysBtn, fxBtn, mixBtn).forEach { it.requestLayout(); it.invalidate() }
+        mixer.invalidate()
         if (drawerKind == "crate") buildCrate()
         tl.invalidate()
     }
@@ -207,24 +223,33 @@ class FireEscapeScreen(c: Context, private val host: Host, private val fire: Fir
         head.addView(Btn(context, "✕ Close", Pal.BROWN).apply { onClick = { closeDrawer() } }, lp(WRAP, Px.dp(40)))
         head.addView(Btn(context, "${lane.title} · effects", laneColor(lane.id)).apply { if (!lane.isTrack) icon = Sprites.icon(lane.id) }, lp(WRAP, Px.dp(40)).apply { leftMargin = Px.dp(6) })
         head.addView(spacer(context))
-        head.addView(Btn(context, "Wraith presets", Snes.PURPLE).apply { onClick = { wraithPresets(fx.wraith) } }, lp(WRAP, Px.dp(40)))
-        head.addView(Btn(context, "Reset", Snes.RED).apply { onClick = { fx.reset(); Studio.save(); buildFxAgain() } }, lp(WRAP, Px.dp(40)).apply { leftMargin = Px.dp(4) })
+        if (fx.wraith.on.on) head.addView(Btn(context, "Wraith presets", Snes.PURPLE).apply { onClick = { wraithPresets(fx.wraith) } }, lp(WRAP, Px.dp(40)))
+        head.addView(Btn(context, "Track…", Pal.AQUA).apply { onClick = { openLanePopup(lane) } }, lp(WRAP, Px.dp(40)).apply { leftMargin = Px.dp(4) })
         box.addView(head, lp(MATCH, Px.dp(44)))
         val strip = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL; setPadding(Px.dp(6), Px.dp(6), Px.dp(6), Px.dp(6)) }
         var k = 0
-        fun panel(name: String, params: List<app.foxbox.audio.Param>, cols: Int, extra: View? = null) {
+        fun panel(name: String, params: List<app.foxbox.audio.Param>, cols: Int, remove: (() -> Unit)? = null) {
             val accent = Snes.accent(k++)
             val p = Panel(context, name, accent = accent)
-            extra?.let { p.addView(it, lp(Px.dp(74) * cols, WRAP).apply { bottomMargin = Px.dp(4) }) }
             val flow = Flow(context)
             params.forEach { flow.addView(Knob(context, it, accent)) }
             p.addView(flow, lp(Px.dp(74) * cols, WRAP))
+            remove?.let { r -> p.addView(Btn(context, "Remove $name", Snes.RED).apply { onClick = { r(); Studio.save(); buildFxAgain(); Studio.changed() } }, lp(Px.dp(74) * cols, Px.dp(36)).apply { topMargin = Px.dp(4) }) }
             strip.addView(p, lp(WRAP, WRAP).apply { rightMargin = Px.dp(6) })
         }
-        // the amp: an effect the track has only if it's added
-        if (lane.isTrack) strip.addView(AmpPanel(context, lane.channel, fire), lp(WRAP, WRAP).apply { rightMargin = Px.dp(6) })
-        fx.p.sections.forEach { (name, params) -> panel(name, params, if (params.size > 8) 5 else (params.size + 1) / 2) }
-        fx.wraith.p.sections.forEach { (name, params) -> panel(name, params, if (params.size > 9) 5 else (params.size + 1) / 2) }
+        // only the effects added from the track's popup show here
+        if (lane.isTrack && Audio.amps[lane.channel].on.on) strip.addView(AmpPanel(context, lane.channel, fire), lp(WRAP, WRAP).apply { rightMargin = Px.dp(6) })
+        val switches = setOf(fx.fOn, fx.cOn, fx.mOn, fx.wraith.on)
+        fx.effects.forEach { (name, on) ->
+            if (!on.on || name == "Wraith") return@forEach
+            val params = fx.p.sections[name]?.filter { it !in switches } ?: return@forEach
+            panel(name, params, if (params.size > 8) 5 else (params.size + 1) / 2) { on.set(0f) }
+        }
+        if (fx.wraith.on.on) fx.wraith.p.sections.forEach { (name, params) ->
+            val ps = params.filter { it !in switches }
+            panel(name, ps, if (ps.size > 9) 5 else (ps.size + 1) / 2, if (name == "Wraith") ({ fx.wraith.on.set(0f) }) else null)
+        }
+        if (strip.childCount == 0) strip.addView(Btn(context, "No effects on ${lane.title} yet: tap Track… (or the track's name) to add some", Pal.BROWN_L).apply { onClick = { openLanePopup(lane) } }, lp(WRAP, Px.dp(44)))
         box.addView(HorizontalScrollView(context).apply { addView(android.widget.ScrollView(context).apply { addView(strip) }) }, lp(MATCH, 0, 1f))
         drawer.addView(box, LayoutParams(MATCH, MATCH).apply { bottomMargin = Px.dp(48) })
     }
@@ -283,7 +308,8 @@ class FireEscapeScreen(c: Context, private val host: Host, private val fire: Fir
         private val waves = HashMap<String, FloatArray>()
 
         private fun lanes() = FireEscape.lanes()
-        private fun laneH(n: Int) = ((height - rulerH) / max(1, n)).coerceIn(Px.dp(40f), Px.dp(76f))
+        private val addH get() = if (FireEscape.arr.tracks.size < 3) Px.dp(30f) else 0f
+        private fun laneH(n: Int) = ((height - rulerH - addH) / max(1, n)).coerceIn(Px.dp(40f), Px.dp(76f))
         private fun x(t: Float) = headerW + (t - left) * ppt
         private fun tickAt(x: Float) = ((x - headerW) / ppt + left).toInt()
         private fun laneY(i: Int, lh: Float) = rulerH + i * lh - top
@@ -394,8 +420,6 @@ class FireEscapeScreen(c: Context, private val host: Host, private val fire: Fir
         private fun drawHeaders(c: Canvas, ls: List<FireEscape.Lane>, lh: Float) {
             p.color = 0xFF1A1622.toInt()
             c.drawRect(0f, 0f, headerW, height.toFloat(), p)
-            head.textSize = Px.dp(10f); head.color = Pal.CREAM
-            c.drawText("FIRE ESCAPE", Px.dp(6f), rulerH * 0.66f, head)
             for ((i, lane) in ls.withIndex()) {
                 val y = laneY(i, lh)
                 if (y + lh < rulerH || y > height) continue
@@ -406,17 +430,22 @@ class FireEscapeScreen(c: Context, private val host: Host, private val fire: Fir
                 head.color = Pal.CREAM; head.textSize = Px.dp(11f)
                 val nameW = headerW - Px.dp(14f)
                 c.drawText(fitText(lane.title, nameW, head, 8f), Px.dp(10f), y + Px.dp(15f), head)
-                // M (mute) and FX, then a level bar (the same level as the Studio / Clibbins fader)
+                // badges: armed, muted, effects (tap the name for the track's popup), then a level bar
                 val bw = Px.dp(22f); val by = y + lh - Px.dp(18f)
-                val muted = lane.id in FireEscape.arr.muted
-                c.pixelBox(Px.dp(10f), by, Px.dp(10f) + bw, by + Px.dp(14f), if (muted) Snes.RED else 0xFF4A4256.toInt())
+                val armed = FireEscape.isArmed(lane.id)
+                c.pixelBox(Px.dp(10f), by, Px.dp(10f) + bw * 0.7f, by + Px.dp(14f), if (armed) Snes.RED else 0xFF4A4256.toInt())
                 small.color = Pal.CREAM; small.textAlign = Paint.Align.CENTER
-                c.drawText("M", Px.dp(10f) + bw / 2, by + Px.dp(10.5f), small)
+                c.drawText("●", Px.dp(10f) + bw * 0.35f, by + Px.dp(10.5f), small)
+                val muted = lane.id in FireEscape.arr.muted
+                val mx = Px.dp(12f) + bw * 0.7f
+                c.pixelBox(mx, by, mx + bw * 0.7f, by + Px.dp(14f), if (muted) Snes.YELLOW else 0xFF4A4256.toInt())
+                c.drawText("M", mx + bw * 0.35f, by + Px.dp(10.5f), small)
                 val fxOn = Audio.laneFx(lane.id).active || (lane.isTrack && Audio.amps[lane.channel].on.on)
-                c.pixelBox(Px.dp(14f) + bw, by, Px.dp(14f) + bw * 2, by + Px.dp(14f), if (fxOn) Snes.PURPLE else 0xFF4A4256.toInt())
-                c.drawText("FX", Px.dp(14f) + bw * 1.5f, by + Px.dp(10.5f), small)
+                val fx0 = mx + bw * 0.7f + Px.dp(2f)
+                c.pixelBox(fx0, by, fx0 + bw, by + Px.dp(14f), if (fxOn) Snes.PURPLE else 0xFF4A4256.toInt())
+                c.drawText("FX", fx0 + bw / 2, by + Px.dp(10.5f), small)
                 small.textAlign = Paint.Align.LEFT
-                val lx = Px.dp(18f) + bw * 2; val lw = headerW - lx - Px.dp(6f)
+                val lx = fx0 + bw + Px.dp(4f); val lw = headerW - lx - Px.dp(6f)
                 if (lw > Px.dp(10f) && lh > Px.dp(46f)) {
                     p.color = 0xFF0E0C14.toInt(); c.drawRect(lx, by + Px.dp(4f), lx + lw, by + Px.dp(10f), p)
                     p.color = col; c.drawRect(lx, by + Px.dp(4f), lx + lw * levelOf(lane), by + Px.dp(10f), p)
@@ -425,13 +454,18 @@ class FireEscapeScreen(c: Context, private val host: Host, private val fire: Fir
                 val wr = Audio.laneFx(lane.id).wraith
                 if (wr.on.on && wr.openness > 0.02f) { p.color = Pal.alpha(0xFFB9A8FF.toInt(), 0.5f * wr.openness); c.drawRect(headerW - Px.dp(4f), y + u * 2, headerW - u, y + lh - u * 2, p) }
             }
+            // add an audio track (they only appear once added)
+            if (FireEscape.arr.tracks.size < 3) {
+                val y = laneY(ls.size, lh)
+                if (y < height) {
+                    c.pixelBox(u * 2, y + u * 2, headerW - u * 2, y + addH - u * 2, 0xFF2E5A40.toInt())
+                    small.color = Pal.CREAM; small.textAlign = Paint.Align.CENTER
+                    c.drawText("+ Audio track", headerW / 2, y + addH / 2 + Px.dp(3.5f), small)
+                    small.textAlign = Paint.Align.LEFT
+                }
+            }
         }
 
-        private fun levelOf(lane: FireEscape.Lane) = if (lane.isTrack) Audio.channelLevel[lane.channel] else lane.engine?.volume?.value ?: 0f
-        private fun setLevel(lane: FireEscape.Lane, v: Float) {
-            if (lane.isTrack) Studio.setTrackLevel(lane.channel, v) else lane.engine?.volume?.set(v)
-            Studio.save()
-        }
 
         private fun drawItem(c: Canvas, it: ArrItem, x0: Float, y0: Float, x1: Float, y1: Float, sel: Boolean, muted: Boolean) {
             val col = color(it.lane)
@@ -559,7 +593,7 @@ class FireEscapeScreen(c: Context, private val host: Host, private val fire: Fir
                         val li = laneIndexAt(e.y)
                         if (li >= 0) {
                             val ls = lanes(); val lh = laneH(ls.size); val y = laneY(li, lh)
-                            val bw = Px.dp(22f); val lx = Px.dp(18f) + bw * 2
+                            val bw = Px.dp(22f); val lx = Px.dp(18f) + bw * 2.4f
                             if (e.y > y + lh - Px.dp(20f) && e.x > lx) { mode = 6; dragLane = ls[li] }
                         }
                     }
@@ -614,7 +648,7 @@ class FireEscapeScreen(c: Context, private val host: Host, private val fire: Fir
                 3 -> dragItem?.let { it -> FireEscape.trimStart(it, origStart + ((xx - downX) / ppt).toInt()) }
                 4 -> { left = max(0f, left - dx / ppt); top += -dy; invalidate() }
                 5 -> FireEscape.setLoop(loopFrom, tickAt(xx).coerceAtLeast(0))
-                6 -> dragLane?.let { lane -> val bw = Px.dp(22f); val lx = Px.dp(18f) + bw * 2; val lw = headerW - lx - Px.dp(6f); setLevel(lane, ((xx - lx) / lw).coerceIn(0f, 1f)); invalidate() }
+                6 -> dragLane?.let { lane -> val bw = Px.dp(22f); val lx = Px.dp(18f) + bw * 2.4f; val lw = headerW - lx - Px.dp(6f); setLevel(lane, ((xx - lx) / lw).coerceIn(0f, 1f)); invalidate() }
                 7, 8 -> cardDrag(xx)
             }
         }
@@ -628,17 +662,17 @@ class FireEscapeScreen(c: Context, private val host: Host, private val fire: Fir
 
         private fun tap(xx: Float, yy: Float) {
             if (yy < rulerH) { if (xx > headerW) FireEscape.setPlayhead(tickAt(xx).coerceAtLeast(0)); return }
+            if (xx < headerW && FireEscape.arr.tracks.size < 3) {
+                val ls = lanes(); val y = laneY(ls.size, laneH(ls.size))
+                if (yy in y..y + addH) { FireEscape.addTrack(); return }
+            }
             val li = laneIndexAt(yy); if (li < 0) return
             val lane = lanes()[li]
             if (xx < headerW) {
-                val ls = lanes(); val lh = laneH(ls.size); val y = laneY(li, lh)
-                val bw = Px.dp(22f); val by = y + lh - Px.dp(18f)
+                // the track's popup: arm, mute, volume, pan, sidechain and its effects
                 FireEscape.selectedLane = lane.id
-                when {
-                    yy >= by - Px.dp(4f) && xx in Px.dp(8f)..Px.dp(12f) + bw -> FireEscape.toggleMute(lane.id)
-                    yy >= by - Px.dp(4f) && xx in Px.dp(12f) + bw..Px.dp(16f) + bw * 2 -> { FireEscape.selected = null; toggleDrawer("fx") }
-                    else -> { if (drawerKind == "crate" || drawerKind == "keys" || drawerKind == "fx") { val k = drawerKind; closeDrawer(); toggleDrawer(k) } }
-                }
+                if (drawerKind == "crate" || drawerKind == "keys" || drawerKind == "fx") { val k = drawerKind; closeDrawer(); toggleDrawer(k) }
+                openLanePopup(lane)
                 Studio.changed(); return
             }
             val it = itemAt(xx, yy)
@@ -668,6 +702,260 @@ class FireEscapeScreen(c: Context, private val host: Host, private val fire: Fir
                     4 -> FireEscape.delete(it)
                 }
             }
+        }
+    }
+
+    // ------------------------------------------------------------------ a lane's popup
+
+    /** A lane's volume (the same as its Studio / Clibbins level), 0..1. */
+    private fun levelOf(lane: FireEscape.Lane) = if (lane.isTrack) Audio.channelLevel[lane.channel] else lane.engine?.volume?.value ?: 0f
+    private fun setLevel(lane: FireEscape.Lane, v: Float) {
+        if (lane.isTrack) Studio.setTrackLevel(lane.channel, v) else lane.engine?.volume?.set(v)
+    }
+    private fun dbText(g: Float) = if (g < 0.0005f) "-inf dB" else "%.1f dB".format(20f * kotlin.math.log10(g))
+    private fun sidechainName(lane: FireEscape.Lane): String {
+        val k = Audio.laneFx(lane.id).compKey
+        return if (k < 0) "Off" else Audio.laneFx(lane.id).sources.getOrElse(k) { "?" }
+    }
+
+    /** Pick where the lane's compressors listen (adds a compressor if it has none). */
+    private fun chooseSidechain(lane: FireEscape.Lane, then: () -> Unit = {}) {
+        val fx = Audio.laneFx(lane.id)
+        val others = Audio.laneIds.indices.filter { Audio.laneIds[it] != lane.id && FireEscape.lane(Audio.laneIds[it]) != null }
+        fire.choose("${lane.title}: sidechain from", listOf("Off (listens to itself)") + others.map { fx.sources[it] }, if (fx.compKey < 0) 0 else others.indexOf(fx.compKey) + 1) { i ->
+            fx.setSidechain(if (i == 0) -1 else others[i - 1])
+            if (i > 0 && !fx.cOn.on && !fx.mOn.on) { fx.cOn.set(1f); Studio.message("Added a Compressor to ${lane.title}, keyed by ${fx.sources[others[i - 1]]}") }
+            Studio.save(); Studio.changed(); then()
+        }
+    }
+
+    fun openLanePopup(lane: FireEscape.Lane) {
+        val a = context as? android.app.Activity ?: return
+        val fx = Audio.laneFx(lane.id)
+        val d = SnesDialog(a, lane.title, wide = 0.8f)
+        val box = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
+        fun rebuild() {
+            box.removeAllViews()
+            val row = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+            row.addView(Btn(a, "● Arm", Snes.RED).apply { on = FireEscape.isArmed(lane.id); onClick = { FireEscape.toggleArm(lane.id); rebuild() } }, lp(0, Px.dp(42), 1f))
+            row.addView(Btn(a, "Mute", Snes.YELLOW).apply { on = FireEscape.isMuted(lane.id); onClick = { FireEscape.toggleMute(lane.id); rebuild() } }, lp(0, Px.dp(42), 1f).apply { leftMargin = Px.dp(4) })
+            if (lane.isTrack) row.addView(Btn(a, if (fx.stereo.on) "Stereo" else "Mono", Pal.AQUA).apply { on = fx.stereo.on; onClick = { FireEscape.toggleStereo(lane.channel); rebuild() } }, lp(0, Px.dp(42), 1f).apply { leftMargin = Px.dp(4) })
+            box.addView(row, lp(MATCH, Px.dp(44)))
+            box.addView(Slider(a, "Volume", { levelOf(lane) }, { setLevel(lane, it) }, { dbText(it) }), lp(MATCH, Px.dp(44)).apply { topMargin = Px.dp(6) })
+            box.addView(Slider(a, "Pan", { (fx.pan.value + 1f) / 2f }, { v -> var x = v * 2f - 1f; if (abs(x) < 0.05f) x = 0f; fx.pan.set(x) },
+                { val v = fx.pan.value; if (abs(v) < 0.01f) "Centre" else (if (v < 0) "L " else "R ") + (abs(v) * 100).toInt() }), lp(MATCH, Px.dp(44)).apply { topMargin = Px.dp(4) })
+            box.addView(Btn(a, "Sidechain: ${sidechainName(lane)}", Snes.PURPLE).apply { onClick = { chooseSidechain(lane) { rebuild() } } }, lp(MATCH, Px.dp(40)).apply { topMargin = Px.dp(6) })
+            // effects: added here, then they appear in the effects panel
+            val flow = Flow(a)
+            val list = fx.effects + if (lane.isTrack) listOf("Amp (NAM)" to Audio.amps[lane.channel].on) else emptyList()
+            list.forEach { (name, on) ->
+                flow.addView(Btn(a, (if (on.on) "✓ " else "+ ") + name, if (on.on) Pal.GREEN else Pal.BROWN_L).apply {
+                    this.on = on.on
+                    onClick = { on.set(if (on.on) 0f else 1f); Studio.save(); Studio.changed(); if (drawerKind == "fx") buildFxAgain(); rebuild() }
+                })
+            }
+            box.addView(Panel(a, "Effects (tap to add or remove)", accent = Snes.PURPLE).apply { addView(flow, lp(MATCH, WRAP)) }, lp(MATCH, WRAP).apply { topMargin = Px.dp(6) })
+            val row2 = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL }
+            row2.addView(Btn(a, "Edit effects", Snes.PURPLE).apply { onClick = { d.dismiss(); FireEscape.selectedLane = lane.id; if (drawerKind == "fx") buildFxAgain() else toggleDrawer("fx") } }, lp(0, Px.dp(40), 1f))
+            row2.addView(Btn(a, "Tuner", Pal.SUN).apply { onClick = { FireEscape.selectedLane = lane.id; openTuner() } }, lp(0, Px.dp(40), 1f).apply { leftMargin = Px.dp(4) })
+            if (lane.isTrack) row2.addView(Btn(a, "Remove track", Snes.RED).apply { onClick = { d.dismiss(); FireEscape.removeTrack(lane.channel) } }, lp(0, Px.dp(40), 1f).apply { leftMargin = Px.dp(4) })
+            box.addView(row2, lp(MATCH, Px.dp(42)).apply { topMargin = Px.dp(6) })
+        }
+        rebuild()
+        d.view(box)
+        d.key("Done", Snes.GREEN) { Studio.save() }
+        d.onDismiss { Studio.save(); Studio.changed() }
+        d.show()
+    }
+
+    /** A labelled horizontal slider with a readout. */
+    @SuppressLint("ViewConstructor", "ClickableViewAccessibility")
+    private class Slider(c: Context, val label: String, val get: () -> Float, val set: (Float) -> Unit, val text: (Float) -> String) : PixelView(c) {
+        private val tp = Px.text(12f, Pal.BROWN_D, align = Paint.Align.LEFT)
+        private val p = Paint()
+        private val labelW get() = Px.dp(64f)
+        private val textW get() = Px.dp(76f)
+        override fun paint(c: Canvas) {
+            c.pixelBox(u, u, width - u, height - u, Pal.CREAM)
+            tp.textSize = Px.dp(12f); tp.textAlign = Paint.Align.LEFT
+            c.textFit(label, Px.dp(8f) + (labelW - Px.dp(8f)) / 2 - Px.dp(2f), height / 2f, labelW - Px.dp(10f), tp.apply { textAlign = Paint.Align.CENTER })
+            val l = labelW; val r = width - textW
+            val v = get().coerceIn(0f, 1f)
+            p.color = 0xFF3A3040.toInt(); c.drawRect(l, height / 2f - Px.dp(3f), r, height / 2f + Px.dp(3f), p)
+            p.color = Pal.ORANGE; c.drawRect(l, height / 2f - Px.dp(3f), l + (r - l) * v, height / 2f + Px.dp(3f), p)
+            val kx = l + (r - l) * v
+            c.pixelBox(kx - Px.dp(6f), height * 0.2f, kx + Px.dp(6f), height * 0.8f, Pal.PAPER)
+            tp.textAlign = Paint.Align.CENTER
+            c.textFit(text(v), width - textW / 2, height / 2f, textW - Px.dp(8f), tp)
+        }
+        override fun onTouchEvent(e: MotionEvent): Boolean {
+            parent?.requestDisallowInterceptTouchEvent(true)
+            val l = labelW; val r = width - textW
+            set(((e.x - l) / (r - l)).coerceIn(0f, 1f)); invalidate()
+            if (e.actionMasked == MotionEvent.ACTION_UP) Studio.save()
+            return true
+        }
+    }
+
+    // ------------------------------------------------------------------ the mixer
+
+    /** Every lane as a channel strip: arm, mute, stereo, effects, sidechain, pan, fader and a dB meter. Plus the master. */
+    @SuppressLint("ClickableViewAccessibility")
+    private inner class MixerView(c: Context) : PixelView(c) {
+        init { animated = true }
+        private val p = Paint()
+        private val tp = Px.text(10f, Pal.CREAM, align = Paint.Align.CENTER)
+        private val hold = HashMap<String, Float>()
+        private val holdAt = HashMap<String, Long>()
+        private var scroll = 0f
+        private val stripW get() = Px.dp(96f)
+        private val hits = ArrayList<MixHit>()
+
+        private fun peakOf(lane: FireEscape.Lane?): Float = when {
+            lane == null -> Audio.peak
+            lane.isTrack -> Audio.channelPeak[lane.channel]
+            else -> lane.engine?.meter ?: 0f
+        }
+        private fun db(x: Float) = if (x < 1e-5f) -100f else 20f * kotlin.math.log10(x)
+        /** Meter position for a level in dB: -60 .. +6. */
+        private fun meterY(d: Float, top: Float, bot: Float) = bot - ((d + 60f) / 66f).coerceIn(0f, 1f) * (bot - top)
+
+        override fun paint(c: Canvas) {
+            hits.clear()
+            p.color = 0xD8141018.toInt(); c.drawRect(0f, 0f, width.toFloat(), height.toFloat(), p)
+            val ls: List<FireEscape.Lane?> = FireEscape.lanes() + listOf<FireEscape.Lane?>(null)
+            scroll = scroll.coerceIn(0f, max(0f, ls.size * stripW - width))
+            for ((i, lane) in ls.withIndex()) {
+                val x0 = i * stripW - scroll; val x1 = x0 + stripW - Px.dp(4f)
+                if (x1 < 0 || x0 > width) continue
+                strip(c, lane, x0 + Px.dp(2f), x1)
+            }
+        }
+
+        private fun strip(c: Canvas, lane: FireEscape.Lane?, l: Float, r: Float) {
+            val h = height.toFloat()
+            val col = if (lane == null) Pal.CREAM else laneColor(lane.id)
+            c.pixelBox(l, Px.dp(4f), r, h - Px.dp(4f), 0xFF262030.toInt())
+            // name
+            p.color = col; c.drawRect(l + u * 2, Px.dp(6f), r - u * 2, Px.dp(24f), p)
+            tp.color = textOn(col); tp.textSize = Px.dp(11f)
+            c.textFit(lane?.title ?: "Master", (l + r) / 2, Px.dp(15f), r - l - Px.dp(8f), tp)
+            hits += MixHit(l, Px.dp(4f), r, Px.dp(26f), 0, lane)
+            var y = Px.dp(28f)
+            if (lane != null) {
+                val fx = Audio.laneFx(lane.id)
+                // arm / mute / stereo
+                val bw = (r - l - Px.dp(8f)) / 3f
+                fun key(i: Int, text: String, lit: Boolean, litCol: Int, kind: Int, enabled: Boolean = true) {
+                    val kl = l + Px.dp(3f) + i * (bw + Px.dp(1f)); val kr = kl + bw
+                    c.pixelBox(kl, y, kr, y + Px.dp(20f), if (!enabled) 0xFF2A2533.toInt() else if (lit) litCol else 0xFF4A4256.toInt())
+                    tp.color = Pal.CREAM; tp.textSize = Px.dp(9f)
+                    c.textFit(text, (kl + kr) / 2, y + Px.dp(10f), bw - Px.dp(2f), tp)
+                    if (enabled) hits += MixHit(kl, y, kr, y + Px.dp(20f), kind, lane)
+                }
+                key(0, "ARM", FireEscape.isArmed(lane.id), Snes.RED, 1)
+                key(1, "M", FireEscape.isMuted(lane.id), Snes.YELLOW, 2)
+                key(2, if (lane.isTrack) (if (fx.stereo.on) "ST" else "MO") else "–", lane.isTrack && fx.stereo.on, Pal.AQUA, 3, lane.isTrack)
+                y += Px.dp(23f)
+                // effects and sidechain
+                val n = fx.effects.count { it.second.on } + if (lane.isTrack && Audio.amps[lane.channel].on.on) 1 else 0
+                c.pixelBox(l + Px.dp(3f), y, r - Px.dp(3f), y + Px.dp(20f), if (n > 0) Snes.PURPLE else 0xFF4A4256.toInt())
+                tp.color = Pal.CREAM; tp.textSize = Px.dp(9f)
+                c.textFit(if (n > 0) "FX ($n)" else "FX +", (l + r) / 2, y + Px.dp(10f), r - l - Px.dp(10f), tp)
+                hits += MixHit(l, y, r, y + Px.dp(20f), 4, lane); y += Px.dp(23f)
+                val sc = sidechainName(lane)
+                c.pixelBox(l + Px.dp(3f), y, r - Px.dp(3f), y + Px.dp(20f), if (sc != "Off") 0xFF5A4A8A.toInt() else 0xFF4A4256.toInt())
+                c.textFit("SC: $sc", (l + r) / 2, y + Px.dp(10f), r - l - Px.dp(10f), tp)
+                hits += MixHit(l, y, r, y + Px.dp(20f), 5, lane); y += Px.dp(23f)
+                // pan
+                val pan = fx.pan.value
+                p.color = 0xFF0E0C14.toInt(); c.drawRect(l + Px.dp(6f), y + Px.dp(6f), r - Px.dp(6f), y + Px.dp(12f), p)
+                val px = (l + r) / 2 + pan * ((r - l) / 2 - Px.dp(8f))
+                p.color = Pal.alpha(Pal.CREAM, 0.35f); c.drawRect((l + r) / 2 - u * 0.5f, y + Px.dp(4f), (l + r) / 2 + u * 0.5f, y + Px.dp(14f), p)
+                c.pixelBox(px - Px.dp(5f), y + Px.dp(2f), px + Px.dp(5f), y + Px.dp(16f), col)
+                hits += MixHit(l, y, r, y + Px.dp(18f), 6, lane); y += Px.dp(20f)
+                tp.textSize = Px.dp(8.5f); tp.color = Pal.alpha(Pal.CREAM, 0.7f)
+                c.drawText(if (abs(pan) < 0.01f) "C" else (if (pan < 0) "L" else "R") + (abs(pan) * 100).toInt(), (l + r) / 2, y + Px.dp(6f), tp)
+                y += Px.dp(10f)
+            } else y += Px.dp(119f)
+            // fader (left) and meter (right), with dB readings
+            val top = y + Px.dp(14f); val bot = h - Px.dp(26f)
+            if (bot - top < Px.dp(30f)) return
+            val level = if (lane == null) Audio.masterVolume else levelOf(lane)
+            val pk = peakOf(lane)
+            val key = lane?.id ?: "master"
+            val now = System.currentTimeMillis()
+            if (pk >= (hold[key] ?: 0f) || now - (holdAt[key] ?: 0L) > 1500) { hold[key] = pk; holdAt[key] = now }
+            tp.textSize = Px.dp(9f); tp.color = if (db(hold[key] ?: 0f) > -0.5f) Snes.RED else Pal.CREAM
+            c.drawText(if ((hold[key] ?: 0f) < 1e-4f) "-inf" else "%.1f".format(db(hold[key] ?: 0f)), l + (r - l) * 0.72f, y + Px.dp(9f), tp)
+            // meter
+            val ml = l + (r - l) * 0.6f; val mr = r - Px.dp(8f)
+            p.color = 0xFF0A080E.toInt(); c.drawRect(ml, top, mr, bot, p)
+            val d = db(pk)
+            val my = meterY(d, top, bot)
+            var yy = bot
+            while (yy > my) {
+                val dd = (bot - yy) / (bot - top) * 66f - 60f
+                p.color = if (dd > -3f) Snes.RED else if (dd > -12f) Snes.YELLOW else Pal.GREEN
+                c.drawRect(ml + u * 0.5f, max(my, yy - Px.dp(2f)), mr - u * 0.5f, yy - u * 0.4f, p)
+                yy -= Px.dp(2.5f)
+            }
+            val hy = meterY(db(hold[key] ?: 0f), top, bot)
+            p.color = Pal.CREAM; c.drawRect(ml, hy - u * 0.5f, mr, hy + u * 0.5f, p)
+            // scale ticks
+            tp.textSize = Px.dp(7.5f); tp.color = Pal.alpha(Pal.CREAM, 0.55f)
+            for (mark in intArrayOf(6, 0, -6, -12, -24, -36, -48)) {
+                val ty = meterY(mark.toFloat(), top, bot)
+                p.color = Pal.alpha(Pal.CREAM, 0.3f); c.drawRect(ml - Px.dp(3f), ty, ml, ty + u * 0.5f, p)
+                c.drawText("$mark", ml - Px.dp(10f), ty + Px.dp(3f), tp)
+            }
+            // fader
+            val fl = l + Px.dp(6f); val fr = l + (r - l) * 0.38f
+            p.color = 0xFF0A080E.toInt(); c.drawRect((fl + fr) / 2 - Px.dp(2f), top, (fl + fr) / 2 + Px.dp(2f), bot, p)
+            val fy = bot - level.coerceIn(0f, 1f) * (bot - top)
+            c.pixelBox(fl, fy - Px.dp(8f), fr, fy + Px.dp(8f), Pal.PAPER)
+            p.color = col; c.drawRect(fl + Px.dp(2f), fy - u * 0.5f, fr - Px.dp(2f), fy + u * 0.5f, p)
+            hits += MixHit(l, top - Px.dp(8f), ml - Px.dp(12f), bot + Px.dp(8f), 7, lane)
+            tp.textSize = Px.dp(9f); tp.color = Pal.CREAM
+            c.textFit(dbText(level), (l + r) / 2, h - Px.dp(14f), r - l - Px.dp(6f), tp)
+        }
+
+        private var dragHit: MixHit? = null
+        private var downX = 0f; private var lastX = 0f; private var moved = false
+        private fun faderBounds(hit: MixHit) = (hit.t + Px.dp(8f)) to (hit.b - Px.dp(8f))
+        override fun onTouchEvent(e: MotionEvent): Boolean {
+            when (e.actionMasked) {
+                MotionEvent.ACTION_DOWN -> { downX = e.x; lastX = e.x; moved = false; dragHit = hits.lastOrNull { e.x in it.l..it.r && e.y in it.t..it.b }; parent?.requestDisallowInterceptTouchEvent(true) }
+                MotionEvent.ACTION_MOVE -> {
+                    val hh = dragHit
+                    if (abs(e.x - downX) > Px.dp(6f)) moved = true
+                    when {
+                        hh != null && hh.kind == 7 -> { val (t, b) = faderBounds(hh); setFader(hh.lane, ((b - e.y) / (b - t)).coerceIn(0f, 1f)) }
+                        hh != null && hh.kind == 6 && hh.lane != null -> { val mid = (hh.l + hh.r) / 2; var v = ((e.x - mid) / ((hh.r - hh.l) / 2 - Px.dp(8f))).coerceIn(-1f, 1f); if (abs(v) < 0.05f) v = 0f; Audio.laneFx(hh.lane.id).pan.set(v) }
+                        else -> { scroll -= e.x - lastX }
+                    }
+                    lastX = e.x; invalidate()
+                }
+                MotionEvent.ACTION_UP -> {
+                    val hh = dragHit
+                    if (hh != null && !moved) when (hh.kind) {
+                        0 -> hh.lane?.let { FireEscape.selectedLane = it.id; openLanePopup(it) }
+                        1 -> hh.lane?.let { FireEscape.toggleArm(it.id) }
+                        2 -> hh.lane?.let { FireEscape.toggleMute(it.id) }
+                        3 -> hh.lane?.let { FireEscape.toggleStereo(it.channel) }
+                        4 -> hh.lane?.let { FireEscape.selectedLane = it.id; val n = Audio.laneFx(it.id).effects.count { e2 -> e2.second.on } + if (it.isTrack && Audio.amps[it.channel].on.on) 1 else 0; if (n == 0) openLanePopup(it) else if (drawerKind == "fx") buildFxAgain() else toggleDrawer("fx") }
+                        5 -> hh.lane?.let { chooseSidechain(it) }
+                        7 -> { val (t, b) = faderBounds(hh); setFader(hh.lane, ((b - e.y) / (b - t)).coerceIn(0f, 1f)) }
+                    }
+                    if (hh?.kind == 6 || hh?.kind == 7) Studio.save()
+                    dragHit = null; invalidate()
+                }
+            }
+            return true
+        }
+
+        private fun setFader(lane: FireEscape.Lane?, v: Float) {
+            if (lane == null) { Audio.masterVolume = v; Studio.project.audioMaster = v } else setLevel(lane, v)
         }
     }
 
@@ -713,3 +1001,6 @@ fun mixColor(a: Int, b: Int, t: Float): Int {
     fun ch(s: Int) = (((a shr s) and 255) + (((b shr s) and 255) - ((a shr s) and 255)) * t).toInt().coerceIn(0, 255)
     return (0xFF shl 24) or (ch(16) shl 16) or (ch(8) shl 8) or ch(0)
 }
+
+/** A touchable spot on the mixer: what kind of control, on which lane (null = master). */
+private class MixHit(val l: Float, val t: Float, val r: Float, val b: Float, val kind: Int, val lane: FireEscape.Lane?)

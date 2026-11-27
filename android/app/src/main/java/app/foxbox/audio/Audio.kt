@@ -53,6 +53,8 @@ object Audio {
     val amps = Array(3) { AmpRig(it) }
     /** Pitch classes in the project's scale (bit n = pitch class n), for Wraith. */
     @Volatile var scaleMask = 0xAB5
+    /** Lanes muted on the Fire Escape (and its mixer): silenced at their fader. */
+    val laneMuted = BooleanArray(laneIds.size)
 
     // ---------------------------------------------------------------- the tuner's ear
     /** What the tuner listens to: -1 nothing, 0..2 the input (1, 2, both), 100 + n the block at engines[n]. */
@@ -164,8 +166,11 @@ object Audio {
         for (ch in 0 until 3) {
             val bl = audioBus[ch]; val br = audioBusR[ch]
             if (li != null && liveMonitor[ch]) {
-                val src = liveInput[ch]
-                for (i in 0 until n) { val v = when (src) { 0 -> inL[i]; 1 -> inR[i]; else -> (inL[i] + inR[i]) * 0.5f }; bl[i] += v; br[i] += v }
+                if (laneFx[E + ch].stereo.on) for (i in 0 until n) { bl[i] += inL[i]; br[i] += inR[i] }   // a stereo track: input 1 left, input 2 right
+                else {
+                    val src = liveInput[ch]
+                    for (i in 0 until n) { val v = when (src) { 0 -> inL[i]; 1 -> inR[i]; else -> (inL[i] + inR[i]) * 0.5f }; bl[i] += v; br[i] += v }
+                }
             }
             amps[ch].process(bl, br, n)
             val key = keyBuf[E + ch]
@@ -184,8 +189,9 @@ object Audio {
             val c = routes[e.id] ?: -1
             val dl = if (c >= 0 && chains[c] != null) chL[c] else mixL
             val dr = if (c >= 0 && chains[c] != null) chR[c] else mixR
-            val pn = e.livePan
-            val pl = v * minOf(1f, 1f - pn); val pr = v * minOf(1f, 1f + pn)
+            val pn = (e.livePan + fx.pan.value).coerceIn(-1f, 1f)
+            val mv = if (laneMuted[idx]) 0f else v
+            val pl = mv * minOf(1f, 1f - pn); val pr = mv * minOf(1f, 1f + pn)
             var pk = e.meter * 0.985f
             for (i in 0 until n) {
                 dl[i] += eL[i] * pl; dr[i] += eR[i] * pr
@@ -201,7 +207,9 @@ object Audio {
             if (fx.active) fx.process(bl, br, n, keyFor(fx.compKey), keyFor(fx.bandKey), bpm, tk, mask) else fx.wraith.idle()
             stripFx[ch].process(bl, br, n, revL, revR)
             val c = rack.channelRoute[ch]
-            val g = channelLevel[ch]
+            val g = if (laneMuted[E + ch]) 0f else channelLevel[ch]
+            val tp = fx.pan.value
+            if (tp != 0f) { val gl = minOf(1f, 1f - tp); val gr = minOf(1f, 1f + tp); for (i in 0 until n) { bl[i] *= gl; br[i] *= gr } }
             val dl = if (c >= 0 && chains[c] != null) chL[c] else mixL
             val dr = if (c >= 0 && chains[c] != null) chR[c] else mixR
             var pk = channelPeak[ch] * 0.95f

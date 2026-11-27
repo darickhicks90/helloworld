@@ -36,7 +36,30 @@ object FireEscape {
 
     /** Lanes, top to bottom: the session's blocks, then the audio tracks. */
     fun lanes(): List<Lane> = Studio.project.blocks.map { Lane(it, Audio.engine(it).title, Audio.engine(it), -1) } +
-        (0 until AudioClip.CHANNELS).filter { Studio.project.planes[it] }.map { Lane("track$it", Studio.CHANNEL_NAMES[it], null, it) }
+        arr.tracks.sorted().map { Lane("track$it", Studio.CHANNEL_NAMES[it], null, it) }
+
+    /** Add the next free audio track (Red, Yellow, Blue). */
+    fun addTrack() {
+        val ch = (0 until AudioClip.CHANNELS).firstOrNull { it !in arr.tracks } ?: return Studio.message("All three audio tracks are on the Fire Escape")
+        arr.tracks += ch; selectedLane = "track$ch"
+        Studio.message("${Studio.CHANNEL_NAMES[ch]} track added: tap its name to arm it")
+        changed()
+    }
+
+    /** Take an audio track off the Fire Escape (its takes stay in the project). */
+    fun removeTrack(ch: Int) {
+        arr.tracks -= ch; arr.items.removeAll { it.lane == "track$ch" }; arr.armed -= "track$ch"; arr.muted -= "track$ch"
+        Audio.laneFx("track$ch").reset(); Audio.amps[ch].on.set(0f)
+        if (selectedLane == "track$ch") selectedLane = lanes().firstOrNull()?.id
+        changed()
+    }
+
+    fun isArmed(id: String) = id in arr.armed
+    fun toggleArm(id: String) { if (!arr.armed.remove(id)) arr.armed += id; changed() }
+    fun isMuted(id: String) = id in arr.muted
+
+    /** The mixer's mutes, handed to the audio thread. */
+    private fun syncMutes() { val ids = Audio.laneIds; for (i in ids.indices) Audio.laneMuted[i] = open && ids[i] in arr.muted }
 
     fun lane(id: String) = lanes().firstOrNull { it.id == id }
 
@@ -131,6 +154,7 @@ object FireEscape {
     }
 
     fun toggleMute(laneId: String) { if (!arr.muted.remove(laneId)) arr.muted += laneId; changed() }
+    fun toggleStereo(ch: Int) { val p = Audio.laneFx("track$ch").stereo; p.set(if (p.on) 0f else 1f); Studio.save(); Studio.changed() }
 
     fun setSnap(s: Int) { arr.snap = s.coerceIn(0, 3); Studio.save(); Studio.changed() }
 
@@ -178,10 +202,11 @@ object FireEscape {
         }
         val p = ArrangementPlayer(midi.toTypedArray(), audio.toTypedArray())
         builtSig = signature()
+        syncMutes()
         Audio.post { t.arrangement = p }
     }
 
-    private fun signature() = arr.items.joinToString { it.id + it.lane + it.ref + it.start + it.length + it.offset } + arr.muted.joinToString() +
+    private fun signature() = arr.items.joinToString { it.id + it.lane + it.ref + it.start + it.length + it.offset } + arr.muted.joinToString() + arr.tracks.joinToString() +
         Studio.project.blocks.joinToString() + Studio.project.bpm
 
     /** Keep the player in step after undo, a tempo change and the like (call on every Studio change). */
@@ -198,6 +223,7 @@ object FireEscape {
         if (!open) return
         open = false
         Audio.post { t.stop(); t.arrangement = null; t.loopOn = false }
+        syncMutes()
     }
 
     val playing get() = t.playing
@@ -230,25 +256,29 @@ object FireEscape {
 
     val recording get() = t.freeRec || (t.audioFree && t.audioRec != Transport.Rec.OFF)
 
-    /** Record on a lane: a block's performance (notes and pad moves), or a take on an audio track. Again to stop. */
-    fun record(lane: Lane) {
-        if (t.freeRec) { Audio.post { t.recordFree(null, 0.0) }; return }
-        if (t.audioFree && t.audioRec != Transport.Rec.OFF) { Studio.recordAudio(0.0); return }
+    /** Record every armed lane: blocks record what's played on them, audio tracks their input. Again to stop. */
+    fun record() {
+        val busy = recording
+        if (t.freeRec) Audio.post { t.recordFree(null, 0.0) }
+        if (t.audioFree && t.audioRec != Transport.Rec.OFF) Studio.recordAudio(0.0)
+        if (busy) { Studio.changed(); return }
+        val ls = lanes().filter { it.id in arr.armed }
+        if (ls.isEmpty()) return Studio.message("Arm a track first: tap its name, then Arm")
         val from = arr.playhead.toDouble()
-        if (lane.isTrack) {
-            Studio.armed.fill(false); Studio.armed[lane.channel] = true; Studio.refreshLive()
+        val blocks = ls.filter { !it.isTrack }; val tracks = ls.filter { it.isTrack }
+        if (blocks.isNotEmpty()) Audio.post { t.recordFree(if (blocks.size == 1) blocks[0].engine else null, from) }
+        if (tracks.isNotEmpty()) {
+            Studio.armed.fill(false); tracks.forEach { Studio.armed[it.channel] = true }; Studio.refreshLive()
             Studio.recordAudio(from)
-        } else {
-            val e = lane.engine ?: return
-            Audio.post { t.recordFree(e, from) }
-            Studio.message(if (t.playing) "Recording ${e.title}: play it from the Studio keys, pads or a MIDI keyboard" else "One bar of count-in, then recording ${e.title}")
         }
+        Studio.message((if (t.playing) "Recording " else "One bar of count-in, then recording ") + ls.joinToString { it.title })
         Studio.changed()
     }
 
     /** A block performance came back from the transport: keep it as a clip and lay it where it was played. */
     fun performance(clips: List<Clip>, startTick: Double) { main.post {
-        for (c in clips) {
+        // only the armed blocks keep what was played
+        for (c in clips.filter { it.engine in arr.armed }) {
             val e = Audio.engine(c.engine)
             val n = Studio.project.clips.count { it.engine == c.engine && it.arr } + 1
             c.arr = true; c.name = "${e.title} take $n"
@@ -256,7 +286,8 @@ object FireEscape {
             runCatching { ProjectStore.saveClipMidi(Studio.project, c) }
             arr.items += ArrItem(lane = c.engine, ref = c.id, start = startTick.toInt().coerceAtLeast(0), length = c.lengthTicks)
         }
-        if (clips.isNotEmpty()) Studio.message("Laid " + clips.joinToString { it.name } + " on the Fire Escape")
+        val kept = clips.filter { it.arr }
+        if (kept.isNotEmpty()) Studio.message("Laid " + kept.joinToString { it.name } + " on the Fire Escape")
         changed()
     } }
 
@@ -267,12 +298,16 @@ object FireEscape {
             val takes = input.finish()
             val made = ArrayList<AudioClip>()
             for (ch in chans) {
-                val raw = takes[app.foxbox.audio.AudioPrefs.planeInput(ch).coerceIn(0, 2)]
+                val stereo = Audio.laneFx("track$ch").stereo.on
+                val raw = if (stereo) takes[0] else takes[app.foxbox.audio.AudioPrefs.planeInput(ch).coerceIn(0, 2)]
                 if (raw.size < SR / 4) continue
                 val room = ((AudioClip.MAX_SECONDS - Studio.secondsOn(ch)) * SR).toInt()
                 if (room <= 0) { Studio.message("${Studio.CHANNEL_NAMES[ch]} is full (6 minutes)"); continue }
                 val n = Studio.project.audioClips.count { it.channel == ch && it.arr } + made.count { it.channel == ch } + 1
-                val c = AudioClip(channel = ch, name = "${Studio.CHANNEL_NAMES[ch]} long take $n").apply { data = raw.copyOf(minOf(raw.size, room)); arr = true }
+                val c = AudioClip(channel = ch, name = "${Studio.CHANNEL_NAMES[ch]} long take $n").apply {
+                    data = raw.copyOf(minOf(raw.size, room)); arr = true
+                    if (stereo) dataR = takes[1].copyOf(minOf(takes[1].size, room))
+                }
                 ProjectStore.saveTake(Studio.project, c)
                 made += c
             }

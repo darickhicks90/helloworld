@@ -162,7 +162,10 @@ class Project(val dir: File) {
         for (i in 0 until app.foxbox.engines.Pickup.PADS) {
             AudioFiles.readWav(File(samplesDir, "pickup_pad$i.wav"))?.let { Audio.pickup.setPadSample(i, it, names?.optString(i) ?: "Pad ${i + 1}") }
         }
-        audioClips.forEach { c -> c.data = AudioFiles.readWav(File(takesDir, "${c.id}.wav")) ?: FloatArray(0) }
+        audioClips.forEach { c ->
+            c.data = AudioFiles.readWav(File(takesDir, "${c.id}.wav")) ?: FloatArray(0)
+            c.dataR = File(takesDir, "${c.id}_R.wav").takeIf { it.exists() }?.let { AudioFiles.readWav(it) }
+        }
         Audio.transport.bpm = bpm; Audio.transport.metronome = metronome
         Audio.masterVolume = audioMaster
         Audio.setActive(blocks)
@@ -235,9 +238,11 @@ object ProjectStore {
     fun saveTake(p: Project, c: AudioClip) {
         val f = File(p.takesDir, "${c.id}.wav")
         AudioFiles.writeWav(f, c.data)
+        // a stereo take keeps its right side next to it
+        c.dataR?.let { AudioFiles.writeWav(File(p.takesDir, "${c.id}_R.wav"), it) }
         export(p, "Audio", safe("${c.name}.wav"), "audio/x-wav", f.readBytes())
     }
-    fun deleteTake(p: Project, c: AudioClip) { File(p.takesDir, "${c.id}.wav").delete() }
+    fun deleteTake(p: Project, c: AudioClip) { File(p.takesDir, "${c.id}.wav").delete(); File(p.takesDir, "${c.id}_R.wav").delete() }
 
     /** Write a clip's MIDI file into the project and to the export location. */
     fun saveClipMidi(p: Project, clip: Clip) = runCatching {

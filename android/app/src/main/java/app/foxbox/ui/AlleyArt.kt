@@ -61,19 +61,87 @@ object AlleyArt {
     fun render(): IntArray {
         px = IntArray(W * H); shaded = BooleanArray(W * H)
         seed = 0x1234567; bulbs.clear(); catEyes = intArrayOf(-100, -100)
-        wall()
+        bricks()
         sunlight()
-        // quiet windows, toned into the wall: the iron is what you see
-        windowAt(96, 22, 54, 58, open = false); mute(96, 22, 54, 58)
-        windowAt(96, 142, 54, 58, open = false); mute(96, 142, 54, 58)
-        windowAt(318, 30, 50, 56, open = false); mute(318, 30, 50, 56)
-        windowAt(318, 150, 50, 56, open = false); mute(318, 150, 50, 56)
-        drainpipe(276)
-        // the fire escape, its shadow first
-        shadowing = true; fireEscape(); shadowing = false
-        fireEscape()
         vignette()
         return px
+    }
+
+    /** Just brick, close up: every brick its own clay, with flecks, pits, hairline cracks and worn arrises. */
+    private fun bricks() {
+        val bw = 48; val bh = 17; val joint = 3
+        val clays = intArrayOf(rgb(172, 80, 58), rgb(186, 92, 64), rgb(158, 72, 54), rgb(196, 106, 76), rgb(150, 68, 54), rgb(178, 100, 78), rgb(166, 86, 66), rgb(140, 64, 52))
+        val mortar = rgb(190, 180, 164)
+        for (row in -1..H / bh + 1) {
+            val y0 = row * bh
+            val off = if (row and 1 == 0) 0 else bw / 2
+            var col = -1
+            while (col * bw - off < W + bw) {
+                val x0 = col * bw - off
+                val h = hash(col * 31 + 7, row * 17 + 3)
+                var base = clays[h % clays.size]
+                if (h % 17 == 0) base = rgb(112, 58, 50)          // overfired, almost purple
+                if (h % 23 == 1) base = rgb(210, 140, 106)        // pale and sandy
+                val warm = ((h shr 3) % 7 - 3) * 0.02f
+                val crack = if (h % 7 == 0) (h shr 4) % (bw - 8) + 4 else -1
+                for (y in y0 until y0 + bh) for (x in x0 until x0 + bw) {
+                    if (x !in 0 until W || y !in 0 until H) continue
+                    val lx = x - x0; val ly = y - y0
+                    var c: Int
+                    if (ly >= bh - joint || lx >= bw - joint) {
+                        // the joint: sandy mortar, recessed (shadow under the brick, a lit lower lip)
+                        val n = hash(x * 3 + 11, y * 5 + 7) % 100
+                        c = mortar
+                        if (ly == bh - joint && lx < bw - joint) c = shade(mortar, 0.6f)
+                        else if (lx == bw - joint && ly < bh - joint) c = shade(mortar, 0.7f)
+                        if (n < 22) c = shade(c, 0.86f) else if (n > 88) c = mix(c, rgb(236, 230, 214), 0.45f)
+                        if (n in 40..42) c = rgb(120, 110, 100)
+                    } else {
+                        c = shade(base, 1f + warm)
+                        // gentle tonal waves across the face (fired clay is never flat)
+                        val fx = x.toFloat(); val fy = y.toFloat()
+                        val wave = kotlin.math.sin(fx * 0.21f + fy * 0.37f + h) * 0.035f + kotlin.math.sin(fx * 0.07f - fy * 0.19f + h * 0.3f) * 0.05f +
+                            ((hash((x + 1) / 2, (y + 1) / 2) % 100) - 50) / 1400f
+                        c = shade(c, 1f + wave)
+                        val n = hash(x * 7 + 1, y * 13 + 5) % 1000
+                        when {
+                            n < 60 -> c = shade(c, 0.93f)
+                            n < 72 -> c = shade(c, 0.84f)
+                            n in 500..503 -> { c = shade(c, 0.6f); }                               // pits
+                            n > 988 -> c = mix(c, rgb(246, 204, 168), 0.35f)                        // sandy flecks
+                            n in 700..704 -> c = mix(c, rgb(70, 44, 42), 0.3f)                       // dark specks
+                        }
+                        // light on the top arris, shade on the right and bottom
+                        if (ly == 0) c = mix(c, rgb(250, 206, 170), 0.35f)
+                        if (ly == 1) c = mix(c, rgb(250, 206, 170), 0.15f)
+                        if (ly == 2) c = mix(c, rgb(250, 206, 170), 0.05f)
+                        if (lx == 0) c = mix(c, rgb(240, 186, 150), 0.2f)
+                        if (ly == bh - joint - 1) c = shade(c, 0.8f)
+                        if (ly == bh - joint - 2) c = shade(c, 0.92f)
+                        if (lx == bw - joint - 1) c = shade(c, 0.85f)
+                        // worn corners
+                        if ((h % 5 == 0 && lx <= 1 && ly <= 1) || (h % 6 == 1 && lx >= bw - joint - 2 && ly <= 1)) c = mix(mortar, c, 0.3f)
+                        if (h % 8 == 3 && lx >= bw - joint - 3 && ly >= bh - joint - 2) c = shade(mortar, 0.75f)
+                        // a hairline crack wandering down the face
+                        if (crack >= 0 && ly in 2 until bh - joint - 3) { val cx = crack + (kotlin.math.sin(ly * 0.9f + h) * 1.5f).toInt(); if (lx == cx) c = shade(c, 0.62f); if (lx == cx + 1) c = mix(c, rgb(240, 190, 160), 0.2f) }
+                    }
+                    set(x, y, c)
+                }
+                col++
+            }
+        }
+        // weathering: pale bloom in patches and faint darker streaks where rain runs
+        for (k in 0 until 9) {
+            val cx = rnd() % W; val cy = rnd() % H; val r = 14 + rnd() % 30
+            for (y in cy - r until cy + r) for (x in cx - r until cx + r) {
+                val d = ((x - cx) * (x - cx) + (y - cy) * (y - cy)) / (r * r).toFloat()
+                if (d < 1f && hash(x, y) % 3 == 0) blend(x, y, rgb(230, 218, 200), 0.16f * (1f - d))
+            }
+        }
+        for (k in 0 until 10) {
+            val x = rnd() % W; val y0 = rnd() % 80; val len = 40 + rnd() % 120; val w = 2 + rnd() % 5
+            for (y in y0 until minOf(H, y0 + len)) for (dx in 0 until w) if (hash(x + dx, y) % 4 != 0) blend(x + dx, y, rgb(70, 50, 46), 0.12f * (1f - (y - y0) / len.toFloat()))
+        }
     }
 
     // ------------------------------------------------------------------ the wall, close up

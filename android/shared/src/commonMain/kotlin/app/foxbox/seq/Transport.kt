@@ -126,7 +126,7 @@ class Transport {
         }
         recTarget = target; recLen = Int.MAX_VALUE / 2; freeRec = true
         if (!playing) { arrangement?.releaseAll(); tick = from - Ticks.BAR; playing = true; recStart = from }
-        else recStart = tick + 1
+        else recStart = if (tick < from) from else tick + 1
         rec = Rec.ARMED
         changed()
     }
@@ -153,7 +153,7 @@ class Transport {
         if (audioRec != Rec.OFF) { endAudioTake(); return }
         audioFree = true
         if (!playing) { arrangement?.releaseAll(); tick = from - Ticks.BAR; playing = true; audioRecStart = from }
-        else audioRecStart = tick + 0.1 * bpm / 60.0 * Ticks.PPQ
+        else audioRecStart = if (tick < from) from else tick + 0.1 * bpm / 60.0 * Ticks.PPQ
         audioRec = Rec.ARMED
         changed()
     }
@@ -343,7 +343,8 @@ class Transport {
     }
 
     private fun step(s: Long) {
-        if (s >= 0) for (i in engines.indices) engines[i].onStep(s)
+        // the Studio's sequencers (step patterns, drum patterns) stay quiet while the Fire Escape plays the song
+        if (s >= 0 && arrangement == null) for (i in engines.indices) engines[i].onStep(s)
         val counting = audioRec == Rec.ARMED || rec == Rec.ARMED || (sampRec == Rec.ARMED && s < 0) || chopRec == Rec.ARMED
         if ((counting || (metronome && (rec != Rec.OFF || audioRec != Rec.OFF))) && Math.floorMod(s, 4L) == 0L) click(Math.floorMod(s, 16L) == 0L)
     }

@@ -25,6 +25,12 @@ class LaneFx(val sources: List<String>) {
     val p = Params()
     private val keys = listOf("Self") + sources
 
+    init { p.section("Lane") }
+    /** The lane's pan (added to the pan of the clips playing on it). */
+    val pan = p.num("pan", "Pan", -1f, 1f, 0f, Fmt.NUM)
+    /** Audio tracks: record and play input 1 left / input 2 right, or mono. */
+    val stereo = p.toggle("stereo", "Stereo")
+
     init { p.section("Filter") }
     val fOn = p.toggle("fOn", "Filter")
     val fMode = p.choice("fMode", "Type", listOf("Low pass", "High pass", "Band pass"))
@@ -69,6 +75,11 @@ class LaneFx(val sources: List<String>) {
     var bandReduction = 0f; private set
 
     fun reset() { p.all.values.forEach { it.set(it.def) }; wraith.reset() }
+
+    /** The effects that can be added to a lane, by name, with their on switches. */
+    val effects get() = listOf("Filter" to fOn, "Compressor" to cOn, "Multiband" to mOn, "Wraith" to wraith.on)
+    /** Set where both compressors listen (-1 itself, else an index into `sources`). */
+    fun setSidechain(k: Int) { cSide.set((k + 1).toFloat()); mSide.set((k + 1).toFloat()) }
 
     // ------------------------------------------------------------------ filter
 

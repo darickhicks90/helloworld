@@ -203,16 +203,16 @@ class FireEscapeScreen(c: Context, private val host: Host, private val fire: Fir
         val page: View = when (lane.id) {
             "minds" -> MindsPage(context)
             "pickup" -> PickupPage(context, host)
-            else -> InstrumentPage(context, lane.id, host)
+            else -> InstrumentPage(context, lane.id, host, roomyChords = true)
         }
+        // the keys take the whole screen below the transport bar
         val box = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; background = Tv.WoodDrawable() }
         val head = bar(context)
-        head.addView(Btn(context, "✕ Close", Pal.BROWN).apply { onClick = { closeDrawer() } }, lp(WRAP, Px.dp(40)))
-        head.addView(Btn(context, "Playing ${lane.title}: ● Rec records it", laneColor(lane.id)).apply { icon = Sprites.icon(lane.id) }, lp(0, Px.dp(40), 1f).apply { leftMargin = Px.dp(6) })
-        box.addView(head, lp(MATCH, Px.dp(44)))
+        head.addView(Btn(context, "✕ Close", Pal.BROWN).apply { onClick = { closeDrawer() } }, lp(WRAP, Px.dp(32)))
+        head.addView(Btn(context, "Playing ${lane.title}: ● Rec records it", laneColor(lane.id)).apply { icon = Sprites.icon(lane.id) }, lp(0, Px.dp(32), 1f).apply { leftMargin = Px.dp(6) })
+        box.addView(head, lp(MATCH, Px.dp(36)))
         box.addView(page, lp(MATCH, 0, 1f))
-        val h = (resources.displayMetrics.heightPixels * 0.62f).toInt()
-        drawer.addView(box, LayoutParams(MATCH, h).apply { gravity = android.view.Gravity.BOTTOM; bottomMargin = Px.dp(48) })
+        drawer.addView(box, LayoutParams(MATCH, MATCH))
     }
 
     private fun buildFx() {

@@ -512,6 +512,8 @@ class NotebookView(private val a: Activity, private val close: () -> Unit, priva
         if (dipPath > down * 1.25f) return false
         // the rise: clearly longer than the dip, well to the right, and steep
         if (up < down * 1.5f || ex - lx < h * 0.3f || ly - ey < h * 0.75f) return false
+        // the rise leans right at least 30° off vertical (a J's upright stroke is close to vertical)
+        if (ex - lx < (ly - ey) * 0.577f) return false
         // ends well above where it began (an "r" comes back to about its starting height)
         if (sy - ey < h * 0.45f) return false
         // and the rise is straight (an r's shoulder, or a u's, curves over)

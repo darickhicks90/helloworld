@@ -26,11 +26,15 @@ object Notes {
     /** Cover colours, in order for new books: oxblood, navy, forest, mustard, black. */
     val COVERS = intArrayOf(0xFF7A2630.toInt(), 0xFF27355E.toInt(), 0xFF2E5240.toInt(), 0xFFB8862C.toInt(), 0xFF26242A.toInt())
 
-    class Sketch(val id: String, var line: Int, var x: Float, var w: Float, var lines: Int, val square: Boolean) {
-        fun toJson() = JSONObject().put("id", id).put("line", line).put("x", x.toDouble()).put("w", w.toDouble()).put("lines", lines).put("square", square)
+    /** A sketch window: wide (4:3), square, or tall (3:4) from the shape of the box drawn. */
+    class Sketch(val id: String, var line: Int, var x: Float, var w: Float, var lines: Int, val square: Boolean, val tall: Boolean = false) {
+        fun toJson() = JSONObject().put("id", id).put("line", line).put("x", x.toDouble()).put("w", w.toDouble()).put("lines", lines).put("square", square).put("tall", tall)
         fun covers(l: Int) = l in line until line + lines
+        /** Height ÷ width of the window. */
+        val ratio get() = if (tall) 4f / 3f else if (square) 1f else 0.75f
+        fun copy(line: Int = this.line, lines: Int = this.lines) = Sketch(id, line, x, w, lines, square, tall)
         companion object {
-            fun from(o: JSONObject) = Sketch(o.getString("id"), o.getInt("line"), o.getDouble("x").toFloat(), o.getDouble("w").toFloat(), o.getInt("lines"), o.optBoolean("square"))
+            fun from(o: JSONObject) = Sketch(o.getString("id"), o.getInt("line"), o.getDouble("x").toFloat(), o.getDouble("w").toFloat(), o.getInt("lines"), o.optBoolean("square"), o.optBoolean("tall"))
         }
     }
 
@@ -38,7 +42,7 @@ object Notes {
         val empty get() = sketches.isEmpty() && lines.all { it.isBlank() }
         fun text() = lines.joinToString("\n").trimEnd()
         fun toJson() = JSONObject().put("id", id).put("lines", JSONArray(lines.toList())).put("sketches", JSONArray(sketches.map { it.toJson() }))
-        fun snapshot() = Page(id, lines.copyOf(), sketches.map { Sketch(it.id, it.line, it.x, it.w, it.lines, it.square) }.toMutableList())
+        fun snapshot() = Page(id, lines.copyOf(), sketches.map { it.copy() }.toMutableList())
         companion object {
             fun from(o: JSONObject): Page {
                 val arr = o.optJSONArray("lines") ?: JSONArray()
@@ -55,7 +59,7 @@ object Notes {
                     val ls = Array(LINES) { i -> arr.optString(c * LINES + i, "") }
                     val mine = sk.filter { it.line / LINES == c }.mapNotNull { s ->
                         val line = s.line - c * LINES; val n = minOf(s.lines, LINES - line)
-                        if (n < 3) null else Sketch(s.id, line, s.x, s.w, n, s.square)
+                        if (n < 3) null else s.copy(line = line, lines = n)
                     }.toMutableList()
                     Page(if (c == 0) o.getString("id") else newId(), ls, mine)
                 }
@@ -129,7 +133,41 @@ object Notes {
         thumbs[id] = picture
     }
     fun sketchPng(id: String): ByteArray? = runCatching { File(dir, "sketch_$id.png").readBytes() }.getOrNull()
-    fun deleteSketchFiles(id: String) { File(dir, "sketch_$id.json").delete(); File(dir, "sketch_$id.png").delete(); thumbs.remove(id) }
+    fun deleteSketchFiles(id: String) { File(dir, "sketch_$id.json").delete(); File(dir, "sketch_$id.png").delete(); thumbs.remove(id); clearAnimation(id) }
+
+    // ---- an animated sketch: small copies of its frames, so the page can play it
+    class Anim(val frames: List<Bitmap>, val fps: Float)
+    private val anims = HashMap<String, Anim?>()
+    private val loading = HashSet<String>()
+    private fun animDir(id: String) = File(dir, "sketch_${id}_anim")
+
+    /** Saves the frames the page plays (already sized for the window). */
+    fun saveAnimation(id: String, frames: List<Bitmap>, fps: Float) {
+        val d = animDir(id); d.deleteRecursively(); d.mkdirs()
+        frames.forEachIndexed { i, b -> runCatching { File(d, "f%03d.jpg".format(i)).outputStream().use { b.compress(Bitmap.CompressFormat.JPEG, 85, it) } } }
+        runCatching { File(d, "meta.json").writeText(JSONObject().put("fps", fps.toDouble()).put("count", frames.size).toString()) }
+        synchronized(anims) { anims[id] = Anim(frames, fps) }
+    }
+    fun clearAnimation(id: String) { animDir(id).deleteRecursively(); synchronized(anims) { anims.remove(id) } }
+
+    /** The page's animation for a sketch, or null (it loads in the background; `loaded` runs when it's ready). */
+    fun animation(id: String, loaded: () -> Unit): Anim? {
+        synchronized(anims) { if (anims.containsKey(id)) return anims[id]; if (!loading.add(id)) return null }
+        Thread {
+            val d = animDir(id)
+            val a = runCatching {
+                if (!d.exists()) null else {
+                    val meta = JSONObject(File(d, "meta.json").readText())
+                    val n = meta.getInt("count")
+                    val fr = (0 until n).mapNotNull { BitmapFactory.decodeFile(File(d, "f%03d.jpg".format(it)).path) }
+                    if (fr.size < 2) null else Anim(fr, meta.getDouble("fps").toFloat())
+                }
+            }.getOrNull()
+            synchronized(anims) { anims[id] = a; loading.remove(id) }
+            if (a != null) loaded()
+        }.start()
+        return null
+    }
 
     private val thumbs = HashMap<String, Bitmap?>()
     /** The finished picture, scaled down for the page (null until something has been drawn). */

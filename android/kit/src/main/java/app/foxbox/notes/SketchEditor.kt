@@ -39,8 +39,8 @@ import kotlin.math.exp
  */
 @SuppressLint("ViewConstructor")
 class SketchEditor(private val a: Activity, private val sketch: Notes.Sketch, private val done: () -> Unit) : View(a) {
-    private val cw = if (sketch.square) 1600 else 2000
-    private val ch = if (sketch.square) 1600 else 1500
+    private val cw = if (sketch.tall) 1500 else if (sketch.square) 1600 else 2000
+    private val ch = if (sketch.tall) 2000 else if (sketch.square) 1600 else 1500
 
     // ---- the drawing: layers of strokes (kept as strokes, so undo is exact), each cached as a bitmap
     private class Stroke(val tool: Int, val color: Int, val size: Float, val opacity: Float, val pts: FloatArray)

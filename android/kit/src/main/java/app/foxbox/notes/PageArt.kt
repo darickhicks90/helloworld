@@ -24,7 +24,7 @@ class PageGeo(val paper: RectF) {
     fun sketchRect(s: Notes.Sketch, out: RectF = RectF()): RectF {
         // the window keeps its shape (4:3 or square) from its height in lines, whatever the screen
         val t = lineTop(s.line) + lineH * 0.12f; val b = lineTop(s.line + s.lines) - lineH * 0.12f
-        val w = minOf((b - t) / (if (s.square) 1f else 0.75f), textW)
+        val w = minOf((b - t) / s.ratio, textW)
         val l = (textL + s.x * textW).coerceAtMost(textR - w)
         return out.apply { set(l, t, l + w, b) }
     }
@@ -52,7 +52,8 @@ class PageArt(c: Context) {
     /** Width of the first [n] characters of a line as typeset. */
     fun width(s: String, n: Int = s.length) = if (n <= 0) 0f else text.measureText(s, 0, n.coerceAtMost(s.length))
 
-    fun draw(c: Canvas, g: PageGeo, page: Notes.Page, number: Int, highlight: String? = null, thumbs: Boolean = true) {
+    /** `play`: when set, animated sketches show the frame for this moment and `loaded` redraws once frames are in. */
+    fun draw(c: Canvas, g: PageGeo, page: Notes.Page, number: Int, highlight: String? = null, thumbs: Boolean = true, playMs: Long = -1L, loaded: () -> Unit = {}) {
         sizeText(g)
         p.style = Paint.Style.FILL
         p.color = PAPER; c.drawRect(g.paper, p)
@@ -93,7 +94,8 @@ class PageArt(c: Context) {
             g.sketchRect(s, r)
             p.color = 0x22000000; c.drawRect(r.left + g.lineH * 0.06f, r.top + g.lineH * 0.08f, r.right + g.lineH * 0.06f, r.bottom + g.lineH * 0.08f, p)
             p.color = 0xFFFFFFFF.toInt(); c.drawRect(r, p)
-            val bmp = if (thumbs) Notes.thumb(s.id) else null
+            val anim = if (thumbs && playMs >= 0) Notes.animation(s.id, loaded) else null
+            val bmp = if (anim != null) anim.frames[((playMs * anim.fps / 1000f).toLong() % anim.frames.size).toInt()] else if (thumbs) Notes.thumb(s.id) else null
             if (bmp != null) { src.set(0, 0, bmp.width, bmp.height); c.drawBitmap(bmp, src, r, img) }
             else {
                 val ts = text.textSize

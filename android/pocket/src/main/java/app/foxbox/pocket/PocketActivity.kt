@@ -79,7 +79,7 @@ class PocketActivity : Activity(), RadioHost {
         if (!doc.load()) {
             // a sketch from the notebook's first drawing board comes across with its strokes
             Notes.sketchData(s.id)?.let { if (!it.optBoolean("art")) doc.importOldSketch(it) }
-            if (doc.layers.isEmpty()) { doc.w = if (s.square) 1600 else 2000; doc.h = if (s.square) 1600 else 1500 }
+            if (doc.layers.isEmpty()) { doc.w = if (s.tall) 1500 else if (s.square) 1600 else 2000; doc.h = if (s.tall) 2000 else if (s.square) 1600 else 1500 }
             setup?.invoke(doc)
         }
         val v = app.foxbox.pocket.art.ArtBoard(this, doc, object : app.foxbox.pocket.art.ArtBoard.Host {
@@ -106,20 +106,50 @@ class PocketActivity : Activity(), RadioHost {
     /** Saves the drawing, and the picture the page shows (fitted into the window's shape). */
     private fun savePicture(v: app.foxbox.pocket.art.ArtBoard, s: Notes.Sketch) {
         val pic = runCatching { v.saveNow() }.getOrNull() ?: return
-        val ww = 1200; val wh = if (s.square) 1200 else 900
+        val out = letterbox(pic, 1200, s)
+        pic.recycle()
+        Notes.saveSketch(s.id, org.json.JSONObject().put("art", true), out)
+        // an animation plays on the page: small copies of its frames, made in the background
+        if (v.doc.frames < 2) { Notes.clearAnimation(s.id); return }
+        Thread {
+            runCatching {
+                // its own copy of the drawing (just saved), so it never shares paints with the open board
+                val doc = app.foxbox.pocket.art.ArtDoc(artDir(s.id)).takeIf { it.load() } ?: return@runCatching
+                val step = (doc.frames + 95) / 96          // at most 96 frames on the page
+                val pw = 360
+                val scale = minOf(1f, pw * 1.5f / maxOf(doc.w, doc.h))
+                val frames = (0 until doc.frames step step).map { f ->
+                    val b = app.foxbox.pocket.art.Exporter.frame(doc, f, scale, transparent = false)
+                    letterbox(b, pw, s).also { b.recycle() }
+                }
+                Notes.saveAnimation(s.id, frames, doc.fps / step.toFloat())
+                runOnUiThread { notebook?.invalidate() }
+            }
+        }.start()
+    }
+
+    /** A picture fitted into the window's shape (`ww` across), on white. */
+    private fun letterbox(pic: Bitmap, ww: Int, s: Notes.Sketch): Bitmap {
+        val wh = (ww * s.ratio).toInt()
         val out = Bitmap.createBitmap(ww, wh, Bitmap.Config.ARGB_8888)
         val c = android.graphics.Canvas(out); c.drawColor(android.graphics.Color.WHITE)
         val k = minOf(ww / pic.width.toFloat(), wh / pic.height.toFloat())
         val dw = pic.width * k; val dh = pic.height * k
         c.drawBitmap(pic, null, android.graphics.RectF((ww - dw) / 2, (wh - dh) / 2, (ww + dw) / 2, (wh + dh) / 2), android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG))
-        pic.recycle()
-        Notes.saveSketch(s.id, org.json.JSONObject().put("art", true), out)
+        return out
+    }
+
+    /** The window shape for a picture `w` × `h`: (square, tall). */
+    private fun shapeFor(w: Int, h: Int): Pair<Boolean, Boolean> {
+        val tall = h > w * 1.15f
+        return Pair(!tall && w < h * 1.15f, tall)
     }
 
     /** A picture from the phone, onto a new window on the page, ready to size and place. */
     private fun insertPicture() = pickImage { bmp ->
         val nb = notebook ?: return@pickImage
-        val s = nb.placeWindow(square = bmp.width < bmp.height * 1.15f)
+        val (sq, tl) = shapeFor(bmp.width, bmp.height)
+        val s = nb.placeWindow(square = sq, tall = tl)
         openSketch(s, setup = { doc ->
             // a canvas the picture's shape, up to 2400 px across
             val k = minOf(1f, 2400f / maxOf(bmp.width, bmp.height))
@@ -141,7 +171,8 @@ class PocketActivity : Activity(), RadioHost {
             fun make(i: Int) {
                 val (w, h) = presets[i].second
                 val nb = notebook ?: return
-                val s = nb.placeWindow(square = w < h * 1.15f)
+                val (sq, tl) = shapeFor(w, h)
+                val s = nb.placeWindow(square = sq, tall = tl)
                 openSketch(s, setup = { doc ->
                     doc.w = w; doc.h = h
                     doc.kind = when (k) { 0 -> app.foxbox.pocket.art.ArtDoc.KIND_SKETCH; 1 -> app.foxbox.pocket.art.ArtDoc.KIND_4K_FRAME; else -> app.foxbox.pocket.art.ArtDoc.KIND_4K_ASSET }

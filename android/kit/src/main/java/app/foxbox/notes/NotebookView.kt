@@ -29,7 +29,7 @@ import kotlin.math.hypot
  * a moment later it's set in a handwritten font on that line. Tap (without writing) to put the
  * cursor somewhere; what you write on that line next goes in at the cursor, and "Type" opens
  * the keyboard there. The eraser takes out whole words. Draw a box and it becomes a sketch window
- * (4:3 or square) without lines; tap it to draw.
+ * (4:3 wide, square, or 3:4 tall) without lines; tap it to draw.
  *
  * Turn pages by swiping up or down from the spiral or the bottom edge, or with two fingers
  * anywhere. Top left: memo books (and export); top middle: bookmarks; top right: search.
@@ -150,7 +150,10 @@ class NotebookView(private val a: Activity, private val close: () -> Unit, priva
 
     private fun drawSheet(c: Canvas, idx: Int, live: Boolean = false) {
         val pg = book.pages.getOrNull(idx) ?: return
-        art.draw(c, g, pg, idx + 1, if (live) highlight else null)
+        val now = android.os.SystemClock.uptimeMillis()
+        art.draw(c, g, pg, idx + 1, if (live) highlight else null, playMs = if (live) now else -1L, loaded = { postInvalidate() })
+        // animated sketches on this page keep playing
+        if (live) pg.sketches.firstNotNullOfOrNull { s -> Notes.animation(s.id) { postInvalidate() } }?.let { an -> postInvalidateDelayed((1000f / an.fps).toLong().coerceIn(16L, 500L)) }
         if (book.bookmarks.contains(pg.id)) {
             // a ribbon hanging over the top of a bookmarked page
             val x = g.textR - g.pw * 0.06f; val w = g.pw * 0.045f
@@ -362,17 +365,17 @@ class NotebookView(private val a: Activity, private val close: () -> Unit, priva
      * Makes a picture window on the page: on this page's first free stretch of empty lines, or
      * on a new page right after it. Returns the new window (already saved).
      */
-    fun placeWindow(square: Boolean): Notes.Sketch {
+    fun placeWindow(square: Boolean, tall: Boolean = false): Notes.Sketch {
         flushPending()
-        val want = if (square) 6 else 5
+        val want = if (tall) 7 else if (square) 6 else 5
         fun fits(p: Notes.Page, l0: Int, n: Int) = (l0 until l0 + n).all { p.lines[it].isBlank() } && p.sketches.none { l0 < it.line + it.lines && it.line < l0 + n }
         var p = page; var line0 = -1; var n = want
         search@ for (nn in want downTo 4) for (l in 0..Notes.LINES - nn) if (fits(p, l, nn)) { line0 = l; n = nn; break@search }
         pushUndo()
         if (line0 < 0) { val np = Notes.Page(); book.pages.add(book.current + 1, np); goTo(book, book.current + 1); p = np; line0 = 0; n = want }
-        val ratio = if (square) 1f else 0.75f
-        val wf = if (g.textW > 0f) minOf(1f, (n * g.lineH - g.lineH * 0.24f) / ratio / g.textW) else 0.8f
-        val s = Notes.Sketch(Notes.newId(), line0, 0f, wf, n, square)
+        val s0 = Notes.Sketch("", 0, 0f, 0f, 0, square && !tall, tall)
+        val wf = if (g.textW > 0f) minOf(1f, (n * g.lineH - g.lineH * 0.24f) / s0.ratio / g.textW) else 0.8f
+        val s = Notes.Sketch(Notes.newId(), line0, 0f, wf, n, square && !tall, tall)
         p.sketches += s; Notes.save(); invalidate()
         return s
     }
@@ -540,8 +543,10 @@ class NotebookView(private val a: Activity, private val close: () -> Unit, priva
     }
 
     private fun makeSketch(b: RectF) {
-        val square = b.width() < b.height() * 1.15f
-        val ratio = if (square) 1f else 0.75f
+        // the box's shape picks the window: wide (4:3), square, or tall (3:4)
+        val tall = b.height() > b.width() * 1.15f
+        val square = !tall && b.width() < b.height() * 1.15f
+        val ratio = if (tall) 4f / 3f else if (square) 1f else 0.75f
         val line0 = g.lineAt(b.top + g.lineH * 0.3f)
         var w = minOf(b.width(), g.textW)
         var lines = Math.ceil((w * ratio / g.lineH).toDouble()).toInt().coerceAtLeast(3)
@@ -553,7 +558,7 @@ class NotebookView(private val a: Activity, private val close: () -> Unit, priva
         if (page.sketches.any { line0 < it.line + it.lines && it.line < line0 + lines }) { toast("That overlaps another sketch"); return }
         if ((line0 until line0 + lines).any { page.lines[it].isNotBlank() }) { toast("Draw the box over empty lines"); return }
         pushUndo()
-        page.sketches += Notes.Sketch(Notes.newId(), line0, x, wf, lines, square)
+        page.sketches += Notes.Sketch(Notes.newId(), line0, x, wf, lines, square, tall)
         Notes.save(); invalidate()
     }
 

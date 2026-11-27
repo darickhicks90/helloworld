@@ -203,7 +203,7 @@ class FireEscapeScreen(c: Context, private val host: Host, private val fire: Fir
         val page: View = when (lane.id) {
             "minds" -> MindsPage(context)
             "pickup" -> PickupPage(context, host)
-            else -> InstrumentPage(context, lane.id, host, roomyChords = true)
+            else -> InstrumentPage(context, lane.id, host)
         }
         // the keys take the whole screen below the transport bar
         val box = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL; background = Tv.WoodDrawable() }

@@ -34,7 +34,7 @@ class SquareBox(c: Context, child: View) : FrameLayout(c) {
  * switches at its foot | strum pad or step sequencer.
  */
 @SuppressLint("ViewConstructor")
-class InstrumentPage(c: Context, id: String, host: Host, private val roomyChords: Boolean = false) : LinearLayout(c) {
+class InstrumentPage(c: Context, id: String, host: Host) : LinearLayout(c) {
     val chords = ChordPanel(c)
     private val engine = Audio.engine(id)
     private val seq: NoteSeq? = engine.seq
@@ -74,8 +74,7 @@ class InstrumentPage(c: Context, id: String, host: Host, private val roomyChords
         // the chord buttons scale with the screen (narrower on small phones) so the strum pad
         // beside them always keeps a good, playable width
         val screenDp = resources.displayMetrics.widthPixels / Px.density
-        // (the Fire Escape's full-screen keys give the chords more room)
-        val colW = if (roomyChords) (screenDp * 0.36f).coerceIn(250f, 340f) else (screenDp * 0.25f).coerceIn(190f, 226f)
+        val colW = (screenDp * 0.25f).coerceIn(190f, 226f)
         addView(col, lp(Px.dp(colW).toInt(), MATCH).apply { leftMargin = Px.dp(6) })
         val right = FrameLayout(c)
         strum = StrumPad(c, chords.chords).apply { this.accent = accent }

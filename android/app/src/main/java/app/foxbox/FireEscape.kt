@@ -36,7 +36,7 @@ object FireEscape {
 
     /** Lanes, top to bottom: the session's blocks, then the audio tracks. */
     fun lanes(): List<Lane> = Studio.project.blocks.map { Lane(it, Audio.engine(it).title, Audio.engine(it), -1) } +
-        (0 until AudioClip.CHANNELS).filter { Studio.project.planes[it] }.map { Lane("track$it", Studio.CHANNEL_NAMES[it] + " track", null, it) }
+        (0 until AudioClip.CHANNELS).filter { Studio.project.planes[it] }.map { Lane("track$it", Studio.CHANNEL_NAMES[it], null, it) }
 
     fun lane(id: String) = lanes().firstOrNull { it.id == id }
 

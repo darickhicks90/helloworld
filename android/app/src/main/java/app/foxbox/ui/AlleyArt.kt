@@ -8,8 +8,8 @@ package app.foxbox.ui
  * up with hard edges.
  */
 object AlleyArt {
-    const val W = 560
-    const val H = 315
+    const val W = 640
+    const val H = 360
 
     /** String-light bulbs (x, y, colour) so the screen can make them twinkle. */
     val bulbs = ArrayList<IntArray>()
@@ -85,15 +85,18 @@ object AlleyArt {
      * specks and little pits that catch the light; the mortar is recessed and gritty.
      */
     private fun bricks() {
-        val bw = 104; val bh = 35; val joint = 7
+        val bw = 180; val bh = 60; val joint = 11
         val clays = intArrayOf(rgb(170, 78, 56), rgb(184, 90, 62), rgb(156, 70, 52), rgb(194, 104, 74), rgb(150, 66, 52), rgb(176, 98, 76), rgb(164, 84, 64), rgb(142, 64, 50))
         val mortarBase = rgb(186, 176, 160)
         // the mortar everywhere first: sandy, with grains, small pebbles and a darker recess
         for (y in 0 until H) for (x in 0 until W) {
-            val n = vnoise(x.toFloat(), y.toFloat(), 3f, 5) * 0.6f + vnoise(x.toFloat(), y.toFloat(), 1.2f, 9) * 0.4f
-            var c = shade(mortarBase, 0.82f + n * 0.3f)
+            val n = vnoise(x.toFloat(), y.toFloat(), 5f, 5) * 0.5f + vnoise(x.toFloat(), y.toFloat(), 1.6f, 9) * 0.5f
+            var c = shade(mortarBase, 0.8f + n * 0.32f)
             val g = hash(x * 3 + 11, y * 5 + 7) % 100
-            if (g < 10) c = shade(c, 0.8f) else if (g > 92) c = mix(c, rgb(238, 232, 218), 0.5f)
+            if (g < 12) c = shade(c, 0.8f) else if (g > 90) c = mix(c, rgb(238, 232, 218), 0.5f)
+            // pebbles in the mix: two-pixel stones with a light top and a dark underside
+            val pb = hash(x / 3 + 41, y / 3 + 17) % 90
+            if (pb == 0) c = if (y % 3 == 0) mix(c, rgb(230, 224, 212), 0.6f) else if (y % 3 == 2) shade(c, 0.6f) else mix(c, rgb(150, 140, 130), 0.5f)
             if (g == 50) c = rgb(110, 100, 92)
             set(x, y, shade(c, 0.86f))   // recessed: always a touch darker than the brick faces
         }
@@ -114,27 +117,32 @@ object AlleyArt {
                 for (ly in 0 until bhIn) for (lx in 0 until bwIn) {
                     val x = x0 + lx; val y = y0 + ly
                     if (x !in 0 until W || y !in 0 until H) continue
-                    val topEdge = (hash(x0 + lx, row * 5 + 1) % 3 == 0).let { if (it) 1 else 0 } + if (h % 4 == 0 && lx < 6) 1 else 0
-                    val botEdge = bhIn - 1 - (if (hash(x0 + lx, row * 5 + 2) % 4 == 0) 1 else 0)
-                    val leftEdge = (if (hash(col * 3, y) % 3 == 0) 1 else 0)
-                    val rightEdge = bwIn - 1 - (if (hash(col * 3 + 1, y) % 3 == 0) 1 else 0)
+                    // the arris wanders a little (smoothly), so edges aren't ruler-straight
+                    val topEdge = (vnoise(lx.toFloat(), row * 7f, 14f, h and 127) * 2.2f).toInt()
+                    val botEdge = bhIn - 1 - (vnoise(lx.toFloat(), row * 7f + 3, 14f, (h shr 3) and 127) * 2.2f).toInt()
+                    val leftEdge = (vnoise(col * 5f, ly.toFloat(), 10f, (h shr 5) and 127) * 2.2f).toInt()
+                    val rightEdge = bwIn - 1 - (vnoise(col * 5f + 2, ly.toFloat(), 10f, (h shr 7) and 127) * 2.2f).toInt()
                     // chips out of the corners and edges
-                    val chipTL = h % 5 == 0 && lx + ly < 4
-                    val chipBR = h % 7 == 2 && (bwIn - lx) + (bhIn - ly) < 6
-                    val chipEdge = h % 9 == 4 && ly < 2 && lx in (h shr 7) % (bwIn - 10)..(h shr 7) % (bwIn - 10) + 6
+                    val chipTL = h % 4 == 0 && lx + ly < 9
+                    val chipBR = h % 5 == 2 && (bwIn - lx) + (bhIn - ly) < 11
+                    val ce = (h shr 7) % (bwIn - 24) + 6
+                    val chipEdge = h % 3 == 1 && ly < 3 + (5 - kotlin.math.abs(lx - ce - 6)).coerceAtLeast(0) / 2 && lx in ce..ce + 12
                     if (ly < topEdge || ly > botEdge || lx < leftEdge || lx > rightEdge || chipTL || chipBR || chipEdge) continue
                     // the clay: firing gradient, broad mottling and fine grain
                     val along = lx / bwIn.toFloat()
                     val fire = if (flashLeft) 1f - along else along
                     var c = shade(base, 1f - flash * fire * fire)
-                    val m = vnoise(x.toFloat(), y.toFloat(), 9f, h and 255) - 0.5f
-                    val f = vnoise(x.toFloat(), y.toFloat(), 2.5f, (h shr 8) and 255) - 0.5f
-                    c = shade(c, 1f + m * 0.16f + f * 0.08f)
+                    val m = vnoise(x.toFloat(), y.toFloat(), 18f, h and 255) - 0.5f
+                    val m2 = vnoise(x.toFloat(), y.toFloat(), 6f, (h shr 4) and 255) - 0.5f
+                    val f = vnoise(x.toFloat(), y.toFloat(), 2f, (h shr 8) and 255) - 0.5f
+                    // grit: the sanded face catches light grain by grain
+                    val gr = (hash(x * 17 + 3, y * 29 + 1) % 100 - 50) / 50f
+                    c = shade(c, 1f + m * 0.18f + m2 * 0.1f + f * 0.12f + gr * 0.045f)
                     // the clay drifts in colour: plum where it fired hard, orange where it didn't
-                    val hue = vnoise(x.toFloat(), y.toFloat(), 14f, (h shr 3) and 255)
+                    val hue = vnoise(x.toFloat(), y.toFloat(), 28f, (h shr 3) and 255)
                     c = if (hue > 0.6f) mix(c, rgb(120, 56, 62), (hue - 0.6f) * 0.7f) else if (hue < 0.3f) mix(c, rgb(214, 120, 72), (0.3f - hue) * 0.6f) else c
                     // soot that settled near the bed joints
-                    if (ly > bhIn - 7) c = shade(c, 1f - (ly - (bhIn - 7)) * 0.012f * (vnoise(x.toFloat(), y.toFloat(), 4f, 33) + 0.5f))
+                    if (ly > bhIn - 12) c = shade(c, 1f - (ly - (bhIn - 12)) * 0.009f * (vnoise(x.toFloat(), y.toFloat(), 6f, 33) + 0.5f))
                     val n = hash(x * 7 + 1, y * 13 + 5) % 1000
                     when {
                         n < 40 -> c = shade(c, 0.92f)
@@ -142,31 +150,38 @@ object AlleyArt {
                         n > 995 -> c = mix(c, rgb(250, 226, 196), 0.4f)
                     }
                     // shallow dents: a soft hollow, shadowed at the top and lit at the bottom
-                    val dk = (h shr 4) % 3
+                    val dk = 1 + (h shr 4) % 4
                     for (dIdx in 0 until dk) {
-                        val dcx = (hash(h, dIdx * 2) % (bwIn - 16)) + 8; val dcy = (hash(h, dIdx * 2 + 1) % (bhIn - 10)) + 5
-                        val rx = 3 + hash(h, dIdx + 9) % 5; val ry = 2 + hash(h, dIdx + 11) % 3
-                        val ex = (lx - dcx) / rx.toFloat(); val ey = (ly - dcy) / ry.toFloat()
+                        val dcx = (hash(h, dIdx * 2) % (bwIn - 30)) + 15; val dcy = (hash(h, dIdx * 2 + 1) % (bhIn - 20)) + 10
+                        val rr = 4 + hash(h, dIdx + 9) % 6
+                        val ex = (lx - dcx) / (rr * 1.4f); val ey = (ly - dcy) / rr.toFloat()
                         val d = ex * ex + ey * ey
-                        if (d < 1f) c = if (ey < 0) shade(c, 0.8f + d * 0.2f) else mix(c, rgb(246, 200, 164), 0.25f * (1f - d))
+                        // a hollow: its upper wall is in shadow, its lower wall faces the light
+                        if (d < 1f) { val k = (1f - d); c = if (ey < 0) shade(c, 1f - 0.28f * k * (-ey + 0.3f)) else mix(c, rgb(246, 200, 164), 0.3f * k * ey) }
                     }
-                    // little pits: dark with a lit lower lip
-                    val pit = hash(x / 2 + 101, y / 2 + 77) % 260 == 0
-                    if (pit) c = shade(c, 0.55f)
-                    if (!pit && hash(x / 2 + 101, (y - 1) / 2 + 77) % 260 == 0 && y % 2 == 0) c = mix(c, rgb(245, 200, 160), 0.35f)
+                    // pores and pits: dark holes with a lit lower lip
+                    val pit = hash(x / 2 + 101, y / 2 + 77) % 150 == 0
+                    if (pit) c = shade(c, 0.5f)
+                    if (!pit && hash(x / 2 + 101, (y - 1) / 2 + 77) % 150 == 0 && y % 2 == 0) c = mix(c, rgb(245, 200, 160), 0.35f)
+                    if (hash(x + 303, y + 909) % 420 == 0) c = shade(c, 0.66f)
+                    // flecks of grog: pale chips of fired clay in the body
+                    if (hash(x / 2 + 55, y / 2 + 66) % 300 == 0) c = mix(c, rgb(226, 170, 130), 0.5f)
+                    // a few dark iron spots
+                    if (hash(x / 2 + 7, y / 2 + 991) % 500 == 0) c = mix(c, rgb(60, 34, 34), 0.55f)
                     // 3D: the top face catches the light, the bottom and right roll into shadow
                     val dTop = ly - topEdge; val dBot = botEdge - ly; val dLeft = lx - leftEdge; val dRight = rightEdge - lx
-                    if (dTop == 0) c = mix(c, rgb(252, 214, 180), 0.45f) else if (dTop == 1) c = mix(c, rgb(252, 214, 180), 0.18f)
-                    if (dLeft == 0) c = mix(c, rgb(246, 196, 160), 0.25f)
-                    if (dBot == 0) c = shade(c, 0.7f) else if (dBot == 1) c = shade(c, 0.86f) else if (dBot == 2) c = shade(c, 0.94f)
-                    if (dRight == 0) c = shade(c, 0.78f) else if (dRight == 1) c = shade(c, 0.92f)
+                    // a rounded arris: light spreads a few pixels down from the top, shadow up from the bottom
+                    if (dTop < 4) c = mix(c, rgb(252, 214, 180), floatArrayOf(0.5f, 0.28f, 0.14f, 0.06f)[dTop])
+                    if (dLeft < 3) c = mix(c, rgb(246, 196, 160), floatArrayOf(0.3f, 0.14f, 0.05f)[dLeft])
+                    if (dBot < 5) c = shade(c, floatArrayOf(0.62f, 0.76f, 0.86f, 0.93f, 0.97f)[dBot])
+                    if (dRight < 3) c = shade(c, floatArrayOf(0.72f, 0.86f, 0.95f)[dRight])
                     // a hairline crack on some
-                    if (h % 6 == 3) { val cx = (h shr 9) % (bwIn - 16) + 8 + (kotlin.math.sin(ly * 0.7f + h) * 2f).toInt(); if (lx == cx && ly in 3 until bhIn - 3) c = shade(c, 0.6f); if (lx == cx + 1 && ly in 3 until bhIn - 3) c = mix(c, rgb(240, 196, 160), 0.2f) }
+                    if (h % 5 == 3) { val cx = (h shr 9) % (bwIn - 30) + 15 + (kotlin.math.sin(ly * 0.45f + h) * 3f + kotlin.math.sin(ly * 1.3f) * 1f).toInt(); if (lx == cx && ly in 4 until bhIn - 4) c = shade(c, 0.55f); if (lx == cx + 1 && ly in 4 until bhIn - 4) c = mix(c, rgb(240, 196, 160), 0.25f) }
                     set(x, y, c)
                 }
                 // the brick's shadow falls into the joint below and to the right
-                for (lx in 1 until bwIn + 1) { val x = x0 + lx; val y = y0 + bhIn; if (x in 0 until W && y in 0 until H) set(x, y, shade(get(x, y), 0.62f)); if (x in 0 until W && y + 1 in 0 until H) set(x, y + 1, shade(get(x, y + 1), 0.82f)) }
-                for (ly in 1 until bhIn) { val x = x0 + bwIn; val y = y0 + ly; if (x in 0 until W && y in 0 until H) set(x, y, shade(get(x, y), 0.72f)) }
+                for (lx in 2 until bwIn + 2) for (k in 0 until 4) { val x = x0 + lx; val y = y0 + bhIn - 1 + k; if (x in 0 until W && y in 0 until H) set(x, y, shade(get(x, y), floatArrayOf(0.55f, 0.66f, 0.8f, 0.92f)[k])) }
+                for (ly in 2 until bhIn) for (k in 0 until 3) { val x = x0 + bwIn - 1 + k; val y = y0 + ly; if (x in 0 until W && y in 0 until H) set(x, y, shade(get(x, y), floatArrayOf(0.62f, 0.78f, 0.9f)[k])) }
                 col++
             }
         }

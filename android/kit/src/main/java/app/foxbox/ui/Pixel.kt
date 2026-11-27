@@ -185,9 +185,16 @@ fun fitText(s: String, maxW: Float, p: Paint, minSp: Float = 8.5f): String {
     val min = Px.dp(minSp)
     while (p.measureText(s) > maxW && p.textSize > min) p.textSize = maxOf(min, p.textSize - Px.dp(0.5f))
     if (p.measureText(s) <= maxW) return s
+    TextCut.report(s, maxW)
     var t = s
     while (t.length > 1 && p.measureText("$t…") > maxW) t = t.dropLast(1)
     return "$t…"
+}
+
+/** Text that had to be cut short is logged once each (the beta check on emulators lists them). */
+object TextCut {
+    private val seen = HashSet<String>()
+    fun report(s: String, w: Float) { if (s.length > 1 && synchronized(seen) { seen.add(s) }) android.util.Log.e("app.foxbox.textcut", "cut: \"$s\" in ${(w / Px.density).toInt()}dp") }
 }
 
 /** Cream text on dark accents, dark text on light ones (yellow, pale aqua…), so labels stay readable. */

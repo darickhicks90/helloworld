@@ -52,8 +52,8 @@ interface Host {
 /**
  * The writing screen: the rail of blocks (hold one and drag it to the
  * tombstone to remove it; + adds one), the top bar (transport, tempo, the
- * block's own tools, ☰ Menu), the page, and the process bar: JAM to layer
- * loops across blocks, CLIPS to prepare clips for Clibbins.
+ * block's own tools, ☰ Menu), the page, and the clip bar: record clips
+ * and prepare them for Clibbins.
  */
 @SuppressLint("ViewConstructor")
 class StudioScreen(c: Context, private val host: Host) : FrameLayout(c) {
@@ -197,13 +197,11 @@ class StudioScreen(c: Context, private val host: Host) : FrameLayout(c) {
         else -> InstrumentPage(context, id, host)
     }
 
-    // ------------------------------------------------------------------ the process bar: Jam or Clips
+    // ------------------------------------------------------------------ the clip bar
 
     private var soundBtn: Btn? = null
     private var micBtn: Btn? = null
     private var auditionBtn: Btn? = null
-    private var jamBtn: Btn? = null
-    private var clipsBtn: Btn? = null
     private var procRec: Btn? = null
     private var sendBtn: Btn? = null
     private var builtMode: Studio.Mode? = null
@@ -213,7 +211,7 @@ class StudioScreen(c: Context, private val host: Host) : FrameLayout(c) {
     private fun buildClipBar() {
         val c = context
         clipBar.removeAllViews(); instr.removeAllViews()
-        soundBtn = null; micBtn = null; auditionBtn = null; jamBtn = null; clipsBtn = null; procRec = null; sendBtn = null
+        soundBtn = null; micBtn = null; auditionBtn = null; procRec = null; sendBtn = null
         (chips.parent as? android.view.ViewGroup)?.removeView(chips)
         builtMode = Studio.mode
         if (Studio.page == Studio.FLOWERS) {
@@ -228,17 +226,12 @@ class StudioScreen(c: Context, private val host: Host) : FrameLayout(c) {
         soundBtn = Btn(c, "Sound", Pal.accent(e.id)).apply { onClick = { if (drawerOpen) closeDrawer() else openDrawer(e) } }.also { tool(it) }
         tool(Btn(c, "Presets", Pal.accent(e.id)).apply { onClick = { host.presetMenu(e.id) } })
         // (samplers' Load and Mic live on the instrument page itself, above the chords, always in view)
-        // the two ways of working: JAM (layer loops) or CLIPS (prepare clips for Clibbins)
-        val jam = Studio.mode == Studio.Mode.JAM
-        jamBtn = Btn(c, "JAM", Snes.GREEN, 62).apply { onClick = { if (Audio.transport.rec == Transport.Rec.OFF) Studio.setMode(Studio.Mode.JAM) } }.also { bar(it) }
-        clipsBtn = Btn(c, "CLIPS", Snes.PURPLE, 70).apply { onClick = { if (Audio.transport.rec == Transport.Rec.OFF) Studio.setMode(Studio.Mode.CLIPS) } }.also { bar(it) }
-        clipBar.addView(View(c), lp(Px.dp(8), 1))
-        procRec = Btn(c, if (jam) "● Loop" else "● Record clip", Snes.RED).apply { onClick = { Studio.recordMidi() } }.also { bar(it) }
-        bar(Stepper(c, if (jam) "Loop length" else "Clip length", 104, { "${Studio.barsFor(e)} bar" + if (Studio.barsFor(e) > 1) "s" else "" }) { Studio.setBarsFor(e, Studio.barsFor(e) + it) })
+        // record clips for the block in front, then prepare them for Clibbins
+        procRec = Btn(c, "● Record clip", Snes.RED).apply { onClick = { Studio.recordMidi() } }.also { bar(it) }
+        bar(Stepper(c, "Clip length", 104, { "${Studio.barsFor(e)} bar" + if (Studio.barsFor(e) > 1) "s" else "" }) { Studio.setBarsFor(e, Studio.barsFor(e) + it) })
         chips.orientation = LinearLayout.HORIZONTAL
         clipBar.addView(HorizontalScrollView(c).apply { isHorizontalScrollBarEnabled = false; addView(chips) }, lp(0, Px.dp(44), 1f))
-        if (jam) bar(Btn(c, "Clear jam", Pal.BROWN_L).apply { onClick = { Studio.clearJam() } })
-        else sendBtn = Btn(c, "➜ Clibbins", Snes.YELLOW).apply {
+        sendBtn = Btn(c, "➜ Clibbins", Snes.YELLOW).apply {
             onClick = { Studio.selectedClip?.takeIf { it.engine == Studio.current.id }?.let { Studio.toggleInClibbins(it) } ?: Studio.message("Record a clip, or tap one, then send it") }
         }.also { bar(it) }
         chipSig = ""
@@ -247,21 +240,20 @@ class StudioScreen(c: Context, private val host: Host) : FrameLayout(c) {
     private var chipSig = ""
     private fun refreshChips() {
         val e = Studio.current
-        val jam = Studio.mode == Studio.Mode.JAM
-        val clips = if (jam) Studio.jamLoops else Studio.clipsFor(e)
+        val clips = Studio.clipsFor(e)
         val sel = Studio.selectedClip
-        val sig = "$jam" + e.id + clips.joinToString { it.id + it.name + it.bars + Studio.isPlaying(it) + it.inClibbins + it.muted } + sel?.id
+        val sig = e.id + clips.joinToString { it.id + it.name + it.bars + Studio.isPlaying(it) + it.inClibbins + it.muted } + sel?.id
         if (sig == chipSig) return
         chipSig = sig
         chips.removeAllViews()
-        if (clips.isEmpty()) chips.addView(Btn(context, if (jam) "No loops yet: tap ● Loop" else "No clips yet: ● Record clip", Pal.BROWN), lp(WRAP, Px.dp(44)))
+        if (clips.isEmpty()) chips.addView(Btn(context, "No clips yet: ● Record clip", Pal.BROWN), lp(WRAP, Px.dp(44)))
         clips.forEach { clip ->
             val playing = Studio.isPlaying(clip)
-            val label = (if (playing) "▶ " else "") + clip.name + " · ${fmtBars(clip)}" + (if (!jam && clip.inClibbins) " ✓" else "") + (if (!jam && clip === sel) " ◀" else "")
+            val label = (if (playing) "▶ " else "") + clip.name + " · ${fmtBars(clip)}" + (if (clip.inClibbins) " ✓" else "") + (if (clip === sel) " ◀" else "")
             chips.addView(Btn(context, label, Pal.accent(clip.engine)).apply {
                 on = playing; icon = Sprites.icon(clip.engine)
-                // Jam: tap starts or stops the loop. Clips: tap previews it and picks it for ➜ Clibbins.
-                onClick = { if (!jam) Studio.selectClip(clip); Studio.toggleClip(clip) }
+                // tap previews it and picks it for ➜ Clibbins
+                onClick = { Studio.selectClip(clip); Studio.toggleClip(clip) }
                 onLong = { host.clipMenu(clip) }
             }, lp(WRAP, Px.dp(44)))
         }
@@ -276,13 +268,11 @@ class StudioScreen(c: Context, private val host: Host) : FrameLayout(c) {
         nameBtn.text = Studio.project.name
         playBtn.on = t.playing
         val rec = t.rec != Transport.Rec.OFF
-        val jam = Studio.mode == Studio.Mode.JAM
         procRec?.let { b ->
             b.on = rec; b.blink = rec && t.rec == Transport.Rec.ARMED
-            b.text = when { t.rec == Transport.Rec.ARMED -> "count-in…"; rec -> "■ Stop"; jam -> "● Loop"; else -> "● Record clip" }
+            b.text = when { t.rec == Transport.Rec.ARMED -> "count-in…"; rec -> "■ Stop"; else -> "● Record clip" }
             b.requestLayout()
         }
-        jamBtn?.on = jam; clipsBtn?.on = !jam
         sendBtn?.let { b -> val sc = Studio.selectedClip; b.text = if (sc != null && sc.inClibbins && sc.engine == Studio.current.id) "◀ Take out" else "➜ Clibbins"; b.requestLayout() }
         metroBtn.on = t.metronome
         micBtn?.let { b ->

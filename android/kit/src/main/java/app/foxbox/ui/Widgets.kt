@@ -32,6 +32,12 @@ class Btn(c: Context, var text: String, var accent: Int = Pal.ORANGE, private va
     var on = false; set(v) { if (field != v) { field = v; invalidate() } }
     var blink = false; set(v) { field = v; animated = v; invalidate() }
     var icon: Sprite? = null
+    /**
+     * What to show when the label won't fit at a readable size: a symbol. Defaults to the label's
+     * leading symbol ("● Record clip" → "●"); labels without one wrap onto two lines instead.
+     */
+    var short: String? = null
+    private fun shortForm(): String? = short ?: text.substringBefore(' ', "").takeIf { it.isNotEmpty() && it.length <= 2 && it.none { ch -> ch.isLetterOrDigit() } }
     var onClick: (() -> Unit)? = null
     var onLong: (() -> Unit)? = null
     var onDown: (() -> Unit)? = null
@@ -68,12 +74,43 @@ class Btn(c: Context, var text: String, var accent: Int = Pal.ORANGE, private va
             val s = maxOf(1f, kotlin.math.floor(height * 0.62f / ic.h)).coerceAtMost(height * 0.75f / ic.h)
             val iw = ic.w * s
             val gap = if (text.isEmpty()) 0f else Px.dp(6f)
-            val t = if (text.isEmpty()) "" else fitText(text, width - pad * 2 - iw - gap, textP)
+            val room = width - pad * 2 - iw - gap
+            // beside an icon: the whole label at a readable size, else its symbol, else just the icon (it is the symbol)
+            var t = text
+            if (t.isNotEmpty()) {
+                while (textP.measureText(t) > room && textP.textSize > Px.dp(10f)) textP.textSize -= Px.dp(0.5f)
+                if (textP.measureText(t) > room) { textP.textSize = Px.dp(14f); t = shortForm()?.takeIf { textP.measureText(it) <= room } ?: "" }
+            }
             val total = iw + if (t.isEmpty()) 0f else textP.measureText(t) + gap
             val x0 = maxOf(pad, (width - total) / 2)
             c.sprite(ic, x0, (height - ic.h * s) / 2, s)
             if (t.isNotEmpty()) { textP.textAlign = android.graphics.Paint.Align.LEFT; c.textCentered(t, x0 + iw + gap, height / 2f, textP); textP.textAlign = android.graphics.Paint.Align.CENTER }
-        } else c.textFit(text, width / 2f, height / 2f, width - pad * 2, textP)
+        } else drawLabel(c, width - pad * 2)
+    }
+
+    /** The label, always whole: one line (down to 11sp), else its symbol, else two lines, else smaller still. */
+    private fun drawLabel(c: Canvas, room: Float) {
+        val cx = width / 2f; val cy = height / 2f
+        fun fits(s: String, sp: Float): Boolean { textP.textSize = Px.dp(sp); return textP.measureText(s) <= room }
+        var sp = 14f
+        while (sp > 11f && !fits(text, sp)) sp -= 0.5f
+        if (fits(text, sp)) { c.textCentered(text, cx, cy, textP); return }
+        shortForm()?.let { s -> if (fits(s, 14f) || fits(s, 11f)) { c.textCentered(s, cx, cy, textP); return } }
+        // two lines, split at the space nearest the middle
+        val spaces = text.indices.filter { text[it] == ' ' }
+        if (spaces.isNotEmpty()) {
+            val at = spaces.minBy { kotlin.math.abs(it - text.length / 2) }
+            val a = text.substring(0, at); val b = text.substring(at + 1)
+            var s2 = 13f
+            while (s2 > 8.5f && !(fits(a, s2) && fits(b, s2))) s2 -= 0.5f
+            fits(a, s2)
+            if (textP.measureText(a) <= room && textP.measureText(b) <= room && textP.textSize * 2.1f <= height) {
+                val lh = textP.textSize * 1.05f
+                c.textCentered(a, cx, cy - lh / 2, textP); c.textCentered(b, cx, cy + lh / 2, textP); return
+            }
+        }
+        textP.textSize = Px.dp(14f)
+        c.textFit(text, cx, cy, room, textP)
     }
 
     @SuppressLint("ClickableViewAccessibility")

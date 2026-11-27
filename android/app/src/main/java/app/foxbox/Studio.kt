@@ -114,6 +114,13 @@ object Studio : Transport.Listener, MidiInput.Sink {
         if (p.flowers.isEmpty()) p.flowers += Flower(name = "Dewdrop")
         Blocks.types.forEach { b -> p.clips.filter { it.engine == b.id && it.inClibbins }.drop(MAX_CLIPS).forEach { it.inClibbins = false } }
         p.flowers.filter { it.inClibbins }.drop(MAX_PLANTED).forEach { it.inClibbins = false }
+        // the Studio no longer has a jam: loops from older projects become ordinary clips
+        p.clips.filter { it.jam }.forEach { c ->
+            val e = Audio.engine(c.engine)
+            val n = p.clips.count { it.engine == c.engine && !it.jam } + 1
+            c.jam = false; c.inClibbins = false; c.name = "${e.title} $n"; c.variant = n - 1
+            runCatching { ProjectStore.saveClipMidi(p, c) }
+        }
         flower = p.flowers.first()
         armed.fill(false); monitor.fill(false)
         // The three audio tracks always exist (like tracks in a DAW).
@@ -278,11 +285,11 @@ object Studio : Transport.Listener, MidiInput.Sink {
      *    set its length, rename it, then send it to Clibbins.
      */
     enum class Mode { JAM, CLIPS }
-    var mode = Mode.JAM
+    var mode = Mode.CLIPS
         private set
     fun setMode(m: Mode) { mode = m; changed() }
     /** The mode the take in progress was started in. */
-    private var recMode = Mode.JAM
+    private var recMode = Mode.CLIPS
     const val MAX_JAM = 8
     const val MAX_TRAY = 8
     /** The clip most recently recorded or tapped in Clips mode (what "Send to Clibbins" sends). */

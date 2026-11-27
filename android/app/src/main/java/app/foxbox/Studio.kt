@@ -240,6 +240,7 @@ object Studio : Transport.Listener, MidiInput.Sink {
     private fun applyKey() {
         Audio.leaves.droneNote = 48 + project.root
         NoteSeq.scale = scale; NoteSeq.root = project.root
+        Audio.scaleMask = scale.steps.fold(0) { m, st -> m or (1 shl ((project.root + st) % 12)) }
     }
 
     // ------------------------------------------------------------------ playing notes
@@ -382,6 +383,8 @@ object Studio : Transport.Listener, MidiInput.Sink {
         clipById(id)?.pan = p; takeById(id)?.pan = p
     }
 
+    override fun onPerformance(clips: List<Clip>, startTick: Double) = FireEscape.performance(clips, startTick)
+
     override fun onRecorded(clips: List<Clip>) {
         main.post {
             val jam = recMode == Mode.JAM
@@ -485,8 +488,8 @@ object Studio : Transport.Listener, MidiInput.Sink {
     fun toggleArm(ch: Int) { if (project.planes[ch]) { armed[ch] = !armed[ch]; refreshLive(); changed() } }
 
     /** Water tower / audio rec: 2 bars of count-in, then record the armed biplanes. Again to stop. */
-    fun recordAudio() {
-        if (audioRecording) { Audio.post { t.recordAudio() }; return }
+    fun recordAudio(freeFrom: Double? = null) {
+        if (audioRecording) { Audio.post { if (t.audioFree) t.recordAudioFree(0.0) else t.recordAudio() }; return }
         if (armed.none { it }) {
             val ch = project.planes.indexOfFirst { it }.takeIf { it >= 0 } ?: addPlane()
             if (ch < 0) return
@@ -495,10 +498,10 @@ object Studio : Transport.Listener, MidiInput.Sink {
         val full = armed.indices.filter { armed[it] && secondsOn(it) >= AudioClip.MAX_SECONDS - 1 }
         if (full.isNotEmpty()) return message(full.joinToString { CHANNEL_NAMES[it] } + " already holds 6 minutes. Lay a take to rest first.")
         val ask = needMic
-        if (ask != null) ask { startTake() } else startTake()
+        if (ask != null) ask { startTake(freeFrom) } else startTake(freeFrom)
     }
 
-    private fun startTake() {
+    private fun startTake(freeFrom: Double?) {
         monitorIn?.close(); monitorIn = null; Audio.liveIn = null
         val input = try { AudioIn(app, AudioPrefs.inputDevice) } catch (e: Exception) {
             return message(e.message ?: "Couldn't open the audio input")
@@ -507,10 +510,10 @@ object Studio : Transport.Listener, MidiInput.Sink {
         Audio.post {
             t.audioIn = input
             t.latencyFrames = (latency * SR / 1000f).toInt().coerceAtLeast(0)
-            t.recordAudio()
+            if (freeFrom != null) t.recordAudioFree(freeFrom) else t.recordAudio()
         }
         Audio.liveIn = input
-        message("Two bars of count-in, then recording " + armed.indices.filter { armed[it] }.joinToString { CHANNEL_NAMES[it] })
+        message((if (freeFrom != null) (if (t.playing) "Recording " else "One bar of count-in, then recording ") else "Two bars of count-in, then recording ") + armed.indices.filter { armed[it] }.joinToString { CHANNEL_NAMES[it] })
         changed()
     }
 
@@ -520,6 +523,8 @@ object Studio : Transport.Listener, MidiInput.Sink {
         Audio.liveIn = null
         val chans = armed.indices.filter { armed[it] && project.planes[it] }
         val bpm = project.bpm
+        // a take on the Fire Escape: as long as it was played, laid where it started
+        if (t.audioFree) { FireEscape.takeEnded(input, chans, t.audioRecStart); return }
         Thread {
             val takes = input.finish()
             val barFrames = SR * 60.0 / bpm * 4
@@ -553,7 +558,7 @@ object Studio : Transport.Listener, MidiInput.Sink {
 
     fun engine(id: String): Engine = Audio.engine(id)
     /** The clips prepared on a block (jam loops are listed separately). */
-    fun clipsFor(e: Engine) = project.clips.filter { it.engine == e.id && !it.jam }
+    fun clipsFor(e: Engine) = project.clips.filter { it.engine == e.id && !it.jam && !it.arr }
     fun isPlaying(id: String) = id in t.playing_ids
     fun isPlaying(c: Clip) = isPlaying(c.id)
 
@@ -630,7 +635,7 @@ object Studio : Transport.Listener, MidiInput.Sink {
 
     val clibbinsClips get() = project.clips.filter { it.engine in project.blocks && !it.jam && it.inClibbins }
     val clibbinsFlowers get() = project.flowers.filter { it.inClibbins }
-    val clibbinsTakes get() = project.audioClips.filter { project.planes[it.channel] }
+    val clibbinsTakes get() = project.audioClips.filter { project.planes[it.channel] && !it.arr }
 
     fun isQueued(id: String) = id in project.queued
     fun toggleQueued(id: String) { if (!project.queued.remove(id)) project.queued += id; save(); changed() }

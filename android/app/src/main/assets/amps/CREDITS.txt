@@ -1,0 +1,14 @@
+Amp captures bundled with 5 Eye Yeti
+
+These Neural Amp Modeler captures come from the community collection at
+https://github.com/pelennor2170/NAM_models and are licensed under the GNU GPL v3
+(see COPYING in this folder). They are kept as separate data files; you may copy,
+share and change them under that licence. Captured by:
+
+  JCM2000 Crunch: "Tim R JCM2000 Crunch.nam" by Tim R
+  JCM2000 Lead: "Tim R JCM2000 L2 G8.nam" by Tim R
+  JVM OD1 Green: "Phillipe P JVM-OD1-GR-NoDrive-ESR0,015.nam" by Phillipe P
+  AC15 Top Boost: "Phillipe P VOXAC15-TopBoost.nam" by Phillipe P
+  Twin Verb Clean: "Tim R Fender TwinVerb Norm Bright.nam" by Tim R
+  5150 Block Letter: "Helga B 5150 BlockLetter - NoBoost.nam" by Helga B
+  TS9 Drive (pedal): "Tim R TS9.nam" by Tim R

@@ -23,6 +23,8 @@ class Clip(
     var inClibbins = false
     /** A jam loop: recorded in the Studio's Jam mode, loops right away, and stays out of Clibbins until kept. */
     var jam = false
+    /** A free-length performance recorded on the Fire Escape (not a loop: stays out of the Studio trays and Clibbins). */
+    var arr = false
     var variant = 0
     /** Clibbins mixer: clip volume (scales note velocity) and mute. */
     @Volatile var volume = 1f
@@ -34,14 +36,14 @@ class Clip(
 
     fun toJson(): JSONObject = JSONObject().apply {
         put("id", id); put("engine", engine); put("name", name); put("len", lengthTicks)
-        put("valley", inClibbins); put("jam", jam); put("variant", variant); put("volume", volume.toDouble()); put("muted", muted); put("pan", pan.toDouble())
+        put("valley", inClibbins); put("jam", jam); put("arr", arr); put("variant", variant); put("volume", volume.toDouble()); put("muted", muted); put("pan", pan.toDouble())
         put("notes", JSONArray().apply { notes.forEach { put(JSONArray(listOf(it.tick, it.dur, it.note, it.vel.toDouble()))) } })
         put("xy", JSONArray().apply { xy.forEach { put(JSONArray(listOf(it.tick, it.x.toDouble(), it.y.toDouble()))) } })
     }
 
     companion object {
         fun fromJson(o: JSONObject) = Clip(o.getString("id"), o.getString("engine"), o.getString("name"), o.getInt("len")).apply {
-            inClibbins = o.optBoolean("valley"); jam = o.optBoolean("jam"); variant = o.optInt("variant")
+            inClibbins = o.optBoolean("valley"); jam = o.optBoolean("jam"); arr = o.optBoolean("arr"); variant = o.optInt("variant")
             volume = o.optDouble("volume", 1.0).toFloat(); muted = o.optBoolean("muted"); pan = o.optDouble("pan", 0.0).toFloat()
             val n = o.getJSONArray("notes")
             for (i in 0 until n.length()) n.getJSONArray(i).let { notes += Note(it.getInt(0), it.getInt(1), it.getInt(2), it.getDouble(3).toFloat()) }

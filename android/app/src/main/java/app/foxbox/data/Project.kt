@@ -63,6 +63,8 @@ class Project(val dir: File) {
     var layoutSeed = 0
     /** Level of the master audio track. */
     var audioMaster = 0.75f
+    /** The song laid out on the Fire Escape. */
+    val arrangement = app.foxbox.seq.Arrangement()
 
     val samplesDir get() = File(dir, "samples")
     val midiDir get() = File(dir, "midi")
@@ -85,6 +87,10 @@ class Project(val dir: File) {
         put("trackLevels", JSONArray(Audio.channelLevel.map { it.toDouble() }))
         put("trackFx", JSONArray().apply { Audio.stripFx.forEach { put(it.p.save()) } })
         put("masterFx", Audio.masterFx.p.save())
+        put("arrangement", arrangement.toJson())
+        // the Fire Escape's lane inserts (Wraith's settings with them), and the tracks' amps
+        put("laneFx", JSONObject().apply { Audio.laneIds.forEachIndexed { i, id -> val f = Audio.laneFx[i]; put(id, f.p.save().put("wraith", f.wraith.p.save())) } })
+        put("amps", JSONArray().apply { Audio.amps.forEach { put(it.save()) } })
     }
     private var mixState: JSONObject? = null
 
@@ -107,7 +113,11 @@ class Project(val dir: File) {
         flowers.clear(); o.optJSONArray("flowers")?.let { a -> for (i in 0 until a.length()) flowers += Flower.fromJson(a.getJSONObject(i)) }
         engineState = o.optJSONObject("engines") ?: JSONObject()
         layoutSeed = o.optInt("layoutSeed"); audioMaster = o.optDouble("audioMaster", 0.75).toFloat()
-        mixState = JSONObject().apply { o.optJSONArray("trackLevels")?.let { put("levels", it) }; o.optJSONArray("trackFx")?.let { put("fx", it) }; o.optJSONObject("masterFx")?.let { put("master", it) } }
+        mixState = JSONObject().apply {
+            o.optJSONArray("trackLevels")?.let { put("levels", it) }; o.optJSONArray("trackFx")?.let { put("fx", it) }; o.optJSONObject("masterFx")?.let { put("master", it) }
+            o.optJSONObject("laneFx")?.let { put("lanes", it) }; o.optJSONArray("amps")?.let { put("amps", it) }
+        }
+        arrangement.load(o.optJSONObject("arrangement"))
     }
 
     /** Put the saved track levels and strip settings onto the audio engine (neutral when there are none). */
@@ -118,6 +128,13 @@ class Project(val dir: File) {
         val fx = st.optJSONArray("fx")
         Audio.stripFx.forEachIndexed { ch, f -> f.reset(); f.p.load(fx?.optJSONObject(ch)) }
         Audio.masterFx.reset(); Audio.masterFx.p.load(st.optJSONObject("master"))
+        val lanes = st.optJSONObject("lanes")
+        Audio.laneIds.forEachIndexed { i, id ->
+            val f = Audio.laneFx[i]; val o = lanes?.optJSONObject(id)
+            f.p.load(o); f.wraith.p.load(o?.optJSONObject("wraith"))
+        }
+        val amps = st.optJSONArray("amps")
+        Audio.amps.forEachIndexed { ch, a -> a.load(amps?.optJSONObject(ch)) }
     }
 
     /** Capture every block's params + extra state. */

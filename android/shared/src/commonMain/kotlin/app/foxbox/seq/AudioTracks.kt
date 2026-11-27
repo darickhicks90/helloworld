@@ -17,16 +17,18 @@ class AudioClip(
     @Volatile var muted = false
     /** Stereo position, -1 (left) .. 1 (right). */
     @Volatile var pan = 0f
+    /** Recorded on the Fire Escape (a long take, kept out of Clibbins' loops). */
+    var arr = false
     val seconds get() = data.size / SR.toFloat()
 
-    fun toJson() = JSONObject().apply { put("id", id); put("ch", channel); put("name", name); put("volume", volume.toDouble()); put("muted", muted); put("pan", pan.toDouble()) }
+    fun toJson() = JSONObject().apply { put("id", id); put("ch", channel); put("name", name); put("volume", volume.toDouble()); put("muted", muted); put("pan", pan.toDouble()); put("arr", arr) }
 
     companion object {
         const val CHANNELS = 3
         /** Most audio per channel: 6 minutes (18 minutes per project). */
         const val MAX_SECONDS = 6 * 60
         fun fromJson(o: JSONObject) = AudioClip(o.getString("id"), o.getInt("ch"), o.optString("name", "Take")).apply {
-            volume = o.optDouble("volume", 1.0).toFloat(); muted = o.optBoolean("muted"); pan = o.optDouble("pan", 0.0).toFloat()
+            volume = o.optDouble("volume", 1.0).toFloat(); muted = o.optBoolean("muted"); pan = o.optDouble("pan", 0.0).toFloat(); arr = o.optBoolean("arr")
         }
     }
 }

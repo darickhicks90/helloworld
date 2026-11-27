@@ -198,5 +198,9 @@ object Iso {
     val iconMushroom by lazy { Sprite(listOf("..rrrr....", ".rOOOOr...", "rOOOOOOr..", "..WW..rr..", "..WW.rOOr.", "..WW..WW..", ".WWWW.WW.."), mapOf('r' to 0xFFB8521B.toInt())) }
     val iconFlower by lazy { Sprite(listOf("..o.o..", ".oOoOo.", "oOOWOOo", ".oOoOo.", "..oGo..", "...G...", "..GG...")) }
     /** The rail button for Clibbins: a few black boxes in the grass. */
+    /** The Fire Escape: a little window with iron stairs across a brick wall. */
+    val iconFireEscape by lazy { Sprite(listOf(
+        "rrrrrrrrrr", "rbbrrrrbbr", "rWWkkkkWWr", "rWWk..kWWr", "rkkkkkkkkr", "rr.k..k..r", "rrk..k..rr", "rkkkkkkkkr"),
+        mapOf('r' to 0xFFA04634.toInt(), 'b' to 0xFF7C3428.toInt(), 'W' to 0xFFF6C26B.toInt(), 'k' to 0xFF1E1C26.toInt(), '.' to 0xFFA04634.toInt()), outline = null) }
     val iconClibbins by lazy { Sprite(listOf("kkkk......", "kWWk..kkkk", "kkkk..kWWk", "......kkkk", ".kkkk.....", ".kWWk.kkkk", ".kkkk.kWWk", "G.G.G.kkkk"), mapOf('k' to 0xFF0B0B0B.toInt(), 'W' to 0xFFFFFFFF.toInt(), 'G' to 0xFF6FA84A.toInt()), outline = null) }
 }

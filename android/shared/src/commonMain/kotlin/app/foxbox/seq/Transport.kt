@@ -26,6 +26,8 @@ class Transport {
         fun onAudioTakeEnded() {}
         /** A sampler mic take finished (audio thread); ticks are where it started and ended. */
         fun onSamplerTakeEnded(startTick: Double, endTick: Double) {}
+        /** A free-length performance finished on the Fire Escape: the clips and the tick they started at. */
+        fun onPerformance(clips: List<Clip>, startTick: Double) {}
     }
 
     @Volatile var bpm = 110f
@@ -84,7 +86,82 @@ class Transport {
         tick = 0.0; playing = true; changed()
     }
 
+    // ---------------------------------------------------------------- the Fire Escape (arrangement)
+
+    /** The arrangement being played (the Fire Escape is open), or null. Set through the host's post. */
+    var arrangement: ArrangementPlayer? = null
+        set(v) { field?.releaseAll(); field = v }
+    /** The Fire Escape's loop region, in ticks (loops while [loopOn]). */
+    @Volatile var loopOn = false
+    @Volatile var loopStart = 0.0
+    @Volatile var loopEnd = 0.0
+
+    /** Start playing from tick `t` (the Fire Escape's playhead). */
+    fun playFrom(t: Double) {
+        if (playing) return
+        arrangement?.releaseAll()
+        tick = t; playing = true; changed()
+    }
+
+    /** Move the playhead while playing (a tap on the Fire Escape's ruler). */
+    fun seek(t: Double) {
+        arrangement?.releaseAll()
+        engines.forEach { it.allOff() }
+        tick = t; changed()
+    }
+
+    /** True while recording a free-length performance (no bar rounding). */
+    @Volatile var freeRec = false; private set
+
+    /**
+     * Record a performance of any length on the Fire Escape: from `from` (with one
+     * bar of count-in if stopped) or from now if already playing, until pressed again
+     * or stopped. Its length is exactly as long as it was played.
+     */
+    fun recordFree(target: Engine?, from: Double) {
+        when (rec) {
+            Rec.RECORDING -> { finishFree(); return }
+            Rec.ARMED -> { rec = Rec.OFF; freeRec = false; changed(); return }
+            Rec.OFF -> {}
+        }
+        recTarget = target; recLen = Int.MAX_VALUE / 2; freeRec = true
+        if (!playing) { arrangement?.releaseAll(); tick = from - Ticks.BAR; playing = true; recStart = from }
+        else recStart = tick + 1
+        rec = Rec.ARMED
+        changed()
+    }
+
+    private fun finishFree() {
+        val end = maxOf(Ticks.STEP, Math.ceil(tick - recStart).toInt())
+        val made = ArrayList<Clip>()
+        for ((e, tk) in takes) {
+            tk.open.values.forEach { tk.notes += it.copy(dur = maxOf(Ticks.STEP / 4, end - it.tick)) }
+            val notes = tk.notes.filter { it.tick < end }.sortedBy { it.tick }
+            if (notes.isEmpty()) continue
+            made += Clip(engine = e.id, name = "", lengthTicks = end, notes = notes.toMutableList(), xy = tk.xy.filter { it.tick < end }.toMutableList())
+        }
+        takes.clear(); rec = Rec.OFF; freeRec = false
+        if (made.isNotEmpty()) listener?.onPerformance(made, recStart)
+        changed()
+    }
+
+    /** Audio recorded on the Fire Escape: no count-in rounding, no bar rounding. */
+    @Volatile var audioFree = false; private set
+
+    /** Record the armed audio tracks from `from` (one bar of count-in if stopped), or from now if playing. Again to stop. */
+    fun recordAudioFree(from: Double) {
+        if (audioRec != Rec.OFF) { endAudioTake(); return }
+        audioFree = true
+        if (!playing) { arrangement?.releaseAll(); tick = from - Ticks.BAR; playing = true; audioRecStart = from }
+        else audioRecStart = tick + 0.1 * bpm / 60.0 * Ticks.PPQ
+        audioRec = Rec.ARMED
+        changed()
+    }
+
     fun stop() {
+        if (rec == Rec.RECORDING && freeRec) finishFree()
+        freeRec = false
+        arrangement?.releaseAll()
         players.forEach { it.releaseAll() }
         players.clear(); audioPlayers.clear(); syncIds()
         if (audioRec != Rec.OFF) endAudioTake()
@@ -99,6 +176,7 @@ class Transport {
 
     /** Arm recording for `target` (null = all engines) for `lenTicks`. Calling again while recording ends it early. */
     fun record(target: Engine?, lenTicks: Int) {
+        if (freeRec) return
         when (rec) {
             Rec.RECORDING -> { recLen = maxOf(Ticks.BAR, nextBar(tick - recStart).toInt()); finish(); return }
             Rec.ARMED -> { rec = Rec.OFF; changed(); return }
@@ -233,9 +311,12 @@ class Transport {
         while (s * Ticks.STEP < t1) { step(s); s++ }
 
         for (i in players.indices) players[i].process(t0, t1)
+        val arr = arrangement
+        arr?.process(t0, t1)
         // Each block takes the pan of the clips playing on it.
         for (i in engines.indices) { engines[i].panSum = 0f; engines[i].panCount = 0 }
         for (i in players.indices) { val p = players[i]; if (!p.clip.muted) { p.engine.panSum += p.clip.pan; p.engine.panCount++ } }
+        arr?.addPan(t0)
         for (i in engines.indices) { val e = engines[i]; e.livePan = if (e.panCount > 0) e.panSum / e.panCount else 0f }
 
         if (rec == Rec.RECORDING) {
@@ -251,9 +332,14 @@ class Transport {
                 }
             }
             tick = t1
-            if (t1 >= recStart + recLen) finish()
+            if (!freeRec && t1 >= recStart + recLen) finish()
         }
         tick = t1
+        // the Fire Escape's loop region (not while recording, so a take runs on)
+        if (arr != null && loopOn && loopEnd > loopStart && t1 >= loopEnd && rec == Rec.OFF && audioRec == Rec.OFF) {
+            arr.releaseAll()
+            tick = loopStart + (t1 - loopEnd)
+        }
     }
 
     private fun step(s: Long) {
@@ -359,6 +445,7 @@ class Transport {
     /** Start a take: two bars of count-in, then record until [endAudioTake]. */
     fun recordAudio() {
         if (audioRec != Rec.OFF) { endAudioTake(); return }
+        audioFree = false
         if (!playing) { tick = -2.0 * Ticks.BAR; playing = true; audioRecStart = 0.0 }
         else audioRecStart = nextBar(tick) + 2.0 * Ticks.BAR
         audioRec = Rec.ARMED
@@ -369,6 +456,7 @@ class Transport {
         if (audioRec == Rec.RECORDING) audioIn?.markEnd(latencyFrames)
         audioRec = Rec.OFF
         listener?.onAudioTakeEnded()
+        audioFree = false
         changed()
     }
 
@@ -384,6 +472,7 @@ class Transport {
         if (!playing) return
         val tpf = bpm * Ticks.PPQ / 60.0 / app.foxbox.audio.SR
         for (i in audioPlayers.indices) { val p = audioPlayers[i]; val ch = p.clip.channel.coerceIn(0, busL.size - 1); p.render(busL[ch], busR[ch], n, t0, tpf) }
+        arrangement?.renderAudio(busL, busR, n, t0, tpf)
     }
     @Volatile var blockStartTick = 0.0; private set
     private fun changed() = listener?.onChanged()

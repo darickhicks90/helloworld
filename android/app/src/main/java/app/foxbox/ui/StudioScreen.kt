@@ -22,6 +22,8 @@ import app.foxbox.seq.Transport
 interface Host {
     fun showProjects()
     fun showClibbins()
+    /** The Fire Escape: the song laid out in time. */
+    fun showFireEscape()
     /** Load audio into "reflections", "leaves" or "pad<i>" (a Pickup pad). */
     fun pickAudio(target: String)
     fun toggleMic(target: String)
@@ -115,6 +117,7 @@ class StudioScreen(c: Context, private val host: Host) : FrameLayout(c) {
         tabBtns[Studio.FLOWERS] = fl
         rail.addView(fl, lp(Px.dp(56), 0, 1f))
         rail.addView(Btn(context, "", Pal.GREEN).apply { icon = Iso.iconClibbins; onClick = { host.showClibbins() } }, lp(Px.dp(56), 0, 1.2f))
+        rail.addView(Btn(context, "", 0xFFB0503C.toInt()).apply { icon = Iso.iconFireEscape; onClick = { host.showFireEscape() } }, lp(Px.dp(56), 0, 1.2f))
         // Pages of removed blocks are dropped.
         pages.keys.filter { it != Studio.FLOWERS && it !in Studio.project.blocks }.forEach { content.removeView(pages.remove(it)) }
         if (Studio.page !in Studio.pages) select(Studio.pages.first())

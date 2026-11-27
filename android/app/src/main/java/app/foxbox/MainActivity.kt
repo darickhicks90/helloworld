@@ -46,9 +46,10 @@ import app.foxbox.ui.ClibbinsScreen
 import app.foxbox.ui.SnesDialog
 
 /** One activity, three screens: projects → studio ⇄ Clibbins. */
-class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost {
+class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost, app.foxbox.ui.FireHost {
     private lateinit var midi: MidiInput
-    private var screen = 0 // 0 projects, 1 studio, 2 Clibbins
+    private var screen = 0 // 0 projects, 1 studio, 2 Clibbins, 3 the Fire Escape
+    private var fireScreen: app.foxbox.ui.FireEscapeScreen? = null
     private var studio: StudioScreen? = null
     private var pickFor: String? = null
     private var mic: AudioFiles.Mic? = null
@@ -66,6 +67,8 @@ class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost {
         app.foxbox.kit.AudioBoost.init(this)
         ProjectStore.init(this)
         Presets.init(this)
+        app.foxbox.data.AmpLibrary.init(this)
+        app.foxbox.data.WraithPresets.init(this)
         app.foxbox.data.Banks.init(this)
         Store.init(this)
         MidiMap.init(this)
@@ -94,11 +97,12 @@ class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost {
         val target = intent?.getStringExtra("screen") ?: return false
         val p = ProjectStore.list().firstOrNull { it.name == "Beta check" } ?: ProjectStore.create("Beta check")
         when (target) {
-            "studio", "clibbins" -> {
+            "studio", "clibbins", "fireescape" -> {
                 Studio.open(p)
                 intent.getStringExtra("page")?.let { pg -> runCatching { Studio.select(pg) } }
                 studio = StudioScreen(this, this); showStudio()
                 if (target == "clibbins") showClibbins()
+                if (target == "fireescape") showFireEscape()
             }
             "notebook" -> openNotebook()
         }
@@ -120,7 +124,8 @@ class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost {
 
     private fun goBack() {
         if (closeNotebook()) return
-        when (screen) { 2 -> showStudio(); 1 -> showProjects(); else -> finish() }
+        if (screen == 3 && fireScreen?.back() == true) return
+        when (screen) { 3 -> leaveFireEscape(); 2 -> showStudio(); 1 -> showProjects(); else -> finish() }
     }
 
     // a steady processor while the app is in front (where the phone supports it), so the audio never glitches as it throttles
@@ -261,13 +266,36 @@ class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost {
     @Deprecated("Back handling for Android 12 and older")
     override fun onBackPressed() = goBack()
 
-    private fun textDialog(title: String, initial: String, numeric: Boolean = false, done: (String) -> Unit) {
+    override fun textDialog(title: String, initial: String, numeric: Boolean, done: (String) -> Unit) {
         SnesDialog.text(this, title, initial, numeric, done)
     }
 
-    private fun choose(title: String, items: List<String>, checked: Int = -1, pick: (Int) -> Unit) {
+    override fun choose(title: String, items: List<String>, checked: Int, pick: (Int) -> Unit) {
         SnesDialog.choose(this, title, items, checked, pick)
     }
+
+    // ------------------------------------------------------------------ the Fire Escape
+
+    override fun showFireEscape() {
+        if (!projectOpen) return
+        screen = 3
+        (studio?.parent as? android.view.ViewGroup)?.removeView(studio)
+        FireEscape.enter()
+        fireScreen = app.foxbox.ui.FireEscapeScreen(this, this, this)
+        setContentView(fireScreen)
+        addTopKeys()
+    }
+
+    override fun leaveFireEscape() {
+        FireEscape.leave()
+        fireScreen = null
+        showStudio()
+    }
+
+    private var importFor = 0
+    override fun importAmp(ch: Int) { importFor = ch; openDocument(REQ_AMP, "*/*") }
+    override fun importCab(ch: Int) { importFor = ch; openDocument(REQ_CAB, "audio/*") }
+    override fun showCredits(text: String) { SnesDialog(this, "Amp captures: credits & licence", wide = 0.9f).message(text.ifBlank { "No bundled captures." }).key("Done", app.foxbox.ui.Snes.GREEN, then = null).show() }
 
     private fun ask(title: String, msg: String, vararg keys: Pair<String, (() -> Unit)?>) = SnesDialog.ask(this, title, msg, *keys)
 
@@ -772,6 +800,21 @@ class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost {
                     Studio.message(if (n > 0) "Imported $name ($n sounds): File → Sample packs" else "No WAV files found in that zip")
                 }.start()
             }
+            REQ_AMP, REQ_CAB -> {
+                val ch = importFor; val isAmp = requestCode == REQ_AMP
+                Studio.message("Importing…")
+                Thread {
+                    try {
+                        val name = if (isAmp) app.foxbox.data.AmpLibrary.importAmp(uri, displayName(uri)) else app.foxbox.data.AmpLibrary.importCab(uri, displayName(uri))
+                        runOnUiThread {
+                            val rig = Audio.amps[ch]
+                            if (isAmp) { rig.chooseAmp(name); if (!rig.on.on) rig.on.set(1f) } else rig.chooseCab(name)
+                            Studio.save(); fireScreen?.ampChanged()
+                            Studio.message("Imported $name")
+                        }
+                    } catch (ex: Exception) { Studio.message(ex.message ?: "Couldn't import that file") }
+                }.start()
+            }
             REQ_TREE -> {
                 runCatching { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION) }
                 ProjectStore.folderUri = uri; ProjectStore.location = ProjectStore.Location.FOLDER
@@ -825,5 +868,7 @@ class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost {
         private const val REQ_BANK = 20
         private const val REQ_PADS = 21
         private const val REQ_TREE = 6
+        private const val REQ_AMP = 30
+        private const val REQ_CAB = 31
     }
 }

@@ -42,6 +42,23 @@ object Audio {
     }
     val flowers = Core.flowers
 
+    // ---------------------------------------------------------------- the Fire Escape's lane inserts
+    /** Every lane: each block type (in [engines] order), then the three audio tracks. */
+    val laneIds: List<String> = engines.map { it.id } + listOf("track0", "track1", "track2")
+    private val laneNames = engines.map { it.title } + listOf("Red track", "Yellow track", "Blue track")
+    /** Filter, compressors (with sidechain) and Wraith on each lane. */
+    val laneFx: Array<app.foxbox.fx.LaneFx> = Array(laneIds.size) { app.foxbox.fx.LaneFx(laneNames) }
+    fun laneFx(id: String) = laneFx[laneIds.indexOf(id).coerceAtLeast(0)]
+    /** The amp and cab on each audio track. */
+    val amps = Array(3) { AmpRig(it) }
+    /** Pitch classes in the project's scale (bit n = pitch class n), for Wraith. */
+    @Volatile var scaleMask = 0xAB5
+    private val engineIndex = HashMap<Engine, Int>().apply { engines.forEachIndexed { i, e -> put(e, i) } }
+    private val laneL = Array(engines.size) { FloatArray(BLOCK) }; private val laneR = Array(engines.size) { FloatArray(BLOCK) }
+    /** Each lane's sound this block (mono, before its inserts): what a sidechain listens to. */
+    private val keyBuf = Array(laneIds.size) { FloatArray(BLOCK) }
+    private val keyLive = BooleanArray(laneIds.size)
+
     @Volatile var masterVolume = 0.7f
     @Volatile var peak = 0f
     /** Set to capture the master output (see data.AudioFiles.Tape). */
@@ -51,7 +68,6 @@ object Audio {
 
     private val queue = ConcurrentLinkedQueue<Runnable>()
     private val mixL = FloatArray(BLOCK); private val mixR = FloatArray(BLOCK)
-    private val eL = FloatArray(BLOCK); private val eR = FloatArray(BLOCK)
     private val revL = FloatArray(BLOCK); private val revR = FloatArray(BLOCK)
     private val reverbFx = Reverb()
     private val limiter = Limiter()
@@ -111,11 +127,43 @@ object Audio {
         val chains = rack.chains
         val routes = rack.blockRoute
         val act = active
+        val E = engines.size
+        keyLive.fill(false)
+        // every block renders into its own buffer first, so any lane can key another's compressor
         for (k in act.indices) {
             val e = act[k]
+            val idx = engineIndex[e] ?: continue
             e.seq?.advance(n)
-            eL.fill(0f, 0, n); eR.fill(0f, 0, n)
-            e.render(eL, eR, n)
+            val bl = laneL[idx]; val br = laneR[idx]
+            bl.fill(0f, 0, n); br.fill(0f, 0, n)
+            e.render(bl, br, n)
+            val v = e.volume.value; val key = keyBuf[idx]
+            for (i in 0 until n) key[i] = (bl[i] + br[i]) * 0.5f * v
+            keyLive[idx] = true
+        }
+        // audio tracks: their takes, plus live input on monitored tracks, then the amp
+        for (ch in 0 until 3) { audioBus[ch].fill(0f, 0, n); audioBusR[ch].fill(0f, 0, n) }
+        transport.renderAudio(audioBus, audioBusR, n, transport.blockStartTick)
+        val li = liveIn
+        if (li != null) li.readMonitor(inL, inR, n) else { inL.fill(0f, 0, n); inR.fill(0f, 0, n) }
+        for (ch in 0 until 3) {
+            val bl = audioBus[ch]; val br = audioBusR[ch]
+            if (li != null && liveMonitor[ch]) {
+                val src = liveInput[ch]
+                for (i in 0 until n) { val v = when (src) { 0 -> inL[i]; 1 -> inR[i]; else -> (inL[i] + inR[i]) * 0.5f }; bl[i] += v; br[i] += v }
+            }
+            amps[ch].process(bl, br, n)
+            val key = keyBuf[E + ch]
+            for (i in 0 until n) key[i] = (bl[i] + br[i]) * 0.5f
+            keyLive[E + ch] = true
+        }
+        val bpm = transport.bpm; val tk = transport.blockStartTick; val mask = scaleMask
+        for (k in act.indices) {
+            val e = act[k]
+            val idx = engineIndex[e] ?: continue
+            val eL = laneL[idx]; val eR = laneR[idx]
+            val fx = laneFx[idx]
+            if (fx.active) fx.process(eL, eR, n, keyFor(fx.compKey), keyFor(fx.bandKey), bpm, tk, mask) else fx.wraith.idle()
             val v = e.volume.value; val s = e.reverb.value * v
             // Blocks tied to a daisy chain go through that chain's flower.
             val c = routes[e.id] ?: -1
@@ -131,18 +179,11 @@ object Audio {
             }
             e.meter = pk
         }
-        // Audio channels: their takes, plus live input on monitored tracks (clock running or not),
-        // through each track's dynamics and effects strip, then its fader.
-        for (ch in 0 until 3) { audioBus[ch].fill(0f, 0, n); audioBusR[ch].fill(0f, 0, n) }
-        transport.renderAudio(audioBus, audioBusR, n, transport.blockStartTick)
-        val li = liveIn
-        if (li != null) li.readMonitor(inL, inR, n) else { inL.fill(0f, 0, n); inR.fill(0f, 0, n) }
+        // Audio tracks: lane inserts, then each track's dynamics and effects strip, then its fader.
         for (ch in 0 until 3) {
             val bl = audioBus[ch]; val br = audioBusR[ch]
-            if (li != null && liveMonitor[ch]) {
-                val src = liveInput[ch]
-                for (i in 0 until n) { val v = when (src) { 0 -> inL[i]; 1 -> inR[i]; else -> (inL[i] + inR[i]) * 0.5f }; bl[i] += v; br[i] += v }
-            }
+            val fx = laneFx[E + ch]
+            if (fx.active) fx.process(bl, br, n, keyFor(fx.compKey), keyFor(fx.bandKey), bpm, tk, mask) else fx.wraith.idle()
             stripFx[ch].process(bl, br, n, revL, revR)
             val c = rack.channelRoute[ch]
             val g = channelLevel[ch]
@@ -192,6 +233,10 @@ object Audio {
             } else tp(mixL, mixR, n)
         } else tp?.invoke(mixL, mixR, n)
     }
+
+    private val silent = FloatArray(BLOCK)
+    /** A sidechain source's sound this block (silence if that lane isn't playing); null means "itself". */
+    private fun keyFor(k: Int): FloatArray? = if (k < 0) null else if (k < keyLive.size && keyLive[k]) keyBuf[k] else silent
 
     // ---------------------------------------------------------------- device output
 

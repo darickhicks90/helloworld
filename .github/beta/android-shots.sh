@@ -31,6 +31,7 @@ start; shot 01-title 6
 start --es screen studio --es page gusts; shot 02-studio-gusts 6
 for pg in reflections leaves minds bumble pickup flowers; do start --es screen studio --es page $pg; shot 03-studio-$pg 5; done
 start --es screen clibbins; shot 04-clibbins 6
+start --es screen fireescape; shot 04b-fireescape 7
 start --es screen notebook; shot 05-notebook 6
 start --es screen studio --es page gusts; sleep 5; adb shell input tap $RX $RY; shot 06-radio 4
 adb shell input keyevent KEYCODE_BACK; sleep 1

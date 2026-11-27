@@ -489,24 +489,35 @@ class NotebookView(private val a: Activity, private val close: () -> Unit, priva
      */
     private fun isCheck(s: FloatArray): Boolean {
         val n = s.size / 3
-        if (n < 4) return false
+        if (n < 5) return false
         var low = 0
         for (k in 1 until n) if (s[k * 3 + 1] > s[low * 3 + 1]) low = k
         if (low == 0 || low == n - 1) return false
         val sx = s[0]; val sy = s[1]; val lx = s[low * 3]; val ly = s[low * 3 + 1]; val ex = s[(n - 1) * 3]; val ey = s[(n - 1) * 3 + 1]
         val down = hypot(lx - sx, ly - sy); val up = hypot(ex - lx, ey - ly)
         val h = maxOf(ly - minOf(sy, ey), 1f)
-        if (h < g.lineH * 0.3f || h > g.lineH * 2.2f) return false
-        // the dip: downwards, not backwards much
-        if (ly - sy < h * 0.2f || lx - sx < -h * 0.25f) return false
-        // the rise: longer than the dip, clearly to the right and steep
-        if (up < down * 1.3f || ex - lx < h * 0.25f || ly - ey < h * 0.6f) return false
+        if (h < g.lineH * 0.45f || h > g.lineH * 2.2f) return false
+        // written right beside letters still being read, it's part of a word (a v, an r, a u…), not a tick
+        var l = Float.MAX_VALUE; var r = -Float.MAX_VALUE
+        for (k in 0 until n) { l = minOf(l, s[k * 3]); r = maxOf(r, s[k * 3]) }
+        val gap = g.lineH * 0.8f
+        if (pending.any { p ->
+                var near = false; var k = 0
+                while (k + 1 < p.size) { if (p[k] > l - gap && p[k] < r + gap && kotlin.math.abs(p[k + 1] - ly) < g.lineH * 1.2f) { near = true; break }; k += 3 }
+                near }) return false
+        // the dip: a short, straight stroke down (and not backwards much)
+        if (ly - sy < h * 0.2f || lx - sx < -h * 0.2f) return false
+        var dipPath = 0f
+        for (k in 1..low) dipPath += hypot(s[k * 3] - s[k * 3 - 3], s[k * 3 + 1] - s[k * 3 - 2])
+        if (dipPath > down * 1.25f) return false
+        // the rise: clearly longer than the dip, well to the right, and steep
+        if (up < down * 1.5f || ex - lx < h * 0.3f || ly - ey < h * 0.75f) return false
         // ends well above where it began (an "r" comes back to about its starting height)
-        if (sy - ey < h * 0.35f) return false
-        // and the rise is fairly straight (an r's shoulder curves over)
+        if (sy - ey < h * 0.45f) return false
+        // and the rise is straight (an r's shoulder, or a u's, curves over)
         var path = 0f
         for (k in low + 1 until n) path += hypot(s[k * 3] - s[k * 3 - 3], s[k * 3 + 1] - s[k * 3 - 2])
-        return path <= up * 1.3f
+        return path <= up * 1.18f
     }
 
     private fun writeCheck(s: FloatArray) {

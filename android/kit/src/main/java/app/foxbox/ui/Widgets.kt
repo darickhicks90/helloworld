@@ -140,9 +140,14 @@ class Stepper(c: Context, private val label: String, private val minW: Int = 120
     override fun onMeasure(w: Int, h: Int) = setMeasuredDimension(resolveSize(Px.dp(minW), w), resolveSize(Px.dp(40), h))
     override fun paint(c: Canvas) {
         c.pixelBox(u, u, width - u, height - u, Pal.CREAM)
-        c.textCentered("◀", Px.dp(14f), height / 2f, tp); c.textCentered("▶", width - Px.dp(14f), height / 2f, tp)
+        // narrow steppers tuck their arrows in, so the value keeps room to be read whole
+        val narrow = width < Px.dp(80f)
+        tp.textSize = Px.dp(if (narrow) 11f else 14f)
+        val ax = (width * 0.15f).coerceIn(Px.dp(7f), Px.dp(14f))
+        val aw = tp.measureText("◀")
+        c.textCentered("◀", ax, height / 2f, tp); c.textCentered("▶", width - ax, height / 2f, tp)
         // the value sits between the two arrows and shrinks to fit there
-        val room = width - Px.dp(56f)
+        val room = width - 2 * (ax + aw / 2 + Px.dp(3f))
         tp.textSize = Px.dp(14f); lp.textSize = Px.dp(10f)
         // the label sits above the arrows, so it can use nearly the whole width
         if (label.isNotEmpty()) { c.textFit(label, width / 2f, Px.dp(10f), width - Px.dp(12f), lp, 8f); c.textFit(text(), width / 2f, height / 2f + Px.dp(5f), room, tp) }

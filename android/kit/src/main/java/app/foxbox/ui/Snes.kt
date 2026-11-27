@@ -322,8 +322,8 @@ class KnobFace(classic: Boolean = false) {
         else {
             val half = (1 until words.size).minByOrNull { k -> kotlin.math.abs(label.measureText(words.take(k).joinToString(" ")) - label.measureText(words.drop(k).joinToString(" "))) } ?: 1
             label.textSize = Px.dp(10f)
-            c.textFit(words.take(half).joinToString(" "), cx, Px.dp(73f), w - Px.dp(4f), label)
-            c.textFit(words.drop(half).joinToString(" "), cx, Px.dp(82f), w - Px.dp(4f), label)
+            c.textFit(words.take(half).joinToString(" "), cx, Px.dp(75f), w - Px.dp(4f), label)
+            c.textFit(words.drop(half).joinToString(" "), cx, Px.dp(85f), w - Px.dp(4f), label)
         }
     }
 

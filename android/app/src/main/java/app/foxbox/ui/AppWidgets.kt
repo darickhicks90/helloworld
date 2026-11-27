@@ -21,7 +21,7 @@ class Knob(c: Context, val param: Param, var accent: Int, classic: Boolean = fal
 
     override fun onAttachedToWindow() { super.onAttachedToWindow(); param.listeners.add(listener) }
     override fun onDetachedFromWindow() { param.listeners.remove(listener); super.onDetachedFromWindow() }
-    override fun onMeasure(w: Int, h: Int) = setMeasuredDimension(Px.dp(70), Px.dp(84))
+    override fun onMeasure(w: Int, h: Int) = setMeasuredDimension(Px.dp(70), Px.dp(90))
 
     private val face = KnobFace(classic)
     override fun paint(c: Canvas) {

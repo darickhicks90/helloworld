@@ -964,16 +964,16 @@ class FireEscapeScreen(c: Context, private val host: Host, private val fire: Fir
     /** The alley painting, scaled up with hard pixel edges to cover the screen, with twinkling string lights. */
     private class AlleyView(c: Context) : PixelView(c) {
         init { animated = true }
-        private val bmp: Bitmap by lazy { Bitmap.createBitmap(AlleyArt.render(), AlleyArt.W, AlleyArt.H, Bitmap.Config.ARGB_8888) }
+        private val bmp: Bitmap by lazy { Bitmap.createBitmap(AlleyArt.render(), AlleyArt.OUT_W, AlleyArt.OUT_H, Bitmap.Config.ARGB_8888) }
         private val paint = Paint().apply { isFilterBitmap = false; isAntiAlias = false }
         private val p = Paint()
         private val src = Rect(); private val dst = RectF()
         private val t0 = System.nanoTime()
         override fun paint(c: Canvas) {
-            val s = max(width / AlleyArt.W.toFloat(), height / AlleyArt.H.toFloat())
-            val w = AlleyArt.W * s; val h = AlleyArt.H * s
+            val s = max(width / AlleyArt.OUT_W.toFloat(), height / AlleyArt.OUT_H.toFloat())
+            val w = AlleyArt.OUT_W * s; val h = AlleyArt.OUT_H * s
             val ox = (width - w) / 2f; val oy = (height - h) / 2f
-            src.set(0, 0, AlleyArt.W, AlleyArt.H); dst.set(ox, oy, ox + w, oy + h)
+            src.set(0, 0, AlleyArt.OUT_W, AlleyArt.OUT_H); dst.set(ox, oy, ox + w, oy + h)
             c.drawBitmap(bmp, src, dst, paint)
             // the string lights breathe, each at its own pace
             val time = (System.nanoTime() - t0) / 1e9f

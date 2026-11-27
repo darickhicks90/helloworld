@@ -8,8 +8,11 @@ package app.foxbox.ui
  * up with hard edges.
  */
 object AlleyArt {
+    /** The painting is made at this size, then reduced to [OUT_W] × [OUT_H] in a small palette. */
     const val W = 640
     const val H = 360
+    const val OUT_W = 320
+    const val OUT_H = 180
 
     /** String-light bulbs (x, y, colour) so the screen can make them twinkle. */
     val bulbs = ArrayList<IntArray>()
@@ -64,7 +67,38 @@ object AlleyArt {
         bricks()
         sunlight()
         vignette()
-        return px
+        return retro()
+    }
+
+    /** The old-school look: half the resolution, every pixel snapped to a 17-colour palette with ordered dithering. */
+    private val PALETTE = intArrayOf(
+        // brick, dark to light, and two plums for the hard-fired ones
+        rgb(70, 30, 34), rgb(96, 40, 40), rgb(120, 52, 46), rgb(142, 62, 50), rgb(162, 74, 56), rgb(180, 88, 62), rgb(198, 106, 74), rgb(216, 130, 92), rgb(234, 164, 122),
+        rgb(84, 40, 48), rgb(104, 50, 56), rgb(126, 62, 64), rgb(150, 80, 70),
+        // mortar, shadow to lit
+        rgb(78, 72, 70), rgb(112, 104, 98), rgb(146, 138, 128), rgb(174, 166, 154), rgb(202, 194, 182), rgb(228, 222, 210),
+    )
+    private val BAYER = intArrayOf(0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5)
+
+    private fun retro(): IntArray {
+        val out = IntArray(OUT_W * OUT_H)
+        for (y in 0 until OUT_H) for (x in 0 until OUT_W) {
+            // average the 2 × 2 block
+            var rr = 0; var gg = 0; var bb = 0
+            for (dy in 0..1) for (dx in 0..1) { val c = px[(y * 2 + dy) * W + x * 2 + dx]; rr += r(c); gg += g(c); bb += b(c) }
+            rr /= 4; gg /= 4; bb /= 4
+            // a little ordered dither before snapping to the palette
+            val d = (BAYER[(y and 3) * 4 + (x and 3)] - 7.5f) * 0.9f
+            val tr = rr + d; val tg = gg + d; val tb = bb + d
+            var best = PALETTE[0]; var bd = Float.MAX_VALUE
+            for (pc in PALETTE) {
+                val er = r(pc) - tr; val eg = g(pc) - tg; val eb = b(pc) - tb
+                val dist = er * er * 0.35f + eg * eg * 0.45f + eb * eb * 0.2f
+                if (dist < bd) { bd = dist; best = pc }
+            }
+            out[y * OUT_W + x] = best
+        }
+        return out
     }
 
     /** Smooth value noise (0..1) at a given scale, for clay and mortar texture. */

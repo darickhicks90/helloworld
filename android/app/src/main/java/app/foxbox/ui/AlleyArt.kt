@@ -63,10 +63,13 @@ object AlleyArt {
         seed = 0x1234567; bulbs.clear(); catEyes = intArrayOf(-100, -100)
         wall()
         sunlight()
-        windowAt(46, 14, 92, 132, open = true)
-        windowAt(296, -40, 84, 120, open = false)
-        acUnit(300, 100)
-        drainpipe(254)
+        // two floors of windows in each column (the fire escape serves the left one)
+        windowAt(52, 10, 64, 76, open = true)
+        windowAt(52, 132, 64, 76, open = false)
+        windowAt(286, 4, 60, 72, open = false)
+        windowAt(286, 142, 60, 70, open = true)
+        acUnit(282, 92)
+        drainpipe(228)
         // the fire escape, its shadow first
         shadowing = true; fireEscape(); shadowing = false
         fireEscape()
@@ -77,7 +80,7 @@ object AlleyArt {
     // ------------------------------------------------------------------ the wall, close up
 
     private fun wall() {
-        val bw = 22; val bh = 8
+        val bw = 16; val bh = 6
         val bricks = intArrayOf(rgb(170, 78, 56), rgb(184, 90, 62), rgb(156, 70, 52), rgb(192, 104, 74), rgb(146, 66, 52), rgb(176, 96, 76), rgb(162, 84, 66))
         val mortarC = rgb(188, 176, 160)
         for (row in -1..H / bh + 1) {
@@ -182,9 +185,10 @@ object AlleyArt {
                 val sway = (kotlin.math.sin((y - oy) / 5f) * 3).toInt()
                 for (x in gx until gx + 18 + sway) set(x, y, mix(rgb(238, 232, 214), rgb(206, 196, 176), ((x - gx) % 4) / 4f))
             }
-            rect(gx + 44, gy + gh - 22, 18, 22, rgb(180, 96, 60)); hline(gx + 43, gx + 62, gy + gh - 22, rgb(210, 126, 86))
+            val px0 = gx + gw / 2 + 4; val pw = minOf(14, gw / 2 - 10)
+            rect(px0, gy + gh - 16, pw, 16, rgb(180, 96, 60)); hline(px0 - 1, px0 + pw, gy + gh - 16, rgb(210, 126, 86))
             val leaf = listOf(rgb(70, 140, 70), rgb(100, 170, 84), rgb(50, 110, 56))
-            for (k in 0 until 70) { val lx = gx + 38 + rnd() % 30; val ly = gy + gh - 24 - rnd() % 26; set(lx, ly, leaf[k % 3]); set(lx + 1, ly, leaf[(k + 1) % 3]) }
+            for (k in 0 until 50) { val lx = px0 - 4 + rnd() % (pw + 8); val ly = gy + gh - 18 - rnd() % 18; if (lx < gx + gw - 4 && ly > oy) { set(lx, ly, leaf[k % 3]); set(lx + 1, ly, leaf[(k + 1) % 3]) } }
         }
         // white-painted sash frames and glazing bars, with their own shading
         val paint = rgb(240, 236, 226); val paintS = rgb(196, 190, 178)
@@ -228,13 +232,14 @@ object AlleyArt {
     }
 
     private fun acUnit(x: Int, y: Int) {
-        for (yy in y + 9 until y + 9 + 34) for (xx in x + 7 until x + 7 + 66) blend(xx, yy, ink, 0.38f)
-        rect(x, y, 66, 34, rgb(214, 216, 218)); hline(x, x + 65, y, rgb(244, 246, 248)); hline(x, x + 65, y + 33, rgb(140, 142, 148)); vline(x + 65, y, y + 33, rgb(168, 170, 176))
-        for (yy in y + 5 until y + 29 step 3) { hline(x + 5, x + 38, yy, rgb(140, 142, 150)); hline(x + 5, x + 38, yy + 1, rgb(236, 238, 240)) }
-        for (k in 0 until 24) { val a = k * 0.2618f; for (r in 4..10 step 3) set(x + 52 + (kotlin.math.cos(a) * r).toInt(), y + 16 + (kotlin.math.sin(a) * r).toInt(), rgb(120, 122, 130)) }
-        rect(x + 50, y + 14, 5, 5, rgb(90, 92, 100))
-        line(x + 6, y + 34, x + 20, y + 50, iron); line(x + 60, y + 34, x + 46, y + 50, iron)
-        for (yy in y + 34 until y + 110) if (hash(x, yy) % 3 != 0) blend(x + 33, yy, rgb(70, 50, 46), 0.25f * (1f - (yy - y - 34) / 76f))
+        val w = 52; val h = 26
+        for (yy in y + 7 until y + 7 + h) for (xx in x + 6 until x + 6 + w) blend(xx, yy, ink, 0.38f)
+        rect(x, y, w, h, rgb(214, 216, 218)); hline(x, x + w - 1, y, rgb(244, 246, 248)); hline(x, x + w - 1, y + h - 1, rgb(140, 142, 148)); vline(x + w - 1, y, y + h - 1, rgb(168, 170, 176))
+        for (yy in y + 4 until y + h - 4 step 3) { hline(x + 4, x + 29, yy, rgb(140, 142, 150)); hline(x + 4, x + 29, yy + 1, rgb(236, 238, 240)) }
+        for (k in 0 until 24) { val a = k * 0.2618f; for (r in 3..8 step 3) set(x + 41 + (kotlin.math.cos(a) * r).toInt(), y + 13 + (kotlin.math.sin(a) * r).toInt(), rgb(120, 122, 130)) }
+        rect(x + 39, y + 11, 4, 4, rgb(90, 92, 100))
+        line(x + 5, y + h, x + 16, y + h + 12, iron); line(x + w - 6, y + h, x + w - 17, y + h + 12, iron)
+        for (yy in y + h until y + h + 60) if (hash(x, yy) % 3 != 0) blend(x + 26, yy, rgb(70, 50, 46), 0.25f * (1f - (yy - y - h) / 60f))
     }
 
     // ------------------------------------------------------------------ the fire escape, close up
@@ -254,9 +259,14 @@ object AlleyArt {
     }
 
     private fun fireEscape() {
-        val left = 6; val right = 236; val y = 178     // the landing's walking surface
-        // stairs climbing from the landing up and off the top, to the right
-        stair(150, y - 2, 236, -12)
+        // the flight from the floor above, then the upper landing, the flight down, and the lower landing
+        stair(150, 98, 196, -14)
+        stair(34, 216, 120, 108)
+        landing(16, 186, 102, top = true)
+        landing(16, 186, 220, top = false)
+    }
+
+    private fun landing(left: Int, right: Int, y: Int, top: Boolean) {
         // landing: a thick grate with a front edge bar
         irect(left, y, right - left, 8, iron)
         ih(left, right - 1, y, ironHi); ih(left, right - 1, y + 1, ironMid)
@@ -264,39 +274,42 @@ object AlleyArt {
         ih(left, right - 1, y + 7, ink)
         irect(left, y + 8, right - left, 3, ironMid); ih(left, right - 1, y + 10, ink)
         // brackets down into the wall
-        for (bx in listOf(left + 18, right - 30)) for (t in 0 until 3) iline(bx + t, y + 11, bx + 22 + t, y + 44, if (t == 1) ironHi else iron)
+        for (bx in listOf(left + 12, right - 24)) for (t in 0 until 2) iline(bx + t, y + 11, bx + 16 + t, y + 34, if (t == 1) ironHi else iron)
         // railing: thick top rail, mid rail and square balusters with a highlight on the sun side
-        val ry = y - 38
+        val ry = y - 26
         irect(left, ry, right - left, 4, iron); ih(left, right - 1, ry, ironHi)
-        irect(left, ry + 18, right - left, 2, iron); ih(left, right - 1, ry + 18, ironHi)
+        irect(left, ry + 13, right - left, 2, iron); ih(left, right - 1, ry + 13, ironHi)
         var x = left
-        while (x < right) { iv(x, ry + 4, y - 1, iron); iv(x + 1, ry + 4, y - 1, ironMid); if (!shadowing) { set(x, ry + 4 + (x % 7), ironHi) }; x += 7 }
+        while (x < right) { iv(x, ry + 4, y - 1, iron); iv(x + 1, ry + 4, y - 1, ironMid); if (!shadowing) { set(x, ry + 4 + (x % 5), ironHi) }; x += 5 }
         irect(left, ry, 4, y - ry, iron); iv(left, ry, y, ironHi)
         irect(right - 4, ry, 4, y - ry, iron); iv(right - 4, ry, y, ironHi)
         if (!shadowing) {
             // rust blooms and flaking paint
             for (k in 0 until 40) { val rx = left + rnd() % (right - left); val rr = if (k % 2 == 0) ry + rnd() % 4 else y + rnd() % 8; set(rx, rr, rust); if (k % 3 == 0) set(rx + 1, rr, mix(rust, rgb(170, 100, 60), 0.5f)) }
-            // things on the landing in the sun
-            pot(30, y - 1, 1); pot(52, y - 1, 2); pot(196, y - 1, 3)
-            cat(92, y - 1)
-            // a watering can
-            rect(120, y - 12, 14, 12, rgb(90, 150, 130)); hline(120, 133, y - 12, rgb(140, 200, 180)); line(134, y - 9, 142, y - 15, rgb(90, 150, 130)); line(120, y - 11, 116, y - 15, rgb(70, 120, 104))
+            // things on the landings in the sun
+            if (top) {
+                pot(28, y - 1, 1); pot(150, y - 1, 3)
+                cat(64, y - 1)
+            } else {
+                pot(130, y - 1, 2)
+                rect(100, y - 12, 14, 12, rgb(90, 150, 130)); hline(100, 113, y - 12, rgb(140, 200, 180)); line(114, y - 9, 122, y - 15, rgb(90, 150, 130)); line(100, y - 11, 96, y - 15, rgb(70, 120, 104))
+            }
         }
     }
 
     private fun stair(x0: Int, y0: Int, x1: Int, y1: Int) {
         // stringers (two deep channels) and chunky treads
         for (t in 0 until 3) iline(x0, y0 + t, x1, y1 + t, if (t == 0) ironHi else iron)
-        for (t in 0 until 3) iline(x0 + 22, y0 - 10 + t, x1 + 22, y1 - 10 + t, if (t == 0) ironHi else iron)
-        val steps = 11
+        for (t in 0 until 2) iline(x0 + 16, y0 - 8 + t, x1 + 16, y1 - 8 + t, if (t == 0) ironHi else iron)
+        val steps = 9
         for (s in 1 until steps) {
             val f = s / steps.toFloat()
             val x = (x0 + (x1 - x0) * f).toInt(); val y = (y0 + (y1 - y0) * f).toInt()
-            ih(x, x + 22, y - 4, ironHi); ih(x, x + 22, y - 3, iron); ih(x, x + 22, y - 2, ink)
+            ih(x, x + 16, y - 4, ironHi); ih(x, x + 16, y - 3, iron); ih(x, x + 16, y - 2, ink)
         }
         // handrail with posts
-        iline(x0 - 2, y0 - 34, x1 - 2, y1 - 34, ironHi); iline(x0 - 2, y0 - 33, x1 - 2, y1 - 33, iron)
-        for (s in 0..4) { val f = s / 4f; val x = (x0 + (x1 - x0) * f).toInt(); val y = (y0 + (y1 - y0) * f).toInt(); iv(x - 2, y - 33, y, iron); iv(x - 1, y - 33, y, ironMid) }
+        iline(x0 - 2, y0 - 24, x1 - 2, y1 - 24, ironHi); iline(x0 - 2, y0 - 23, x1 - 2, y1 - 23, iron)
+        for (s in 0..4) { val f = s / 4f; val x = (x0 + (x1 - x0) * f).toInt(); val y = (y0 + (y1 - y0) * f).toInt(); iv(x - 2, y - 23, y, iron); iv(x - 1, y - 23, y, ironMid) }
     }
 
     private fun pot(x: Int, y: Int, kind: Int) {

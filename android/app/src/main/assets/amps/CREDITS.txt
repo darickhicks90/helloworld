@@ -12,3 +12,10 @@ share and change them under that licence. Captured by:
   Twin Verb Clean: "Tim R Fender TwinVerb Norm Bright.nam" by Tim R
   5150 Block Letter: "Helga B 5150 BlockLetter - NoBoost.nam" by Helga B
   TS9 Drive (pedal): "Tim R TS9.nam" by Tim R
+
+Product names in these captures' titles (amps and pedals) are trademarks of their owners.
+They only describe the gear each capture was made from; 5 Eye Yeti is not affiliated
+with or endorsed by those companies.
+
+The cabinet impulses (Brick 4x12, Fire Escape 2x12, Basement 1x10, Boiler Room 4x12)
+are original to 5 Eye Yeti, designed from a speaker model rather than captured.

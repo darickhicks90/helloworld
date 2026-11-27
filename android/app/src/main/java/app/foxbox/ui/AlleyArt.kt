@@ -8,8 +8,8 @@ package app.foxbox.ui
  * up with hard edges.
  */
 object AlleyArt {
-    const val W = 400
-    const val H = 225
+    const val W = 560
+    const val H = 315
 
     /** String-light bulbs (x, y, colour) so the screen can make them twinkle. */
     val bulbs = ArrayList<IntArray>()
@@ -67,80 +67,120 @@ object AlleyArt {
         return px
     }
 
-    /** Just brick, close up: every brick its own clay, with flecks, pits, hairline cracks and worn arrises. */
+    /** Smooth value noise (0..1) at a given scale, for clay and mortar texture. */
+    private fun vnoise(x: Float, y: Float, sc: Float, salt: Int): Float {
+        val fx = x / sc; val fy = y / sc
+        val ix = kotlin.math.floor(fx).toInt(); val iy = kotlin.math.floor(fy).toInt()
+        val tx = fx - ix; val ty = fy - iy
+        val sx = tx * tx * (3 - 2 * tx); val sy = ty * ty * (3 - 2 * ty)
+        fun v(a: Int, b: Int) = (hash(a * 7 + salt, b * 13 - salt) % 1000) / 1000f
+        val top = v(ix, iy) + (v(ix + 1, iy) - v(ix, iy)) * sx
+        val bot = v(ix, iy + 1) + (v(ix + 1, iy + 1) - v(ix, iy + 1)) * sx
+        return top + (bot - top) * sy
+    }
+
+    /**
+     * Just brick, seen from about three feet away: five or six bricks across. Each has
+     * its own clay and firing (darker at one end), a wavy, chipped arris, grain, sand
+     * specks and little pits that catch the light; the mortar is recessed and gritty.
+     */
     private fun bricks() {
-        val bw = 48; val bh = 17; val joint = 3
-        val clays = intArrayOf(rgb(172, 80, 58), rgb(186, 92, 64), rgb(158, 72, 54), rgb(196, 106, 76), rgb(150, 68, 54), rgb(178, 100, 78), rgb(166, 86, 66), rgb(140, 64, 52))
-        val mortar = rgb(190, 180, 164)
+        val bw = 104; val bh = 35; val joint = 7
+        val clays = intArrayOf(rgb(170, 78, 56), rgb(184, 90, 62), rgb(156, 70, 52), rgb(194, 104, 74), rgb(150, 66, 52), rgb(176, 98, 76), rgb(164, 84, 64), rgb(142, 64, 50))
+        val mortarBase = rgb(186, 176, 160)
+        // the mortar everywhere first: sandy, with grains, small pebbles and a darker recess
+        for (y in 0 until H) for (x in 0 until W) {
+            val n = vnoise(x.toFloat(), y.toFloat(), 3f, 5) * 0.6f + vnoise(x.toFloat(), y.toFloat(), 1.2f, 9) * 0.4f
+            var c = shade(mortarBase, 0.82f + n * 0.3f)
+            val g = hash(x * 3 + 11, y * 5 + 7) % 100
+            if (g < 10) c = shade(c, 0.8f) else if (g > 92) c = mix(c, rgb(238, 232, 218), 0.5f)
+            if (g == 50) c = rgb(110, 100, 92)
+            set(x, y, shade(c, 0.86f))   // recessed: always a touch darker than the brick faces
+        }
         for (row in -1..H / bh + 1) {
             val y0 = row * bh
-            val off = if (row and 1 == 0) 0 else bw / 2
+            val off = if (row and 1 == 0) 18 else 18 + bw / 2
             var col = -1
             while (col * bw - off < W + bw) {
                 val x0 = col * bw - off
                 val h = hash(col * 31 + 7, row * 17 + 3)
                 var base = clays[h % clays.size]
-                if (h % 17 == 0) base = rgb(112, 58, 50)          // overfired, almost purple
-                if (h % 23 == 1) base = rgb(210, 140, 106)        // pale and sandy
-                val warm = ((h shr 3) % 7 - 3) * 0.02f
-                val crack = if (h % 7 == 0) (h shr 4) % (bw - 8) + 4 else -1
-                for (y in y0 until y0 + bh) for (x in x0 until x0 + bw) {
+                if (h % 13 == 0) base = rgb(116, 60, 52)
+                if (h % 19 == 1) base = rgb(206, 136, 104)
+                val flashLeft = (h shr 2) % 2 == 0                   // which end got the hotter fire
+                val flash = 0.12f + ((h shr 5) % 10) / 80f
+                val bwIn = bw - joint; val bhIn = bh - joint
+                // the arris wobbles: each column's top and bottom edge, and each row's sides, by up to a pixel or two
+                for (ly in 0 until bhIn) for (lx in 0 until bwIn) {
+                    val x = x0 + lx; val y = y0 + ly
                     if (x !in 0 until W || y !in 0 until H) continue
-                    val lx = x - x0; val ly = y - y0
-                    var c: Int
-                    if (ly >= bh - joint || lx >= bw - joint) {
-                        // the joint: sandy mortar, recessed (shadow under the brick, a lit lower lip)
-                        val n = hash(x * 3 + 11, y * 5 + 7) % 100
-                        c = mortar
-                        if (ly == bh - joint && lx < bw - joint) c = shade(mortar, 0.6f)
-                        else if (lx == bw - joint && ly < bh - joint) c = shade(mortar, 0.7f)
-                        if (n < 22) c = shade(c, 0.86f) else if (n > 88) c = mix(c, rgb(236, 230, 214), 0.45f)
-                        if (n in 40..42) c = rgb(120, 110, 100)
-                    } else {
-                        c = shade(base, 1f + warm)
-                        // gentle tonal waves across the face (fired clay is never flat)
-                        val fx = x.toFloat(); val fy = y.toFloat()
-                        val wave = kotlin.math.sin(fx * 0.21f + fy * 0.37f + h) * 0.035f + kotlin.math.sin(fx * 0.07f - fy * 0.19f + h * 0.3f) * 0.05f +
-                            ((hash((x + 1) / 2, (y + 1) / 2) % 100) - 50) / 1400f
-                        c = shade(c, 1f + wave)
-                        val n = hash(x * 7 + 1, y * 13 + 5) % 1000
-                        when {
-                            n < 60 -> c = shade(c, 0.93f)
-                            n < 72 -> c = shade(c, 0.84f)
-                            n in 500..503 -> { c = shade(c, 0.6f); }                               // pits
-                            n > 988 -> c = mix(c, rgb(246, 204, 168), 0.35f)                        // sandy flecks
-                            n in 700..704 -> c = mix(c, rgb(70, 44, 42), 0.3f)                       // dark specks
-                        }
-                        // light on the top arris, shade on the right and bottom
-                        if (ly == 0) c = mix(c, rgb(250, 206, 170), 0.35f)
-                        if (ly == 1) c = mix(c, rgb(250, 206, 170), 0.15f)
-                        if (ly == 2) c = mix(c, rgb(250, 206, 170), 0.05f)
-                        if (lx == 0) c = mix(c, rgb(240, 186, 150), 0.2f)
-                        if (ly == bh - joint - 1) c = shade(c, 0.8f)
-                        if (ly == bh - joint - 2) c = shade(c, 0.92f)
-                        if (lx == bw - joint - 1) c = shade(c, 0.85f)
-                        // worn corners
-                        if ((h % 5 == 0 && lx <= 1 && ly <= 1) || (h % 6 == 1 && lx >= bw - joint - 2 && ly <= 1)) c = mix(mortar, c, 0.3f)
-                        if (h % 8 == 3 && lx >= bw - joint - 3 && ly >= bh - joint - 2) c = shade(mortar, 0.75f)
-                        // a hairline crack wandering down the face
-                        if (crack >= 0 && ly in 2 until bh - joint - 3) { val cx = crack + (kotlin.math.sin(ly * 0.9f + h) * 1.5f).toInt(); if (lx == cx) c = shade(c, 0.62f); if (lx == cx + 1) c = mix(c, rgb(240, 190, 160), 0.2f) }
+                    val topEdge = (hash(x0 + lx, row * 5 + 1) % 3 == 0).let { if (it) 1 else 0 } + if (h % 4 == 0 && lx < 6) 1 else 0
+                    val botEdge = bhIn - 1 - (if (hash(x0 + lx, row * 5 + 2) % 4 == 0) 1 else 0)
+                    val leftEdge = (if (hash(col * 3, y) % 3 == 0) 1 else 0)
+                    val rightEdge = bwIn - 1 - (if (hash(col * 3 + 1, y) % 3 == 0) 1 else 0)
+                    // chips out of the corners and edges
+                    val chipTL = h % 5 == 0 && lx + ly < 4
+                    val chipBR = h % 7 == 2 && (bwIn - lx) + (bhIn - ly) < 6
+                    val chipEdge = h % 9 == 4 && ly < 2 && lx in (h shr 7) % (bwIn - 10)..(h shr 7) % (bwIn - 10) + 6
+                    if (ly < topEdge || ly > botEdge || lx < leftEdge || lx > rightEdge || chipTL || chipBR || chipEdge) continue
+                    // the clay: firing gradient, broad mottling and fine grain
+                    val along = lx / bwIn.toFloat()
+                    val fire = if (flashLeft) 1f - along else along
+                    var c = shade(base, 1f - flash * fire * fire)
+                    val m = vnoise(x.toFloat(), y.toFloat(), 9f, h and 255) - 0.5f
+                    val f = vnoise(x.toFloat(), y.toFloat(), 2.5f, (h shr 8) and 255) - 0.5f
+                    c = shade(c, 1f + m * 0.16f + f * 0.08f)
+                    // the clay drifts in colour: plum where it fired hard, orange where it didn't
+                    val hue = vnoise(x.toFloat(), y.toFloat(), 14f, (h shr 3) and 255)
+                    c = if (hue > 0.6f) mix(c, rgb(120, 56, 62), (hue - 0.6f) * 0.7f) else if (hue < 0.3f) mix(c, rgb(214, 120, 72), (0.3f - hue) * 0.6f) else c
+                    // soot that settled near the bed joints
+                    if (ly > bhIn - 7) c = shade(c, 1f - (ly - (bhIn - 7)) * 0.012f * (vnoise(x.toFloat(), y.toFloat(), 4f, 33) + 0.5f))
+                    val n = hash(x * 7 + 1, y * 13 + 5) % 1000
+                    when {
+                        n < 40 -> c = shade(c, 0.92f)
+                        n < 48 -> c = mix(c, rgb(236, 182, 140), 0.22f)          // sand grains
+                        n > 995 -> c = mix(c, rgb(250, 226, 196), 0.4f)
                     }
+                    // shallow dents: a soft hollow, shadowed at the top and lit at the bottom
+                    val dk = (h shr 4) % 3
+                    for (dIdx in 0 until dk) {
+                        val dcx = (hash(h, dIdx * 2) % (bwIn - 16)) + 8; val dcy = (hash(h, dIdx * 2 + 1) % (bhIn - 10)) + 5
+                        val rx = 3 + hash(h, dIdx + 9) % 5; val ry = 2 + hash(h, dIdx + 11) % 3
+                        val ex = (lx - dcx) / rx.toFloat(); val ey = (ly - dcy) / ry.toFloat()
+                        val d = ex * ex + ey * ey
+                        if (d < 1f) c = if (ey < 0) shade(c, 0.8f + d * 0.2f) else mix(c, rgb(246, 200, 164), 0.25f * (1f - d))
+                    }
+                    // little pits: dark with a lit lower lip
+                    val pit = hash(x / 2 + 101, y / 2 + 77) % 260 == 0
+                    if (pit) c = shade(c, 0.55f)
+                    if (!pit && hash(x / 2 + 101, (y - 1) / 2 + 77) % 260 == 0 && y % 2 == 0) c = mix(c, rgb(245, 200, 160), 0.35f)
+                    // 3D: the top face catches the light, the bottom and right roll into shadow
+                    val dTop = ly - topEdge; val dBot = botEdge - ly; val dLeft = lx - leftEdge; val dRight = rightEdge - lx
+                    if (dTop == 0) c = mix(c, rgb(252, 214, 180), 0.45f) else if (dTop == 1) c = mix(c, rgb(252, 214, 180), 0.18f)
+                    if (dLeft == 0) c = mix(c, rgb(246, 196, 160), 0.25f)
+                    if (dBot == 0) c = shade(c, 0.7f) else if (dBot == 1) c = shade(c, 0.86f) else if (dBot == 2) c = shade(c, 0.94f)
+                    if (dRight == 0) c = shade(c, 0.78f) else if (dRight == 1) c = shade(c, 0.92f)
+                    // a hairline crack on some
+                    if (h % 6 == 3) { val cx = (h shr 9) % (bwIn - 16) + 8 + (kotlin.math.sin(ly * 0.7f + h) * 2f).toInt(); if (lx == cx && ly in 3 until bhIn - 3) c = shade(c, 0.6f); if (lx == cx + 1 && ly in 3 until bhIn - 3) c = mix(c, rgb(240, 196, 160), 0.2f) }
                     set(x, y, c)
                 }
+                // the brick's shadow falls into the joint below and to the right
+                for (lx in 1 until bwIn + 1) { val x = x0 + lx; val y = y0 + bhIn; if (x in 0 until W && y in 0 until H) set(x, y, shade(get(x, y), 0.62f)); if (x in 0 until W && y + 1 in 0 until H) set(x, y + 1, shade(get(x, y + 1), 0.82f)) }
+                for (ly in 1 until bhIn) { val x = x0 + bwIn; val y = y0 + ly; if (x in 0 until W && y in 0 until H) set(x, y, shade(get(x, y), 0.72f)) }
                 col++
             }
         }
-        // weathering: pale bloom in patches and faint darker streaks where rain runs
-        for (k in 0 until 9) {
-            val cx = rnd() % W; val cy = rnd() % H; val r = 14 + rnd() % 30
+        // weathering: pale lime bloom in patches and a few faint rain streaks
+        for (k in 0 until 6) {
+            val cx = rnd() % W; val cy = rnd() % H; val r = 20 + rnd() % 40
             for (y in cy - r until cy + r) for (x in cx - r until cx + r) {
                 val d = ((x - cx) * (x - cx) + (y - cy) * (y - cy)) / (r * r).toFloat()
-                if (d < 1f && hash(x, y) % 3 == 0) blend(x, y, rgb(230, 218, 200), 0.16f * (1f - d))
+                if (d < 1f && hash(x, y) % 3 == 0) blend(x, y, rgb(232, 222, 204), 0.12f * (1f - d))
             }
         }
-        for (k in 0 until 10) {
-            val x = rnd() % W; val y0 = rnd() % 80; val len = 40 + rnd() % 120; val w = 2 + rnd() % 5
-            for (y in y0 until minOf(H, y0 + len)) for (dx in 0 until w) if (hash(x + dx, y) % 4 != 0) blend(x + dx, y, rgb(70, 50, 46), 0.12f * (1f - (y - y0) / len.toFloat()))
+        for (k in 0 until 6) {
+            val x = rnd() % W; val y0 = rnd() % 60; val len = 60 + rnd() % 140; val w = 3 + rnd() % 6
+            for (y in y0 until minOf(H, y0 + len)) for (dx in 0 until w) if (hash(x + dx, y) % 4 != 0) blend(x + dx, y, rgb(70, 50, 46), 0.09f * (1f - (y - y0) / len.toFloat()))
         }
     }
 

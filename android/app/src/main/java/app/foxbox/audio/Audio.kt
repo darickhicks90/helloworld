@@ -53,6 +53,18 @@ object Audio {
     val amps = Array(3) { AmpRig(it) }
     /** Pitch classes in the project's scale (bit n = pitch class n), for Wraith. */
     @Volatile var scaleMask = 0xAB5
+
+    // ---------------------------------------------------------------- the tuner's ear
+    /** What the tuner listens to: -1 nothing, 0..2 the input (1, 2, both), 100 + n the block at engines[n]. */
+    @Volatile var tunerSource = -1
+    /** The last few thousand samples of it (mono), written by the audio thread. */
+    val tunerRing = FloatArray(8192)
+    @Volatile var tunerWrite = 0
+    private fun tunerTap(l: FloatArray, r: FloatArray?, n: Int) {
+        var w = tunerWrite
+        for (i in 0 until n) { tunerRing[w] = if (r != null) (l[i] + r[i]) * 0.5f else l[i]; w = (w + 1) and 8191 }
+        tunerWrite = w
+    }
     private val engineIndex = HashMap<Engine, Int>().apply { engines.forEachIndexed { i, e -> put(e, i) } }
     private val laneL = Array(engines.size) { FloatArray(BLOCK) }; private val laneR = Array(engines.size) { FloatArray(BLOCK) }
     /** Each lane's sound this block (mono, before its inserts): what a sidechain listens to. */
@@ -146,6 +158,9 @@ object Audio {
         transport.renderAudio(audioBus, audioBusR, n, transport.blockStartTick)
         val li = liveIn
         if (li != null) li.readMonitor(inL, inR, n) else { inL.fill(0f, 0, n); inR.fill(0f, 0, n) }
+        val ts = tunerSource
+        if (ts in 0..2 && li != null) { if (ts == 0) tunerTap(inL, null, n) else if (ts == 1) tunerTap(inR, null, n) else tunerTap(inL, inR, n) }
+        else if (ts >= 100) { val k = ts - 100; if (k < E && keyLive[k]) tunerTap(laneL[k], laneR[k], n) }
         for (ch in 0 until 3) {
             val bl = audioBus[ch]; val br = audioBusR[ch]
             if (li != null && liveMonitor[ch]) {

@@ -356,16 +356,21 @@ class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost, app.foxbox.ui
             panel.addView(flow, android.widget.LinearLayout.LayoutParams(Px.dp(74) * ((params.size + 1) / 2), android.view.ViewGroup.LayoutParams.WRAP_CONTENT))
             strip.addView(panel, android.widget.LinearLayout.LayoutParams(android.view.ViewGroup.LayoutParams.WRAP_CONTENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT).apply { rightMargin = Px.dp(6) })
         }
+        // the amp: an effect a track has only once it's added
+        if (ch < 3) strip.addView(app.foxbox.ui.AmpPanel(this, ch, this), 0, android.widget.LinearLayout.LayoutParams(android.view.ViewGroup.LayoutParams.WRAP_CONTENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT).apply { rightMargin = Px.dp(6) })
         d.view(android.widget.HorizontalScrollView(this).apply { addView(strip) })
+        if (ch < 3) d.key("Tuner", app.foxbox.ui.Snes.YELLOW, close = false) { showTuner(AudioPrefs.planeInput(ch).coerceIn(0, 2)) }
         d.key("Reset", app.foxbox.ui.Snes.RED, close = false) { fx.reset(); Studio.save() }
         d.key("Done", app.foxbox.ui.Snes.GREEN) { Studio.save() }
         d.onDismiss { Studio.save() }
         d.show()
     }
 
-    override fun mainMenu() = choose("Menu", listOf("File…", "Audio settings…", "MIDI…", "Jam over the internet…")) { i ->
-        when (i) { 0 -> fileMenu(); 1 -> audioSettings(); 2 -> midiMenu(); 3 -> app.foxbox.jam.JamPanel.show(this) }
+    override fun mainMenu() = choose("Menu", listOf("File…", "Audio settings…", "MIDI…", "Tuner", "Jam over the internet…")) { i ->
+        when (i) { 0 -> fileMenu(); 1 -> audioSettings(); 2 -> midiMenu(); 3 -> showTuner(2); 4 -> app.foxbox.jam.JamPanel.show(this) }
     }
+
+    override fun showTuner(source: Int) = app.foxbox.ui.Tuner.show(this, source)
 
     override fun chooseXyTarget(xy: XyState, isX: Boolean) {
         val choice = if (isX) xy.xTarget else xy.yTarget
@@ -809,7 +814,7 @@ class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost, app.foxbox.ui
                         runOnUiThread {
                             val rig = Audio.amps[ch]
                             if (isAmp) { rig.chooseAmp(name); if (!rig.on.on) rig.on.set(1f) } else rig.chooseCab(name)
-                            Studio.save(); fireScreen?.ampChanged()
+                            Studio.save(); fireScreen?.ampChanged(); app.foxbox.ui.AmpPanel.refreshAll()
                             Studio.message("Imported $name")
                         }
                     } catch (ex: Exception) { Studio.message(ex.message ?: "Couldn't import that file") }

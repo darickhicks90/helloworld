@@ -24,6 +24,8 @@ interface Host {
     fun showClibbins()
     /** The Fire Escape: the song laid out in time. */
     fun showFireEscape()
+    /** Pop up the tuner listening to `source` (see Audio.tunerSource). */
+    fun showTuner(source: Int)
     /** Load audio into "reflections", "leaves" or "pad<i>" (a Pickup pad). */
     fun pickAudio(target: String)
     fun toggleMic(target: String)

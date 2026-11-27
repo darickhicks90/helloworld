@@ -59,8 +59,9 @@ class InstrumentPage(c: Context, id: String, host: Host) : LinearLayout(c) {
         micBtn?.let { mb ->
             mb.onClick = { host.toggleMic(id) }
             val load = Btn(c, "Load", Pal.AQUA).apply { onClick = { host.pickAudio(id) } }
+            val tune = Btn(c, "Tuner", Pal.SUN).apply { onClick = { host.showTuner(2) } }
             val bar = LinearLayout(c).apply { orientation = HORIZONTAL }
-            bar.addView(mb, lp(0, MATCH, 1.3f)); bar.addView(load, lp(0, MATCH, 1f).apply { leftMargin = Px.dp(4) })
+            bar.addView(mb, lp(0, MATCH, 1.3f)); bar.addView(load, lp(0, MATCH, 1f).apply { leftMargin = Px.dp(4) }); bar.addView(tune, lp(0, MATCH, 1f).apply { leftMargin = Px.dp(4) })
             col.addView(bar, lp(MATCH, Px.dp(40)).apply { bottomMargin = Px.dp(4) })
         }
         col.addView(chords, lp(MATCH, 0, 1f))
@@ -260,7 +261,8 @@ class PickupPage(c: Context, private val host: Host) : LinearLayout(c) {
         editor.addView(title, lp(MATCH, Px.dp(30)))
         val load = Btn(c, "Load to pad", Pal.AQUA).apply { onClick = { host.pickAudio("pad$i") } }
         recBtn = Btn(c, "● Rec", Pal.ORANGE_D).apply { onClick = { host.toggleMic("pad$i") } }
-        editor.addView(row(c, load, recBtn!!).apply { load.layoutParams = lp(0, Px.dp(42), 1f); recBtn!!.layoutParams = lp(0, Px.dp(42), 1f) }, lp(MATCH, WRAP))
+        val tune = Btn(c, "Tuner", Pal.SUN).apply { onClick = { host.showTuner(2) } }
+        editor.addView(row(c, load, recBtn!!, tune).apply { load.layoutParams = lp(0, Px.dp(42), 1f); recBtn!!.layoutParams = lp(0, Px.dp(42), 1f); tune.layoutParams = lp(0, Px.dp(42), 0.8f) }, lp(MATCH, WRAP))
         val chop = Btn(c, "Chop…", Pal.ORANGE).apply { onClick = { host.chopMenu(i) } }
         val banks = Btn(c, "Banks…", Pal.HONEY).apply { onClick = { host.bankMenu() } }
         editor.addView(row(c, chop, banks).apply { chop.layoutParams = lp(0, Px.dp(42), 1f); banks.layoutParams = lp(0, Px.dp(42), 1f) }, lp(MATCH, WRAP))

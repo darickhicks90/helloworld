@@ -99,6 +99,7 @@ class FireEscapeScreen(c: Context, private val host: Host, private val fire: Fir
         crateBtn = Btn(c, "Crate", Pal.GREEN).apply { onClick = { toggleDrawer("crate") } }.also { add(it) }
         keysBtn = Btn(c, "Keys", Pal.ORANGE).apply { onClick = { toggleDrawer("keys") } }.also { add(it) }
         fxBtn = Btn(c, "FX", Snes.PURPLE, 44).apply { onClick = { toggleDrawer("fx") } }.also { add(it) }
+        add(Btn(c, "Tuner", Pal.AQUA).apply { onClick = { openTuner() } })
         b.addView(spacer(c, Px.dp(6), 0f))
         add(Btn(c, "Copy", Pal.AQUA).apply { onClick = { sel()?.let { FireEscape.copy(it) } ?: Studio.message("Tap a clip to copy it") } })
         pasteBtn = Btn(c, "Paste", Pal.AQUA).apply { onClick = { FireEscape.paste(FireEscape.selectedLane, FireEscape.arr.playhead) } }.also { add(it) }
@@ -109,6 +110,19 @@ class FireEscapeScreen(c: Context, private val host: Host, private val fire: Fir
     }
 
     private fun sel(): ArrItem? = FireEscape.item(FireEscape.selected)
+
+    /** The tuner, listening to the selected lane: a track's input, or a sampler's own sound. */
+    private fun openTuner() {
+        val a = context as? android.app.Activity ?: return
+        val lane = FireEscape.selectedLaneObj()
+        val src = when {
+            lane == null -> 2
+            lane.isTrack -> app.foxbox.audio.AudioPrefs.planeInput(lane.channel).coerceIn(0, 2)
+            lane.id in listOf("reflections", "leaves", "pickup") -> 100 + Audio.engines.indexOfFirst { it.id == lane.id }
+            else -> 2
+        }
+        Tuner.show(a, src)
+    }
 
     private fun refresh() {
         FireEscape.sync()
@@ -207,15 +221,8 @@ class FireEscapeScreen(c: Context, private val host: Host, private val fire: Fir
             p.addView(flow, lp(Px.dp(74) * cols, WRAP))
             strip.addView(p, lp(WRAP, WRAP).apply { rightMargin = Px.dp(6) })
         }
-        if (lane.isTrack) {
-            val rig = Audio.amps[lane.channel]
-            rig.onProblem = { msg -> Studio.message(msg) }
-            val pick = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-            pick.addView(Btn(context, "Amp: ${rig.ampName}", Pal.ORANGE).apply { onClick = { chooseAmp(lane.channel) } }, lp(MATCH, Px.dp(40)).apply { bottomMargin = Px.dp(3) })
-            pick.addView(Btn(context, "Cab: ${rig.cabName}", Pal.AQUA).apply { onClick = { chooseCab(lane.channel) } }, lp(MATCH, Px.dp(40)).apply { bottomMargin = Px.dp(3) })
-            pick.addView(Btn(context, "Credits & licence", Pal.BROWN_L).apply { onClick = { fire.showCredits(app.foxbox.data.AmpLibrary.credits()) } }, lp(MATCH, Px.dp(36)))
-            panel("Amp & cab (NAM)", rig.p.all.values.toList(), 3, pick)
-        }
+        // the amp: an effect the track has only if it's added
+        if (lane.isTrack) strip.addView(AmpPanel(context, lane.channel, fire), lp(WRAP, WRAP).apply { rightMargin = Px.dp(6) })
         fx.p.sections.forEach { (name, params) -> panel(name, params, if (params.size > 8) 5 else (params.size + 1) / 2) }
         fx.wraith.p.sections.forEach { (name, params) -> panel(name, params, if (params.size > 9) 5 else (params.size + 1) / 2) }
         box.addView(HorizontalScrollView(context).apply { addView(android.widget.ScrollView(context).apply { addView(strip) }) }, lp(MATCH, 0, 1f))
@@ -223,22 +230,6 @@ class FireEscapeScreen(c: Context, private val host: Host, private val fire: Fir
     }
 
     private fun buildFxAgain() { drawer.removeAllViews(); buildFx() }
-
-    private fun chooseAmp(ch: Int) {
-        val rig = Audio.amps[ch]
-        val list = app.foxbox.data.AmpLibrary.amps()
-        fire.choose("Amp capture", list.map { it.name } + "Import a .nam capture…", list.indexOfFirst { it.name == rig.ampName }) { i ->
-            if (i == list.size) fire.importAmp(ch) else { rig.chooseAmp(list[i].name); if (!rig.on.on) rig.on.set(1f); Studio.save(); buildFxAgain() }
-        }
-    }
-
-    private fun chooseCab(ch: Int) {
-        val rig = Audio.amps[ch]
-        val list = app.foxbox.data.AmpLibrary.cabs()
-        fire.choose("Cabinet (impulse response)", list.map { it.name } + "Import an impulse response…", list.indexOfFirst { it.name == rig.cabName }) { i ->
-            if (i == list.size) fire.importCab(ch) else { rig.chooseCab(list[i].name); Studio.save(); buildFxAgain() }
-        }
-    }
 
     /** After an import: show the new choice. */
     fun ampChanged() { if (drawerKind == "fx") buildFxAgain() }

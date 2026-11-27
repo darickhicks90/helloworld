@@ -336,12 +336,16 @@ object Studio : Transport.Listener, MidiInput.Sink {
      * recording), what comes in on each armed Red/Yellow/Blue track goes on
      * its meter and into the mixdown.
      */
+    /** The tuner is listening to the input: keep it open (heard nowhere unless a track monitors it). */
+    var tunerListening = false
+        set(v) { field = v; refreshLive() }
+
     fun refreshLive() {
         if (!isOpen) return
         for (ch in 0 until 3) { Audio.liveArm[ch] = armed[ch]; Audio.liveMonitor[ch] = monitor[ch]; Audio.liveInput[ch] = AudioPrefs.planeInput(ch) }
         val take = t.audioIn as AudioIn?
         if (take != null) { monitorIn?.close(); monitorIn = null; Audio.liveIn = take; return }
-        val need = (tape != null && armed.any { it }) || monitor.any { it }
+        val need = (tape != null && armed.any { it }) || monitor.any { it } || tunerListening
         if (need && monitorIn == null) {
             if (app.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 message("Allow the microphone (tap ● Rec once) so armed tracks can be mixed down"); return

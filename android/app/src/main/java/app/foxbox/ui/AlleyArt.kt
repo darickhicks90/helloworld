@@ -63,13 +63,12 @@ object AlleyArt {
         seed = 0x1234567; bulbs.clear(); catEyes = intArrayOf(-100, -100)
         wall()
         sunlight()
-        // two floors of windows in each column (the fire escape serves the left one)
-        windowAt(52, 10, 64, 76, open = true)
-        windowAt(52, 132, 64, 76, open = false)
-        windowAt(286, 4, 60, 72, open = false)
-        windowAt(286, 142, 60, 70, open = true)
-        acUnit(282, 92)
-        drainpipe(228)
+        // quiet windows, toned into the wall: the iron is what you see
+        windowAt(96, 22, 54, 58, open = false); mute(96, 22, 54, 58)
+        windowAt(96, 142, 54, 58, open = false); mute(96, 142, 54, 58)
+        windowAt(318, 30, 50, 56, open = false); mute(318, 30, 50, 56)
+        windowAt(318, 150, 50, 56, open = false); mute(318, 150, 50, 56)
+        drainpipe(276)
         // the fire escape, its shadow first
         shadowing = true; fireEscape(); shadowing = false
         fireEscape()
@@ -260,56 +259,59 @@ object AlleyArt {
 
     private fun fireEscape() {
         // the flight from the floor above, then the upper landing, the flight down, and the lower landing
-        stair(150, 98, 196, -14)
-        stair(34, 216, 120, 108)
-        landing(16, 186, 102, top = true)
-        landing(16, 186, 220, top = false)
+        stair(176, 92, 262, -26)
+        stair(40, 214, 168, 98)
+        landing(-4, 256, 98, top = true)
+        landing(-4, 256, 218, top = false)
+    }
+
+    /** Tone a window back into the wall: less contrast, a little of the brick's warmth. */
+    private fun mute(x0: Int, y0: Int, w: Int, h: Int) {
+        for (y in y0 - 13 until y0 + h + 14) for (x in x0 - 9 until x0 + w + 9) {
+            val c = get(x, y)
+            val l = (r(c) * 0.3f + g(c) * 0.55f + b(c) * 0.15f).toInt()
+            set(x, y, mix(mix(c, rgb(l, l, l), 0.35f), rgb(128, 76, 62), 0.38f))
+        }
     }
 
     private fun landing(left: Int, right: Int, y: Int, top: Boolean) {
         // landing: a thick grate with a front edge bar
-        irect(left, y, right - left, 8, iron)
+        irect(left, y, right - left, 10, iron)
         ih(left, right - 1, y, ironHi); ih(left, right - 1, y + 1, ironMid)
         for (x in left + 1 until right - 1) if (x % 3 == 0) { iv(x, y + 2, y + 5, ink) }
-        ih(left, right - 1, y + 7, ink)
-        irect(left, y + 8, right - left, 3, ironMid); ih(left, right - 1, y + 10, ink)
+        ih(left, right - 1, y + 9, ink)
+        irect(left, y + 10, right - left, 4, ironMid); ih(left, right - 1, y + 13, ink)
         // brackets down into the wall
-        for (bx in listOf(left + 12, right - 24)) for (t in 0 until 2) iline(bx + t, y + 11, bx + 16 + t, y + 34, if (t == 1) ironHi else iron)
+        for (bx in listOf(left + 22, left + (right - left) / 2, right - 34)) for (t in 0 until 3) iline(bx + t, y + 14, bx + 24 + t, y + 46, if (t == 1) ironHi else iron)
         // railing: thick top rail, mid rail and square balusters with a highlight on the sun side
-        val ry = y - 26
-        irect(left, ry, right - left, 4, iron); ih(left, right - 1, ry, ironHi)
-        irect(left, ry + 13, right - left, 2, iron); ih(left, right - 1, ry + 13, ironHi)
+        val ry = y - 40
+        irect(left, ry, right - left, 5, iron); ih(left, right - 1, ry, ironHi); ih(left, right - 1, ry + 1, ironMid)
+        irect(left, ry + 20, right - left, 3, iron); ih(left, right - 1, ry + 20, ironHi)
         var x = left
-        while (x < right) { iv(x, ry + 4, y - 1, iron); iv(x + 1, ry + 4, y - 1, ironMid); if (!shadowing) { set(x, ry + 4 + (x % 5), ironHi) }; x += 5 }
+        while (x < right) { iv(x, ry + 5, y - 1, iron); iv(x + 1, ry + 5, y - 1, ironMid); iv(x + 2, ry + 5, y - 1, ink); if (!shadowing) { set(x + 1, ry + 6 + (x % 9), ironHi) }; x += 8 }
         irect(left, ry, 4, y - ry, iron); iv(left, ry, y, ironHi)
         irect(right - 4, ry, 4, y - ry, iron); iv(right - 4, ry, y, ironHi)
         if (!shadowing) {
             // rust blooms and flaking paint
             for (k in 0 until 40) { val rx = left + rnd() % (right - left); val rr = if (k % 2 == 0) ry + rnd() % 4 else y + rnd() % 8; set(rx, rr, rust); if (k % 3 == 0) set(rx + 1, rr, mix(rust, rgb(170, 100, 60), 0.5f)) }
-            // things on the landings in the sun
-            if (top) {
-                pot(28, y - 1, 1); pot(150, y - 1, 3)
-                cat(64, y - 1)
-            } else {
-                pot(130, y - 1, 2)
-                rect(100, y - 12, 14, 12, rgb(90, 150, 130)); hline(100, 113, y - 12, rgb(140, 200, 180)); line(114, y - 9, 122, y - 15, rgb(90, 150, 130)); line(100, y - 11, 96, y - 15, rgb(70, 120, 104))
-            }
+            // just one plant
+            if (top) pot(40, y - 1, 1)
         }
     }
 
     private fun stair(x0: Int, y0: Int, x1: Int, y1: Int) {
         // stringers (two deep channels) and chunky treads
-        for (t in 0 until 3) iline(x0, y0 + t, x1, y1 + t, if (t == 0) ironHi else iron)
-        for (t in 0 until 2) iline(x0 + 16, y0 - 8 + t, x1 + 16, y1 - 8 + t, if (t == 0) ironHi else iron)
-        val steps = 9
+        for (t in 0 until 4) iline(x0, y0 + t, x1, y1 + t, if (t == 0) ironHi else iron)
+        for (t in 0 until 3) iline(x0 + 24, y0 - 12 + t, x1 + 24, y1 - 12 + t, if (t == 0) ironHi else iron)
+        val steps = 10
         for (s in 1 until steps) {
             val f = s / steps.toFloat()
             val x = (x0 + (x1 - x0) * f).toInt(); val y = (y0 + (y1 - y0) * f).toInt()
-            ih(x, x + 16, y - 4, ironHi); ih(x, x + 16, y - 3, iron); ih(x, x + 16, y - 2, ink)
+            ih(x, x + 24, y - 5, ironHi); ih(x, x + 24, y - 4, iron); ih(x, x + 24, y - 3, iron); ih(x, x + 24, y - 2, ink)
         }
         // handrail with posts
-        iline(x0 - 2, y0 - 24, x1 - 2, y1 - 24, ironHi); iline(x0 - 2, y0 - 23, x1 - 2, y1 - 23, iron)
-        for (s in 0..4) { val f = s / 4f; val x = (x0 + (x1 - x0) * f).toInt(); val y = (y0 + (y1 - y0) * f).toInt(); iv(x - 2, y - 23, y, iron); iv(x - 1, y - 23, y, ironMid) }
+        iline(x0 - 2, y0 - 36, x1 - 2, y1 - 36, ironHi); iline(x0 - 2, y0 - 35, x1 - 2, y1 - 35, iron); iline(x0 - 2, y0 - 34, x1 - 2, y1 - 34, iron)
+        for (s in 0..5) { val f = s / 5f; val x = (x0 + (x1 - x0) * f).toInt(); val y = (y0 + (y1 - y0) * f).toInt(); iv(x - 2, y - 34, y, iron); iv(x - 1, y - 34, y, ironMid) }
     }
 
     private fun pot(x: Int, y: Int, kind: Int) {

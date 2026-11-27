@@ -44,312 +44,282 @@ object AlleyArt {
     /** Darken a shape's shadow onto the wall: offset down-right, soft. */
     private fun shadowRect(x0: Int, y0: Int, w: Int, h: Int, k: Float) { for (y in y0 until y0 + h) for (x in x0 until x0 + w) { val c = get(x, y); set(x, y, shade(c, k)) } }
 
-    // ---- palette
-    private val ink = rgb(14, 12, 20)
-    private val iron = rgb(30, 28, 38)
-    private val ironHi = rgb(74, 70, 88)
-    private val ironMid = rgb(46, 43, 58)
-    private val rust = rgb(112, 58, 40)
-    private val mortar = rgb(52, 40, 44)
-    private val warm = rgb(255, 196, 110)
-    private val warmDeep = rgb(240, 140, 60)
+    // ---- palette (daylight)
+    private val ink = rgb(22, 20, 28)
+    private val iron = rgb(38, 36, 46)
+    private val ironHi = rgb(104, 100, 118)
+    private val ironMid = rgb(62, 58, 74)
+    private val rust = rgb(132, 70, 44)
+    private val sky = rgb(150, 196, 236)
+
+    /** While set, drawing marks the sunlit wall's shadow (down and right) instead of drawing. */
+    private var shadowing = false
+    private lateinit var shaded: BooleanArray
+    private const val SDX = 7
+    private const val SDY = 9
 
     fun render(): IntArray {
-        px = IntArray(W * H)
-        seed = 0x1234567; bulbs.clear()
+        px = IntArray(W * H); shaded = BooleanArray(W * H)
+        seed = 0x1234567; bulbs.clear(); catEyes = intArrayOf(-100, -100)
         wall()
-        val groundY = 206
-        ground(groundY)
-        // windows: two columns, three floors (the fire escape serves the left column)
-        val floors = intArrayOf(12, 82, 152)
-        windowAt(70, floors[0], lit = true, kind = 0)
-        windowAt(70, floors[1], lit = false, kind = 1)
-        windowAt(70, floors[2], lit = true, kind = 2)
-        windowAt(262, floors[0] + 4, lit = false, kind = 1)
-        windowAt(262, floors[1] + 4, lit = true, kind = 3)
-        door(300, groundY)
-        drainpipe(222)
-        acUnit(268, floors[1] + 4 + 52)
-        meterBox(350, 150)
-        lampLight(318, groundY - 52)
-        fireEscape(intArrayOf(floors[0], floors[1]), groundY)
+        sunlight()
+        windowAt(46, 14, 92, 132, open = true)
+        windowAt(296, -40, 84, 120, open = false)
+        acUnit(300, 100)
+        drainpipe(254)
+        // the fire escape, its shadow first
+        shadowing = true; fireEscape(); shadowing = false
+        fireEscape()
         vignette()
         return px
     }
 
-    // ------------------------------------------------------------------ the wall
+    // ------------------------------------------------------------------ the wall, close up
 
     private fun wall() {
-        val bw = 10; val bh = 4
-        val bricks = intArrayOf(rgb(122, 52, 42), rgb(136, 60, 46), rgb(110, 46, 40), rgb(146, 70, 52), rgb(98, 44, 40), rgb(128, 64, 54))
-        for (row in 0..H / bh) {
+        val bw = 22; val bh = 8
+        val bricks = intArrayOf(rgb(170, 78, 56), rgb(184, 90, 62), rgb(156, 70, 52), rgb(192, 104, 74), rgb(146, 66, 52), rgb(176, 96, 76), rgb(162, 84, 66))
+        val mortarC = rgb(188, 176, 160)
+        for (row in -1..H / bh + 1) {
             val y0 = row * bh
-            val off = if (row % 2 == 0) 0 else bw / 2
+            val off = if (row and 1 == 0) 0 else bw / 2
             var col = -1
-            while (col * bw - off < W) {
-                val x0 = col * bw + off
-                val h = hash(col, row)
+            while (col * bw - off < W + bw) {
+                val x0 = col * bw - off
+                val h = hash(col * 31 + 7, row * 17 + 3)
                 var base = bricks[h % bricks.size]
-                if (h % 23 == 0) base = rgb(70, 40, 40)          // sooty brick
-                if (h % 31 == 1) base = rgb(160, 92, 70)         // a newer, paler one
+                if (h % 19 == 0) base = rgb(118, 62, 52)            // a darker, overfired brick
+                if (h % 29 == 1) base = rgb(204, 128, 96)           // a paler one
+                val tilt = ((h shr 5) % 5 - 2) * 0.012f              // bricks aren't perfectly even
                 for (y in y0 until y0 + bh) for (x in x0 until x0 + bw) {
+                    if (x !in 0 until W || y !in 0 until H) continue
                     val lx = x - x0; val ly = y - y0
-                    var c = if (lx == bw - 1 || ly == bh - 1) mortar else base
-                    if (c != mortar) {
-                        // top edge catches light, bottom edge sits in shadow; a little grain
-                        if (ly == 0) c = mix(c, rgb(190, 120, 96), 0.25f)
-                        if (ly == bh - 2) c = shade(c, 0.86f)
-                        val n = hash(x * 7, y * 13) % 100
-                        if (n < 7) c = shade(c, 0.82f) else if (n > 95) c = mix(c, rgb(196, 140, 120), 0.3f)
-                        // chipped corners
-                        if ((lx == 0 || lx == bw - 2) && ly == 0 && h % 7 == 0) c = mortar
+                    val mortarRow = ly >= bh - 2; val mortarCol = lx >= bw - 2
+                    var c: Int
+                    if (mortarRow || mortarCol) {
+                        // recessed mortar: shadowed under the brick above, sandy grain
+                        val n = hash(x * 3, y * 5) % 100
+                        c = if (ly == bh - 2 && !mortarCol) shade(mortarC, 0.62f) else if (lx == bw - 2 && !mortarRow) shade(mortarC, 0.72f) else mortarC
+                        if (n < 18) c = shade(c, 0.88f) else if (n > 90) c = mix(c, rgb(230, 222, 206), 0.4f)
+                    } else {
+                        c = shade(base, 1f + tilt * (lx - bw / 2))
+                        // the face: grain, little pits, a lit top edge and a shaded left/bottom
+                        val n = hash(x * 7 + 1, y * 13 + 5) % 1000
+                        if (n < 90) c = shade(c, 0.9f) else if (n < 120) c = shade(c, 0.78f) else if (n > 975) c = mix(c, rgb(240, 190, 150), 0.35f)
+                        if (n in 400..408) c = shade(c, 0.55f)          // a pit
+                        if (ly == 0) c = mix(c, rgb(246, 196, 160), 0.32f)
+                        if (lx == 0) c = mix(c, rgb(236, 176, 140), 0.18f)
+                        if (ly == bh - 3) c = shade(c, 0.86f)
+                        if (lx == bw - 3) c = shade(c, 0.9f)
+                        // a chipped corner now and then
+                        if (h % 9 == 0 && lx <= 1 && ly <= 1) c = mortarC
+                        if (h % 11 == 0 && lx >= bw - 4 && ly >= bh - 4) c = shade(mortarC, 0.8f)
+                        // soft tonal blotches across the face
+                        val blot = ((hash((x + 3) / 4, (y + 1) / 3) % 100) - 50) / 900f
+                        c = shade(c, 1f + blot)
                     }
                     set(x, y, c)
                 }
                 col++
             }
         }
-        // night: cool at the top, with grime and water stains running down
+        // weathering: pale lime bloom and darker rain streaks
+        for (k in 0 until 10) {
+            val cx = rnd() % W; val cy = rnd() % H; val r = 10 + rnd() % 22
+            for (y in cy - r until cy + r) for (x in cx - r until cx + r) {
+                val d = ((x - cx) * (x - cx) + (y - cy) * (y - cy)) / (r * r).toFloat()
+                if (d < 1f && hash(x, y) % 3 == 0) blend(x, y, rgb(226, 214, 196), 0.18f * (1f - d))
+            }
+        }
+        for (k in 0 until 14) {
+            val x = rnd() % W; val y0 = rnd() % 90; val len = 30 + rnd() % 110; val w = 2 + rnd() % 4
+            for (y in y0 until minOf(H, y0 + len)) for (dx in 0 until w) if (hash(x + dx, y) % 4 != 0) blend(x + dx, y, rgb(70, 50, 46), 0.14f * (1f - (y - y0) / len.toFloat()))
+        }
+    }
+
+    /** Afternoon sun from the upper left: brighter there, a little cooler lower right. */
+    private fun sunlight() {
         for (y in 0 until H) for (x in 0 until W) {
+            val t = (x / W.toFloat()) * 0.6f + (y / H.toFloat()) * 0.4f
             var c = get(x, y)
-            val top = (1f - y / H.toFloat())
-            c = mix(c, rgb(28, 30, 70), 0.42f * top + 0.18f)
+            c = mix(c, rgb(255, 236, 200), 0.14f * (1f - t))
+            c = mix(c, rgb(90, 96, 130), 0.10f * t)
             set(x, y, c)
-        }
-        for (k in 0 until 18) {
-            val x = rnd() % W; val y0 = rnd() % 120; val len = 20 + rnd() % 80; val w = 1 + rnd() % 3
-            for (y in y0 until minOf(H, y0 + len)) for (dx in 0 until w) blend(x + dx, y, rgb(20, 16, 24), 0.18f * (1f - (y - y0) / len.toFloat()))
         }
     }
 
-    private fun ground(gy: Int) {
-        for (y in gy until H) for (x in 0 until W) {
-            val n = hash(x, y * 3) % 100
-            var c = mix(rgb(34, 32, 44), rgb(22, 20, 30), (y - gy) / (H - gy).toFloat())
-            if (n < 6) c = rgb(48, 46, 60) else if (n > 96) c = rgb(16, 14, 22)
+    // ------------------------------------------------------------------ windows (big, in daylight)
+
+    private fun windowAt(x0: Int, y0: Int, w: Int, h: Int, open: Boolean) {
+        // stone lintel and sill with tooling marks
+        stone(x0 - 6, y0 - 12, w + 12, 10)
+        stone(x0 - 8, y0 + h, w + 16, 9)
+        for (x in x0 - 8 until x0 + w + 8) blend(x, y0 + h + 9, ink, 0.45f)
+        for (y in y0 + h + 10 until y0 + h + 14) for (x in x0 - 6 until x0 + w + 10) blend(x, y, ink, 0.25f)
+        // deep reveal (the wall's thickness) in shadow on the left and top
+        rect(x0 - 3, y0 - 2, w + 6, h + 4, rgb(70, 52, 50))
+        for (y in y0 - 2 until y0 + h + 2) for (x in x0 - 3 until x0 + 2) set(x, y, rgb(96, 70, 62))
+        // the glass: sky and clouds reflected, darker inside towards the bottom
+        val gx = x0 + 3; val gy = y0 + 3; val gw = w - 6; val gh = h - 6
+        for (y in gy until gy + gh) for (x in gx until gx + gw) {
+            val t = (y - gy) / gh.toFloat()
+            var c = mix(sky, rgb(70, 96, 130), t * 0.9f)
+            // soft drifting clouds, mirrored in the glass
+            val fx = x.toFloat(); val fy = y.toFloat()
+            val cl = kotlin.math.sin(fx * 0.07f + fy * 0.03f) + kotlin.math.sin(fx * 0.031f - fy * 0.11f + 1.3f) * 0.8f + kotlin.math.sin(fx * 0.13f + fy * 0.07f + 2.1f) * 0.35f
+            val k = ((cl - 0.7f) / 0.9f).coerceIn(0f, 1f) * (1f - t * 1.4f).coerceIn(0f, 1f)
+            if (k > 0f) c = mix(c, rgb(248, 250, 253), k * 0.8f)
+            if (k > 0.05f && k < 0.25f) c = mix(c, rgb(200, 214, 232), 0.25f)
             set(x, y, c)
         }
-        hline(0, W, gy, rgb(60, 56, 70)); hline(0, W, gy + 1, rgb(26, 24, 34))
-        // a puddle catching the window light
-        for (y in gy + 6 until gy + 15) for (x in 40 until 160) {
-            val e = ((x - 100) / 58f).let { it * it } + ((y - gy - 10) / 4.5f).let { it * it }
-            if (e < 1f) blend(x, y, rgb(30, 36, 76), 0.75f * (1f - e * 0.5f))
+        // a bright glint across the glass
+        for (k in 0 until 26) { set(gx + 8 + k, gy + 10 + k / 2, mix(get(gx + 8 + k, gy + 10 + k / 2), rgb(255, 255, 255), 0.65f)); set(gx + 9 + k, gy + 10 + k / 2, mix(get(gx + 9 + k, gy + 10 + k / 2), rgb(255, 255, 255), 0.4f)) }
+        if (open) {
+            // lower sash raised: the room shows, with a curtain lifting in the breeze and a plant
+            val oy = gy + gh / 2 + 4
+            for (y in oy until gy + gh) for (x in gx until gx + gw) set(x, y, mix(rgb(84, 64, 58), rgb(50, 38, 36), (y - oy) / (gy + gh - oy).toFloat()))
+            for (y in oy until gy + gh) {
+                val sway = (kotlin.math.sin((y - oy) / 5f) * 3).toInt()
+                for (x in gx until gx + 18 + sway) set(x, y, mix(rgb(238, 232, 214), rgb(206, 196, 176), ((x - gx) % 4) / 4f))
+            }
+            rect(gx + 44, gy + gh - 22, 18, 22, rgb(180, 96, 60)); hline(gx + 43, gx + 62, gy + gh - 22, rgb(210, 126, 86))
+            val leaf = listOf(rgb(70, 140, 70), rgb(100, 170, 84), rgb(50, 110, 56))
+            for (k in 0 until 70) { val lx = gx + 38 + rnd() % 30; val ly = gy + gh - 24 - rnd() % 26; set(lx, ly, leaf[k % 3]); set(lx + 1, ly, leaf[(k + 1) % 3]) }
         }
-        // reflections of the lit window above (broken by ripples)
-        for (y in gy + 7 until gy + 13) for (x in 80 until 112) if ((y - gy) % 2 == 1 && hash(x, y) % 5 != 0) blend(x, y, warm, 0.45f)
-        for (y in gy + 8 until gy + 12) for (x in 125 until 140) if ((y - gy) % 2 == 0 && hash(x, y) % 4 != 0) blend(x, y, rgb(160, 180, 230), 0.25f)
+        // white-painted sash frames and glazing bars, with their own shading
+        val paint = rgb(240, 236, 226); val paintS = rgb(196, 190, 178)
+        val my = gy + gh / 2 + (if (open) 4 else 0)
+        rect(gx - 1, my - 3, gw + 2, 6, paint); hline(gx - 1, gx + gw, my + 2, paintS)
+        rect(gx - 1, gy - 1, gw + 2, 4, paint); rect(gx - 1, gy + gh - 3, gw + 2, 4, paint)
+        rect(gx - 1, gy - 1, 4, gh + 2, paint); rect(gx + gw - 3, gy - 1, 4, gh + 2, paintS)
+        rect(gx + gw / 2 - 1, gy, 3, my - gy, paint)
+        if (!open) rect(gx + gw / 2 - 1, my, 3, gy + gh - my, paint)
+        // peeling paint flecks
+        for (k in 0 until 10) set(gx + rnd() % gw, gy + rnd() % gh, rgb(150, 140, 128))
+        if (!open) {
+            // half-lowered blinds in the lower pane
+            for (y in my + 3 until my + 3 + (gy + gh - my) / 2) if ((y - my) % 3 != 0) hline(gx + 3, gx + gw - 4, y, rgb(226, 214, 190)) else hline(gx + 3, gx + gw - 4, y, rgb(178, 164, 140))
+        }
     }
 
-    // ------------------------------------------------------------------ windows
-
-    private fun windowAt(x0: Int, y0: Int, lit: Boolean, kind: Int) {
-        val w = 40; val h = 46
-        // stone lintel and sill
-        rect(x0 - 3, y0 - 5, w + 6, 4, rgb(150, 140, 130)); hline(x0 - 3, x0 + w + 2, y0 - 5, rgb(196, 186, 172)); hline(x0 - 3, x0 + w + 2, y0 - 2, rgb(96, 88, 84))
-        rect(x0 - 4, y0 + h, w + 8, 4, rgb(150, 140, 130)); hline(x0 - 4, x0 + w + 3, y0 + h, rgb(200, 190, 176)); hline(x0 - 4, x0 + w + 3, y0 + h + 3, rgb(70, 62, 62))
-        // frame
-        rect(x0 - 1, y0 - 1, w + 2, h + 2, ink)
+    private fun stone(x0: Int, y0: Int, w: Int, h: Int) {
         for (y in y0 until y0 + h) for (x in x0 until x0 + w) {
-            val t = (y - y0) / h.toFloat()
-            set(x, y, if (lit) mix(warm, warmDeep, t * 0.9f) else mix(rgb(34, 42, 86), rgb(16, 18, 40), t))
+            var c = mix(rgb(214, 204, 186), rgb(170, 160, 146), (y - y0) / h.toFloat())
+            val n = hash(x * 5, y * 9) % 100
+            if (n < 12) c = shade(c, 0.9f) else if (n > 94) c = mix(c, rgb(240, 234, 222), 0.5f)
+            if ((x - x0) % 5 == 0 && y < y0 + h - 2) c = shade(c, 0.95f)
+            set(x, y, c)
         }
-        if (lit) {
-            when (kind) {
-                0 -> { // curtains drawn back, a lamp and a plant
-                    for (y in y0 until y0 + h) { for (x in x0 until x0 + 8 + (y - y0) / 8) set(x, y, mix(rgb(170, 60, 70), rgb(110, 30, 50), ((x - x0) % 3) / 3f)); for (x in x0 + w - 8 - (y - y0) / 8 until x0 + w) set(x, y, mix(rgb(170, 60, 70), rgb(110, 30, 50), ((x - x0) % 3) / 3f)) }
-                    rect(x0 + 18, y0 + 28, 6, 12, rgb(80, 44, 36)); rect(x0 + 14, y0 + 20, 14, 9, rgb(255, 236, 180)); rect(x0 + 15, y0 + 21, 12, 7, rgb(255, 248, 214))
-                    for (k in 0 until 9) { val lx = x0 + 28 + rnd() % 8; val ly = y0 + 26 + rnd() % 10; set(lx, ly, rgb(40, 90, 50)); set(lx + 1, ly, rgb(60, 120, 64)) }
-                    rect(x0 + 29, y0 + 36, 6, 6, rgb(150, 80, 50))
-                }
-                2 -> { // half-drawn blind and a silhouette at a desk
-                    for (y in y0 until y0 + 18) if (y % 3 != 2) hline(x0, x0 + w - 1, y, rgb(222, 196, 150)) else hline(x0, x0 + w - 1, y, rgb(180, 150, 110))
-                    rect(x0 + 10, y0 + 26, 9, 12, rgb(60, 36, 40)); rect(x0 + 11, y0 + 21, 7, 6, rgb(60, 36, 40)); rect(x0 + 6, y0 + 36, 28, 3, rgb(50, 30, 30))
-                    rect(x0 + 24, y0 + 30, 8, 6, rgb(120, 200, 230))   // a little screen glow
-                }
-                else -> { // a band's practice room: amp and a guitar on the wall
-                    rect(x0 + 4, y0 + 28, 14, 16, rgb(40, 30, 30)); rect(x0 + 5, y0 + 30, 12, 9, rgb(90, 80, 70)); hline(x0 + 5, x0 + 16, y0 + 29, rgb(200, 180, 140))
-                    for (k in 0..10) { set(x0 + 26 + k / 3, y0 + 10 + k, rgb(130, 60, 30)) }
-                    rect(x0 + 25, y0 + 20, 7, 9, rgb(170, 90, 40)); rect(x0 + 26, y0 + 22, 5, 5, rgb(200, 120, 60))
-                    rect(x0 + 30, y0 + 34, 7, 3, rgb(60, 40, 40))
-                }
-            }
-            // window glow spilling onto the bricks
-            for (y in y0 - 14 until y0 + h + 22) for (x in x0 - 22 until x0 + w + 22) {
-                if (x in x0 - 1..x0 + w && y in y0 - 1..y0 + h) continue
-                val dx = (x - (x0 + w / 2)) / (w * 0.95f); val dy = (y - (y0 + h / 2)) / (h * 0.9f)
-                val d = dx * dx + dy * dy
-                if (d < 1f) blend(x, y, warm, 0.22f * (1f - d))
-            }
-        } else {
-            // a dark pane with the moon's reflection and closed blinds behind
-            for (y in y0 + 2 until y0 + h) if (y % 4 == 0) hline(x0 + 1, x0 + w - 2, y, rgb(30, 34, 64))
-            for (k in 0 until 6) line(x0 + 6 + k, y0 + 4, x0 + 2 + k, y0 + 14, rgb(120, 140, 190))
-        }
-        // mullions (sash window)
-        rect(x0, y0 + h / 2 - 1, w, 3, rgb(232, 224, 210)); hline(x0, x0 + w - 1, y0 + h / 2 + 1, rgb(150, 140, 130))
-        vline(x0 + w / 2, y0, y0 + h - 1, rgb(232, 224, 210))
-        rect(x0, y0, w, 2, rgb(232, 224, 210)); rect(x0, y0 + h - 2, w, 2, rgb(210, 200, 186)); vline(x0, y0, y0 + h - 1, rgb(232, 224, 210)); vline(x0 + w - 1, y0, y0 + h - 1, rgb(200, 190, 176))
-    }
-
-    private fun door(x0: Int, gy: Int) {
-        val w = 30; val h = 50; val y0 = gy - h
-        rect(x0 - 3, y0 - 3, w + 6, h + 3, rgb(60, 56, 60))
-        for (y in y0 until gy) for (x in x0 until x0 + w) set(x, y, mix(rgb(40, 70, 64), rgb(26, 44, 42), (x - x0) / w.toFloat()))
-        for (y in y0 + 4 until gy - 4 step 9) { hline(x0 + 3, x0 + w - 4, y, rgb(24, 40, 38)); hline(x0 + 3, x0 + w - 4, y + 1, rgb(60, 96, 88)) }
-        rect(x0 + w - 7, y0 + 26, 3, 4, rgb(200, 170, 90))
-        // a hand-painted sign: "5IY" (the studio's back door)
-        rect(x0 + 4, y0 + 8, 22, 9, rgb(230, 210, 160)); rect(x0 + 5, y0 + 9, 20, 7, rgb(250, 236, 196))
-        val sx = x0 + 8; val sy = y0 + 10
-        // 5
-        hline(sx, sx + 3, sy, rgb(170, 40, 40)); vline(sx, sy, sy + 2, rgb(170, 40, 40)); hline(sx, sx + 3, sy + 2, rgb(170, 40, 40)); vline(sx + 3, sy + 2, sy + 4, rgb(170, 40, 40)); hline(sx, sx + 3, sy + 4, rgb(170, 40, 40))
-        // I
-        vline(sx + 6, sy, sy + 4, rgb(170, 40, 40))
-        // Y
-        set(sx + 9, sy, rgb(170, 40, 40)); set(sx + 13, sy, rgb(170, 40, 40)); set(sx + 10, sy + 1, rgb(170, 40, 40)); set(sx + 12, sy + 1, rgb(170, 40, 40)); vline(sx + 11, sy + 2, sy + 4, rgb(170, 40, 40))
-    }
-
-    private fun lampLight(x: Int, y: Int) {
-        // a caged bulb over the door, and its cone of light
-        rect(x - 4, y - 2, 9, 2, iron); rect(x - 2, y, 5, 4, rgb(255, 240, 190)); set(x, y + 1, rgb(255, 255, 240))
-        vline(x - 3, y, y + 4, iron); vline(x + 3, y, y + 4, iron)
-        for (yy in y - 30 until 206) for (xx in x - 70 until x + 70) {
-            val dy = (yy - y).toFloat(); if (dy < -30) continue
-            val spread = if (dy > 0) 8 + dy * 0.75f else 26f
-            val dx = kotlin.math.abs(xx - x) / spread
-            val d = if (dy < 0) (dx * dx + (dy / 30f) * (dy / 30f)) else dx
-            if (d < 1f) blend(xx, yy, rgb(255, 214, 140), 0.16f * (1f - d) * (if (dy > 0) (1f - dy / 120f).coerceAtLeast(0f) else 1f))
-        }
+        hline(x0, x0 + w - 1, y0, rgb(244, 238, 226)); hline(x0, x0 + w - 1, y0 + h - 1, rgb(120, 110, 100))
     }
 
     private fun drainpipe(x: Int) {
-        for (y in 0 until 206) {
-            set(x, y, rgb(40, 44, 56)); set(x + 1, y, rgb(84, 92, 110)); set(x + 2, y, rgb(60, 66, 82)); set(x + 3, y, rgb(30, 32, 44))
-            if (y % 38 == 10) { rect(x - 1, y, 6, 3, rgb(26, 26, 34)); hline(x - 1, x + 4, y, rgb(90, 96, 110)) }
-            if (y % 17 == 3) set(x + 2, y, rust)
+        val cols = intArrayOf(rgb(56, 64, 70), rgb(120, 134, 140), rgb(170, 184, 188), rgb(110, 122, 128), rgb(72, 80, 88), rgb(44, 50, 56))
+        for (y in 0 until H) {
+            for (k in cols.indices) set(x + k, y, cols[k])
+            if (hash(x, y) % 9 == 0) set(x + 2, y, rgb(140, 150, 150))
+            if (y % 60 == 24) {
+                rect(x - 2, y, 10, 5, rgb(48, 52, 60)); hline(x - 2, x + 7, y, rgb(140, 150, 156)); hline(x - 2, x + 7, y + 4, rgb(28, 30, 36))
+                set(x - 1, y + 2, rgb(180, 186, 190)); set(x + 6, y + 2, rgb(180, 186, 190))
+            }
+            if (y % 23 == 5) set(x + 3, y, rust)
         }
-        // the shoe at the bottom
-        rect(x - 2, 200, 8, 6, rgb(40, 44, 56)); hline(x - 2, x + 5, 200, rgb(84, 92, 110))
+        for (y in 0 until H) for (dx in 6 until 10) blend(x + dx, y, ink, 0.2f)
     }
 
     private fun acUnit(x: Int, y: Int) {
-        shadowRect(x + 3, y + 3, 34, 18, 0.6f)
-        rect(x, y, 34, 18, rgb(170, 172, 176)); hline(x, x + 33, y, rgb(214, 216, 220)); hline(x, x + 33, y + 17, rgb(110, 112, 118))
-        for (yy in y + 3 until y + 15 step 2) hline(x + 3, x + 20, yy, rgb(110, 112, 120))
-        for (k in 0 until 12) { val a = k * 0.523f; set(x + 27 + (kotlin.math.cos(a) * 4).toInt(), y + 9 + (kotlin.math.sin(a) * 4).toInt(), rgb(90, 92, 100)) }
-        rect(x + 26, y + 8, 3, 3, rgb(70, 72, 80))
-        // bracket and a drip stain
-        line(x + 4, y + 18, x + 12, y + 26, iron); line(x + 30, y + 18, x + 22, y + 26, iron)
-        for (yy in y + 18 until y + 60) blend(x + 17, yy, rgb(16, 16, 28), 0.3f * (1f - (yy - y - 18) / 42f))
+        for (yy in y + 9 until y + 9 + 34) for (xx in x + 7 until x + 7 + 66) blend(xx, yy, ink, 0.38f)
+        rect(x, y, 66, 34, rgb(214, 216, 218)); hline(x, x + 65, y, rgb(244, 246, 248)); hline(x, x + 65, y + 33, rgb(140, 142, 148)); vline(x + 65, y, y + 33, rgb(168, 170, 176))
+        for (yy in y + 5 until y + 29 step 3) { hline(x + 5, x + 38, yy, rgb(140, 142, 150)); hline(x + 5, x + 38, yy + 1, rgb(236, 238, 240)) }
+        for (k in 0 until 24) { val a = k * 0.2618f; for (r in 4..10 step 3) set(x + 52 + (kotlin.math.cos(a) * r).toInt(), y + 16 + (kotlin.math.sin(a) * r).toInt(), rgb(120, 122, 130)) }
+        rect(x + 50, y + 14, 5, 5, rgb(90, 92, 100))
+        line(x + 6, y + 34, x + 20, y + 50, iron); line(x + 60, y + 34, x + 46, y + 50, iron)
+        for (yy in y + 34 until y + 110) if (hash(x, yy) % 3 != 0) blend(x + 33, yy, rgb(70, 50, 46), 0.25f * (1f - (yy - y - 34) / 76f))
     }
 
-    private fun meterBox(x: Int, y: Int) {
-        rect(x, y, 18, 24, rgb(90, 96, 92)); hline(x, x + 17, y, rgb(150, 156, 150)); vline(x + 17, y, y + 23, rgb(56, 60, 58))
-        rect(x + 4, y + 5, 10, 8, rgb(30, 34, 40)); rect(x + 6, y + 7, 6, 3, rgb(140, 200, 150))
-        vline(x + 8, y + 24, 205, rgb(56, 60, 58)); vline(x + 9, y + 24, 205, rgb(100, 106, 102))
-        vline(x + 8, 0, y - 1, rgb(56, 60, 58)); vline(x + 9, 0, y - 1, rgb(100, 106, 102))
+    // ------------------------------------------------------------------ the fire escape, close up
+
+    private fun ironSet(x: Int, y: Int, c: Int) {
+        if (!shadowing) { set(x, y, c); return }
+        val sx = x + SDX; val sy = y + SDY
+        if (sx in 0 until W && sy in 0 until H && !shaded[sy * W + sx]) { shaded[sy * W + sx] = true; px[sy * W + sx] = shade(px[sy * W + sx], 0.58f) }
+    }
+    private fun irect(x0: Int, y0: Int, w: Int, h: Int, c: Int) { for (y in y0 until y0 + h) for (x in x0 until x0 + w) ironSet(x, y, c) }
+    private fun ih(x0: Int, x1: Int, y: Int, c: Int) { for (x in minOf(x0, x1)..maxOf(x0, x1)) ironSet(x, y, c) }
+    private fun iv(x: Int, y0: Int, y1: Int, c: Int) { for (y in minOf(y0, y1)..maxOf(y0, y1)) ironSet(x, y, c) }
+    private fun iline(x0: Int, y0: Int, x1: Int, y1: Int, c: Int) {
+        var x = x0; var y = y0; val dx = kotlin.math.abs(x1 - x0); val dy = -kotlin.math.abs(y1 - y0)
+        val sx = if (x0 < x1) 1 else -1; val sy = if (y0 < y1) 1 else -1; var err = dx + dy
+        while (true) { ironSet(x, y, c); if (x == x1 && y == y1) break; val e2 = 2 * err; if (e2 >= dy) { err += dy; x += sx }; if (e2 <= dx) { err += dx; y += sy } }
     }
 
-    // ------------------------------------------------------------------ the fire escape
-
-    private fun fireEscape(floors: IntArray, gy: Int) {
-        val left = 40; val right = 140
-        val landings = floors.map { it + 46 + 4 }      // a landing just under each window sill
-        // shadows first, so the iron sits on top of them
-        for (ly in landings) shadowRect(left + 5, ly + 5, right - left, 4, 0.55f)
-        for (k in landings.indices) {
-            val ly = landings[k]
-            // the railing's shadow
-            for (x in left + 4 until right + 4 step 3) for (y in ly - 14 + 4 until ly + 4) blend(x, y, ink, 0.25f)
+    private fun fireEscape() {
+        val left = 6; val right = 236; val y = 178     // the landing's walking surface
+        // stairs climbing from the landing up and off the top, to the right
+        stair(150, y - 2, 236, -12)
+        // landing: a thick grate with a front edge bar
+        irect(left, y, right - left, 8, iron)
+        ih(left, right - 1, y, ironHi); ih(left, right - 1, y + 1, ironMid)
+        for (x in left + 1 until right - 1) if (x % 3 == 0) { iv(x, y + 2, y + 5, ink) }
+        ih(left, right - 1, y + 7, ink)
+        irect(left, y + 8, right - left, 3, ironMid); ih(left, right - 1, y + 10, ink)
+        // brackets down into the wall
+        for (bx in listOf(left + 18, right - 30)) for (t in 0 until 3) iline(bx + t, y + 11, bx + 22 + t, y + 44, if (t == 1) ironHi else iron)
+        // railing: thick top rail, mid rail and square balusters with a highlight on the sun side
+        val ry = y - 38
+        irect(left, ry, right - left, 4, iron); ih(left, right - 1, ry, ironHi)
+        irect(left, ry + 18, right - left, 2, iron); ih(left, right - 1, ry + 18, ironHi)
+        var x = left
+        while (x < right) { iv(x, ry + 4, y - 1, iron); iv(x + 1, ry + 4, y - 1, ironMid); if (!shadowing) { set(x, ry + 4 + (x % 7), ironHi) }; x += 7 }
+        irect(left, ry, 4, y - ry, iron); iv(left, ry, y, ironHi)
+        irect(right - 4, ry, 4, y - ry, iron); iv(right - 4, ry, y, ironHi)
+        if (!shadowing) {
+            // rust blooms and flaking paint
+            for (k in 0 until 40) { val rx = left + rnd() % (right - left); val rr = if (k % 2 == 0) ry + rnd() % 4 else y + rnd() % 8; set(rx, rr, rust); if (k % 3 == 0) set(rx + 1, rr, mix(rust, rgb(170, 100, 60), 0.5f)) }
+            // things on the landing in the sun
+            pot(30, y - 1, 1); pot(52, y - 1, 2); pot(196, y - 1, 3)
+            cat(92, y - 1)
+            // a watering can
+            rect(120, y - 12, 14, 12, rgb(90, 150, 130)); hline(120, 133, y - 12, rgb(140, 200, 180)); line(134, y - 9, 142, y - 15, rgb(90, 150, 130)); line(120, y - 11, 116, y - 15, rgb(70, 120, 104))
         }
-        // the flight from the floor above (off the top of the wall) down to the top landing
-        stair(right - 14, -30, left + 14, landings[0] - 1)
-        // stairs between landings (alternating direction), each with its stringers and treads
-        for (k in 0 until landings.size - 1) {
-            val top = landings[k]; val bot = landings[k + 1]
-            val goRight = k % 2 == 1
-            val x0 = if (goRight) left + 12 else right - 12
-            val x1 = if (goRight) right - 14 else left + 14
-            stair(x0, top + 3, x1, bot - 1)
-        }
-        for (k in landings.indices) landing(left, right, landings[k], top = k == 0)
-        // the drop ladder from the lowest landing, stopping above the ground
-        val ly = landings.last()
-        val lx = right - 16
-        val ladderEnd = gy - 26
-        for (y in ly + 4 until ladderEnd) { set(lx, y, iron); set(lx + 1, y, ironHi); set(lx + 8, y, iron); set(lx + 9, y, ironHi) }
-        for (y in ly + 8 until ladderEnd step 5) { hline(lx, lx + 9, y, iron); hline(lx + 1, lx + 8, y - 1, ironMid) }
-        for (y in ly + 4 until ladderEnd) blend(lx + 12, y + 3, ink, 0.25f)
-        // a cat on the lower landing, plants on both
-        cat(left + 22, landings[1] - 1)
-        plants(left + 54, landings[0] - 1)
-        plants(left + 74, landings[1] - 1)
-        // string lights draped along the top railing
-        val y0 = landings[0] - 14
-        var x = left + 2
-        while (x < right - 2) {
-            val sag = (kotlin.math.sin((x - left) / (right - left).toFloat() * 3.14159f * 3) * 3).toInt().let { kotlin.math.abs(it) }
-            set(x, y0 + 2 + sag, rgb(20, 20, 24))
-            if ((x - left) % 9 == 4) {
-                val col = listOf(rgb(255, 210, 120), rgb(255, 120, 110), rgb(140, 220, 255), rgb(170, 255, 150))[((x - left) / 9) % 4]
-                set(x, y0 + 3 + sag, col); set(x, y0 + 4 + sag, shade(col, 0.8f))
-                for (dy in -3..4) for (dx in -3..3) { val d = (dx * dx + dy * dy) / 12f; if (d < 1f) blend(x + dx, y0 + 3 + sag + dy, col, 0.18f * (1f - d)) }
-                bulbs += intArrayOf(x, y0 + 3 + sag, col)
-            }
-            x++
-        }
-    }
-
-    private fun landing(left: Int, right: Int, y: Int, top: Boolean) {
-        // the platform: a slatted grate seen from just above
-        rect(left, y, right - left, 4, iron)
-        hline(left, right - 1, y, ironHi)
-        for (x in left + 1 until right - 1) if (x % 2 == 0) { set(x, y + 1, ironMid); set(x, y + 2, ink) }
-        hline(left, right - 1, y + 3, ink)
-        // brackets into the wall
-        for (bx in listOf(left + 6, right - 8)) { line(bx, y + 4, bx + 6, y + 14, iron); line(bx + 1, y + 4, bx + 7, y + 14, ironMid) }
-        // the railing: a top rail and balusters
-        val ry = y - 14
-        hline(left, right - 1, ry, ironHi); hline(left, right - 1, ry + 1, iron)
-        hline(left, right - 1, ry + 7, iron)
-        for (x in left until right step 3) { vline(x, ry + 1, y - 1, iron); if (x % 6 == 0) set(x, ry + 4, ironMid) }
-        vline(left, ry, y, ironHi); vline(right - 1, ry, y, ironHi)
-        // rust spots
-        for (k in 0 until 6) set(left + rnd() % (right - left), y + rnd() % 3, rust)
     }
 
     private fun stair(x0: Int, y0: Int, x1: Int, y1: Int) {
-        val dir = if (x1 > x0) 1 else -1
-        // two stringers
-        line(x0, y0, x1, y1, iron); line(x0, y0 + 1, x1, y1 + 1, ironHi)
-        line(x0 + 4 * dir, y0 - 3, x1 + 4 * dir, y1 - 3, iron)
-        // treads
-        val steps = 9
+        // stringers (two deep channels) and chunky treads
+        for (t in 0 until 3) iline(x0, y0 + t, x1, y1 + t, if (t == 0) ironHi else iron)
+        for (t in 0 until 3) iline(x0 + 22, y0 - 10 + t, x1 + 22, y1 - 10 + t, if (t == 0) ironHi else iron)
+        val steps = 11
         for (s in 1 until steps) {
-            val t = s / steps.toFloat()
-            val x = (x0 + (x1 - x0) * t).toInt(); val y = (y0 + (y1 - y0) * t).toInt()
-            hline(x, x + 5 * dir, y - 1, ironMid); hline(x, x + 5 * dir, y, ink)
+            val f = s / steps.toFloat()
+            val x = (x0 + (x1 - x0) * f).toInt(); val y = (y0 + (y1 - y0) * f).toInt()
+            ih(x, x + 22, y - 4, ironHi); ih(x, x + 22, y - 3, iron); ih(x, x + 22, y - 2, ink)
         }
-        // a handrail
-        line(x0, y0 - 12, x1, y1 - 12, ironHi)
-        for (s in 0..4) { val t = s / 4f; val x = (x0 + (x1 - x0) * t).toInt(); val y = (y0 + (y1 - y0) * t).toInt(); vline(x, y - 12, y, iron) }
+        // handrail with posts
+        iline(x0 - 2, y0 - 34, x1 - 2, y1 - 34, ironHi); iline(x0 - 2, y0 - 33, x1 - 2, y1 - 33, iron)
+        for (s in 0..4) { val f = s / 4f; val x = (x0 + (x1 - x0) * f).toInt(); val y = (y0 + (y1 - y0) * f).toInt(); iv(x - 2, y - 33, y, iron); iv(x - 1, y - 33, y, ironMid) }
     }
 
+    private fun pot(x: Int, y: Int, kind: Int) {
+        rect(x, y - 12, 16, 12, rgb(196, 104, 64)); hline(x - 1, x + 16, y - 12, rgb(226, 140, 96)); hline(x - 1, x + 16, y - 11, rgb(206, 120, 80))
+        vline(x + 15, y - 10, y - 1, rgb(150, 76, 48)); hline(x, x + 15, y - 1, rgb(130, 64, 40))
+        val leaf = listOf(rgb(70, 140, 70), rgb(110, 180, 90), rgb(46, 104, 54))
+        when (kind) {
+            1 -> for (k in 0 until 40) { val lx = x + 1 + rnd() % 15; val ly = y - 13 - rnd() % 16; set(lx, ly, leaf[k % 3]); set(lx, ly - 1, leaf[(k + 2) % 3]) }
+            2 -> { for (k in 0 until 6) { vline(x + 3 + k * 2, y - 13 - (k % 3) * 5, y - 12, leaf[k % 3]) }; set(x + 4, y - 24, rgb(250, 210, 80)); set(x + 9, y - 22, rgb(250, 120, 140)); set(x + 13, y - 25, rgb(250, 210, 80)) }
+            else -> for (k in 0 until 50) { val lx = x - 3 + rnd() % 22; val ly = y - 12 - rnd() % 20; set(lx, ly, leaf[k % 3]); if (k % 5 == 0) set(lx, ly, rgb(240, 90, 90)) }
+        }
+    }
+
+    /** A cat asleep in the sun on the landing. */
     private fun cat(x: Int, y: Int) {
-        val c = rgb(18, 16, 22)
-        // sitting, seen from the side, tail curled over the edge
-        rect(x, y - 7, 7, 7, c); rect(x + 1, y - 9, 5, 2, c)
-        rect(x + 4, y - 13, 5, 5, c); set(x + 4, y - 14, c); set(x + 8, y - 14, c)
-        set(x + 6, y - 11, rgb(190, 230, 110)); set(x + 8, y - 11, rgb(190, 230, 110))
-        catEyes = intArrayOf(x + 6, y - 11)
-        for (k in 0 until 6) set(x - 1 - k / 2, y - 1 + k, c)
-        set(x - 3, y + 5, c); set(x - 2, y + 6, c)
-    }
-
-    private fun plants(x: Int, y: Int) {
-        rect(x, y - 5, 8, 5, rgb(176, 90, 56)); hline(x - 1, x + 8, y - 5, rgb(200, 116, 76)); hline(x, x + 7, y - 1, rgb(120, 58, 40))
-        val leaf = listOf(rgb(60, 120, 64), rgb(86, 150, 76), rgb(40, 90, 50))
-        for (k in 0 until 16) { val lx = x + rnd() % 9 - 1; val ly = y - 6 - rnd() % 9; set(lx, ly, leaf[k % 3]); if (k % 3 == 0) set(lx + 1, ly - 1, leaf[(k + 1) % 3]) }
-        set(x + 3, y - 13, rgb(240, 120, 150)); set(x + 6, y - 12, rgb(250, 220, 120))
+        val fur = rgb(214, 132, 60); val dark = rgb(160, 88, 40); val light = rgb(244, 186, 120)
+        for (yy in y - 9 until y) for (xx in x until x + 22) {
+            val dx = (xx - x - 11) / 11f; val dy = (yy - y + 4.5f) / 4.5f
+            if (dx * dx + dy * dy < 1f) set(xx, yy, if ((xx + yy) % 5 == 0) dark else fur)
+        }
+        for (xx in x + 3 until x + 19) set(xx, y - 9, light)
+        rect(x + 18, y - 10, 8, 7, fur); set(x + 19, y - 11, dark); set(x + 24, y - 11, dark); set(x + 20, y - 7, rgb(60, 40, 30)); set(x + 23, y - 7, rgb(60, 40, 30))
+        for (k in 0 until 9) set(x - k, y - 2 + (k / 4), dark)
     }
 
     private fun vignette() {

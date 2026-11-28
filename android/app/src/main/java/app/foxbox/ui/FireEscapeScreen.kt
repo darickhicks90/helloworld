@@ -103,7 +103,7 @@ class FireEscapeScreen(c: Context, private val host: Host, private val fire: Fir
             add(Btn(c, "-", Pal.BROWN_L, 36).apply { onClick = { tl.zoomBy(0.7f) } })
             add(Btn(c, "+", Pal.BROWN_L, 36).apply { onClick = { tl.zoomBy(1.4f) } })
         }
-        b.setPadding(Px.dp(4), 0, TopKeys.WIDTH.toInt(), 0)
+        b.setPadding(Px.dp(4), 0, (TopKeys.WIDTH + NoodlerKey.WIDTH + Px.dp(4f)).toInt(), 0)
         return b
     }
 
@@ -239,7 +239,7 @@ class FireEscapeScreen(c: Context, private val host: Host, private val fire: Fir
         }
         // only the effects added from the track's popup show here
         if (lane.isTrack && Audio.amps[lane.channel].on.on) strip.addView(AmpPanel(context, lane.channel, fire), lp(WRAP, WRAP).apply { rightMargin = Px.dp(6) })
-        val hidden = setOf(fx.fOn, fx.cOn, fx.mOn, fx.wraith.on, fx.cSide, fx.mSide, fx.mBand)
+        val hidden = setOf(fx.pcOn, fx.fOn, fx.cOn, fx.mOn, fx.wraith.on, fx.cSide, fx.mSide, fx.mBand)
         fun knobs(name: String) = fx.p.sections[name]?.filter { it !in hidden } ?: emptyList()
         fun box(name: String, cols: Int, remove: () -> Unit, build: (Panel, Int) -> Unit) {
             val accent = Snes.accent(k++)
@@ -249,6 +249,7 @@ class FireEscapeScreen(c: Context, private val host: Host, private val fire: Fir
             strip.addView(pn, lp(WRAP, WRAP).apply { rightMargin = Px.dp(6) })
         }
         fun flow(params: List<app.foxbox.audio.Param>, accent: Int) = Flow(context).apply { params.forEach { addView(Knob(context, it, accent)) } }
+        if (fx.pcOn.on) box("Pitch Correct", 2, { fx.pcOn.set(0f) }) { pn, acc -> pn.addView(flow(knobs("Pitch Correct"), acc), lp(Px.dp(74) * 2, WRAP)) }
         if (fx.fOn.on) box("Filter", 3, { fx.fOn.set(0f) }) { pn, acc -> pn.addView(flow(knobs("Filter"), acc), lp(Px.dp(74) * 3, WRAP)) }
         if (fx.cOn.on) box("Compressor", 3, { fx.cOn.set(0f) }) { pn, acc ->
             pn.addView(CompMeter(context, fx), lp(Px.dp(74) * 3, Px.dp(70)).apply { bottomMargin = Px.dp(4) })

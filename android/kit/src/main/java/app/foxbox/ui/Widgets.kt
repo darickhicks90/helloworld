@@ -139,6 +139,10 @@ class Btn(c: Context, var text: String, var accent: Int = Pal.ORANGE, private va
 class Stepper(c: Context, private val label: String, private val minW: Int = 120, private val text: () -> String, private val step: (Int) -> Unit) : PixelView(c) {
     /** Optional action when the middle (the value) is tapped. */
     var onMiddle: (() -> Unit)? = null
+    /** Optional action when held. */
+    var onLong: (() -> Unit)? = null
+    private var held = false
+    private val hold = Runnable { held = true; performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS); onLong?.invoke() }
     private val tp = Px.text(14f); private val lp = Px.text(10f, Pal.BROWN_D, headFont = false, align = android.graphics.Paint.Align.CENTER)
     override fun onMeasure(w: Int, h: Int) = setMeasuredDimension(resolveSize(Px.dp(minW), w), resolveSize(Px.dp(40), h))
     override fun paint(c: Canvas) {
@@ -158,7 +162,11 @@ class Stepper(c: Context, private val label: String, private val minW: Int = 120
     }
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(e: MotionEvent): Boolean {
+        if (e.actionMasked == MotionEvent.ACTION_DOWN) { held = false; if (onLong != null) postDelayed(hold, 480) }
+        if (e.actionMasked == MotionEvent.ACTION_CANCEL) removeCallbacks(hold)
         if (e.actionMasked == MotionEvent.ACTION_UP) {
+            removeCallbacks(hold)
+            if (held) { held = false; return true }
             val mid = onMiddle
             if (mid != null && e.x > width / 3f && e.x < width * 2 / 3f) mid() else step(if (e.x < width / 2f) -1 else 1)
             invalidate()

@@ -69,6 +69,9 @@ class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost, app.foxbox.ui
         Presets.init(this)
         app.foxbox.data.AmpLibrary.init(this)
         app.foxbox.data.WraithPresets.init(this)
+        Noodler.init(this)
+        Noodler.onChange = { noodleKey?.invalidate() }
+        applyMetronomePrefs()
         app.foxbox.data.Banks.init(this)
         Store.init(this)
         MidiMap.init(this)
@@ -214,6 +217,15 @@ class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost, app.foxbox.ui
         app.foxbox.radio.Radio.onChange = { runOnUiThread { topKeys?.radioOn = app.foxbox.radio.Radio.playing; topKeys?.radioRec = app.foxbox.radio.Radio.recording } }
         topKeys = k
         addContentView(k, android.widget.FrameLayout.LayoutParams(app.foxbox.ui.TopKeys.WIDTH.toInt(), app.foxbox.ui.TopKeys.HEIGHT.toInt(), android.view.Gravity.TOP or android.view.Gravity.END).apply { topMargin = Px.dp(4); rightMargin = Px.dp(4) })
+        // the Noodler key, just left of them, on the studio, Clibbins and the Fire Escape
+        noodleKey = null
+        if (screen in 1..3) {
+            val nk = app.foxbox.ui.NoodlerKey(this, { noodlerPressed() }) { noodlerSettings() }
+            noodleKey = nk
+            addContentView(nk, android.widget.FrameLayout.LayoutParams(app.foxbox.ui.NoodlerKey.WIDTH.toInt(), app.foxbox.ui.TopKeys.HEIGHT.toInt(), android.view.Gravity.TOP or android.view.Gravity.END).apply {
+                topMargin = Px.dp(4); rightMargin = (Px.dp(6f) + app.foxbox.ui.TopKeys.WIDTH).toInt()
+            })
+        } else if (Noodler.active) Noodler.stop()
     }
 
     private fun openNotebook() {
@@ -371,6 +383,124 @@ class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost, app.foxbox.ui
     }
 
     override fun showTuner(source: Int) = app.foxbox.ui.Tuner.show(this, source)
+
+    // ------------------------------------------------------------------ Noodler
+
+    private var noodleKey: app.foxbox.ui.NoodlerKey? = null
+    /** The metronome warning is given once a session. */
+    private var warnedMetronome = false
+
+    private fun noodlerPressed() {
+        if (Noodler.active) { Noodler.stop(); return }
+        withMic { noodlerChecks() }
+    }
+
+    private fun noodlerChecks() {
+        if (Audio.transport.metronome && !warnedMetronome) {
+            warnedMetronome = true
+            ask("Metronome is on", "If the metronome plays where the mic can hear it, its clicks can get into the notes Noodler picks up. Headphones fix that.",
+                "Got it" to { noodlerMode() })
+            return
+        }
+        noodlerMode()
+    }
+
+    private fun noodlerMode() {
+        when (Noodler.mode) {
+            Noodler.Mode.LIVE -> ask("Headphones needed", "Live Noodler plays ${Noodler.targetEngine().title} as you sing. Headphones (or keeping the mic well away from the instrument's sound) are needed for it to work properly, or it will hear the synth and follow itself.",
+                "Cancel" to null, "Headphones on: start" to { Noodler.start() })
+            Noodler.Mode.FORGE -> ask("Noodle Forge", "Noodle Forge will change this project's tempo and scale to match your count and your idea. Do you want to do that?",
+                "No" to null, "Yes, forge it" to { Noodler.start() })
+            else -> Noodler.start()
+        }
+    }
+
+    private fun noodlerSettings() {
+        val d = SnesDialog(this, "Noodler", wide = 0.8f)
+        val box = android.widget.LinearLayout(this).apply { orientation = android.widget.LinearLayout.VERTICAL }
+        fun rebuild() {
+            box.removeAllViews()
+            fun row(text: String, color: Int, then: () -> Unit) = box.addView(app.foxbox.ui.Btn(this, text, color).apply { onClick = then }, android.widget.LinearLayout.LayoutParams(-1, Px.dp(42)).apply { bottomMargin = Px.dp(4) })
+            row("Mode: ${Noodler.mode.label}", app.foxbox.ui.Snes.PURPLE) {
+                choose("Noodler mode", Noodler.Mode.entries.map { it.label }, Noodler.mode.ordinal) { i -> Noodler.mode = Noodler.Mode.entries[i]; rebuild() }
+            }
+            val blocks = Studio.project.blocks.filter { app.foxbox.blocks.Blocks.get(it)?.melodic == true }
+            row("Block: " + (if (Noodler.block.isEmpty()) "the one in front (${Noodler.targetEngine().title})" else Audio.engine(Noodler.block).title), app.foxbox.ui.Pal.ORANGE) {
+                choose("Noodle into which block?", listOf("The melodic block in front") + blocks.map { Audio.engine(it).title }) { i -> Noodler.block = if (i == 0) "" else blocks[i - 1]; rebuild() }
+            }
+            row("Notes: " + (if (Noodler.snap) "in the project's scale" else "every semitone") + " (Noodle Forge ignores this)", app.foxbox.ui.Pal.AQUA) { Noodler.snap = !Noodler.snap; rebuild() }
+            row("Listens to: " + listOf("Input 1", "Input 2", "Inputs 1+2")[Noodler.input], app.foxbox.ui.Pal.AQUA) {
+                choose("Noodler listens to", listOf("Input 1", "Input 2", "Inputs 1+2"), Noodler.input) { i -> Noodler.input = i; rebuild() }
+            }
+            row("Capture grid: " + listOf("off (as played)", "1/16 notes", "1/8 notes")[Noodler.quantize], app.foxbox.ui.Pal.GREEN) {
+                choose("Line captured notes up to", listOf("Off (as played)", "1/16 notes", "1/8 notes"), Noodler.quantize) { i -> Noodler.quantize = i; rebuild() }
+            }
+            box.addView(app.foxbox.ui.Stepper(this, "Sensitivity (hears sounds above)", 200, { "${Noodler.sensitivity.toInt()} dB" }) { Noodler.sensitivity = (Noodler.sensitivity + it * 3f).coerceIn(-66f, -18f) },
+                android.widget.LinearLayout.LayoutParams(-1, Px.dp(44)).apply { bottomMargin = Px.dp(4) })
+            box.addView(app.foxbox.ui.Stepper(this, "Octave", 200, { (if (Noodler.octave > 0) "+" else "") + Noodler.octave }) { Noodler.octave = Noodler.octave + it },
+                android.widget.LinearLayout.LayoutParams(-1, Px.dp(44)))
+        }
+        rebuild()
+        d.view(box)
+        d.key("Done", app.foxbox.ui.Snes.GREEN, then = null)
+        d.show()
+    }
+
+    // ------------------------------------------------------------------ tempo tools (hold the tempo)
+
+    private val metPrefs get() = getSharedPreferences("metronome", MODE_PRIVATE)
+    private fun applyMetronomePrefs() {
+        val t = Audio.transport; val p = metPrefs
+        t.clickVolume = p.getFloat("vol", 1f); t.clickSound = p.getInt("sound", 0); t.clickAccent = p.getBoolean("accent", true); t.clickAlways = p.getBoolean("always", false)
+    }
+    private fun saveMetronomePrefs() {
+        val t = Audio.transport
+        metPrefs.edit().putFloat("vol", t.clickVolume).putInt("sound", t.clickSound).putBoolean("accent", t.clickAccent).putBoolean("always", t.clickAlways).apply()
+    }
+
+    private val taps = ArrayList<Long>()
+
+    override fun tempoTools() {
+        val t = Audio.transport
+        val d = SnesDialog(this, "Tempo & metronome", wide = 0.84f)
+        val box = android.widget.LinearLayout(this).apply { orientation = android.widget.LinearLayout.VERTICAL }
+        fun lpw(h: Int) = android.widget.LinearLayout.LayoutParams(-1, Px.dp(h)).apply { bottomMargin = Px.dp(4) }
+        val bpmBox = app.foxbox.ui.Stepper(this, "Tempo", 200, { "${Studio.project.bpm.toInt()} BPM" }) { Studio.setBpm(Studio.project.bpm + it) }
+        box.addView(bpmBox, lpw(46))
+        taps.clear()
+        box.addView(app.foxbox.ui.Btn(this, "TAP TEMPO", app.foxbox.ui.Pal.ORANGE).apply {
+            onDown = {
+                val now = System.nanoTime()
+                if (taps.isNotEmpty() && now - taps.last() > 2_000_000_000L) taps.clear()
+                taps += now; while (taps.size > 6) taps.removeAt(0)
+                if (taps.size >= 3) {
+                    val gaps = (1 until taps.size).map { (taps[it] - taps[it - 1]) / 1e9 }
+                    Studio.setBpm(Math.round(60.0 / gaps.average()).toFloat()); bpmBox.invalidate()
+                }
+            }
+        }, lpw(58))
+        fun toggle(text: String, on: Boolean, then: () -> Unit) = app.foxbox.ui.Btn(this, text, app.foxbox.ui.Pal.AQUA).apply { this.on = on; onClick = { then(); this.on = !this.on; invalidate(); saveMetronomePrefs() } }
+        box.addView(toggle("Metronome", t.metronome) { Studio.setMetronome(!t.metronome) }, lpw(42))
+        box.addView(toggle("Click whenever playing (not just recording)", t.clickAlways) { t.clickAlways = !t.clickAlways }, lpw(42))
+        box.addView(toggle("Accent the first beat", t.clickAccent) { t.clickAccent = !t.clickAccent }, lpw(42))
+        val sounds = listOf("Beep", "Wood", "Tick")
+        box.addView(app.foxbox.ui.Stepper(this, "Click sound", 200, { sounds[t.clickSound] }) { t.clickSound = Math.floorMod(t.clickSound + it, 3); saveMetronomePrefs() }, lpw(44))
+        box.addView(app.foxbox.ui.Stepper(this, "Click volume", 200, { "${(t.clickVolume * 100).toInt()}%" }) { t.clickVolume = (t.clickVolume + it * 0.1f).coerceIn(0.1f, 1.5f); saveMetronomePrefs() }, lpw(44))
+        box.addView(app.foxbox.ui.Btn(this, "Find the BPM and scale of an audio file…", app.foxbox.ui.Snes.PURPLE).apply { onClick = { d.dismiss(); openDocument(REQ_ANALYZE, "audio/*") } }, lpw(44))
+        d.view(box)
+        d.key("Done", app.foxbox.ui.Snes.GREEN, then = null)
+        d.show()
+    }
+
+    private fun showAnalysis(name: String, r: app.foxbox.audio.Analysis.Result) {
+        val bpm = Math.round(r.bpm)
+        val scale = app.foxbox.seq.Theory.SCALES.indexOfFirst { it.name == if (r.minor) "Minor" else "Major" }.coerceAtLeast(0)
+        val keyName = app.foxbox.seq.Theory.NOTE_NAMES[r.root] + " " + app.foxbox.seq.Theory.SCALES[scale].name
+        ask(name, "Tempo: about $bpm BPM\nScale: $keyName" + (if (r.confidence < 0.25f) " (not certain: it could be its relative major / minor)" else ""),
+            "Close" to null,
+            "Use the tempo" to { Studio.setBpm(bpm.toFloat()) },
+            "Use both" to { Studio.setBpm(bpm.toFloat()); Studio.setKey(root = r.root, scale = scale) })
+    }
 
     override fun chooseXyTarget(xy: XyState, isX: Boolean) {
         val choice = if (isX) xy.xTarget else xy.yTarget
@@ -805,6 +935,17 @@ class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost, app.foxbox.ui
                     Studio.message(if (n > 0) "Imported $name ($n sounds): File → Sample packs" else "No WAV files found in that zip")
                 }.start()
             }
+            REQ_ANALYZE -> {
+                val name = displayName(uri)?.substringBeforeLast('.') ?: "Audio"
+                Studio.message("Listening to $name…")
+                Thread {
+                    try {
+                        val pcm = AudioFiles.decode(this, uri)
+                        val r = app.foxbox.audio.Analysis.analyze(pcm, app.foxbox.audio.SR)
+                        runOnUiThread { showAnalysis(name, r) }
+                    } catch (ex: Exception) { Studio.message("Couldn't read that file: ${ex.message}") }
+                }.start()
+            }
             REQ_AMP, REQ_CAB -> {
                 val ch = importFor; val isAmp = requestCode == REQ_AMP
                 Studio.message("Importing…")
@@ -875,5 +1016,6 @@ class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost, app.foxbox.ui
         private const val REQ_TREE = 6
         private const val REQ_AMP = 30
         private const val REQ_CAB = 31
+        private const val REQ_ANALYZE = 32
     }
 }

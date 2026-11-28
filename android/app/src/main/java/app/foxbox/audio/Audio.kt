@@ -57,6 +57,10 @@ object Audio {
     val laneMuted = BooleanArray(laneIds.size)
 
     // ---------------------------------------------------------------- the tuner's ear
+    /** What Noodler listens to: -1 nothing, 0..2 the input (1, 2, both). Written to [noodleRing] (mono). */
+    @Volatile var noodleSource = -1
+    val noodleRing = FloatArray(16384)
+    @Volatile var noodleWrite = 0
     /** What the tuner listens to: -1 nothing, 0..2 the input (1, 2, both), 100 + n the block at engines[n]. */
     @Volatile var tunerSource = -1
     /** The last few thousand samples of it (mono), written by the audio thread. */
@@ -160,6 +164,12 @@ object Audio {
         transport.renderAudio(audioBus, audioBusR, n, transport.blockStartTick)
         val li = liveIn
         if (li != null) li.readMonitor(inL, inR, n) else { inL.fill(0f, 0, n); inR.fill(0f, 0, n) }
+        val ns = noodleSource
+        if (ns in 0..2 && li != null) {
+            var w = noodleWrite
+            for (i in 0 until n) { noodleRing[w] = when (ns) { 0 -> inL[i]; 1 -> inR[i]; else -> (inL[i] + inR[i]) * 0.5f }; w = (w + 1) and 16383 }
+            noodleWrite = w
+        }
         val ts = tunerSource
         if (ts in 0..2 && li != null) { if (ts == 0) tunerTap(inL, null, n) else if (ts == 1) tunerTap(inR, null, n) else tunerTap(inL, inR, n) }
         else if (ts >= 100) { val k = ts - 100; if (k < E && keyLive[k]) tunerTap(laneL[k], laneR[k], n) }

@@ -167,7 +167,7 @@ object ClipField {
         val topH = Px.dp(40f)
         var x = pad
         // on narrow screens the buttons shrink together so they never run under the radio/notebook keys
-        val fit = minOf(1f, (w - pad * 2 - TopKeys.WIDTH) / Px.dp(540f))
+        val fit = minOf(1f, (w - pad * 2 - TopKeys.WIDTH - NoodlerKey.WIDTH) / Px.dp(540f))
         fun top(id: String, kind: Int, text: String, wd0: Float, color: Int, lit: Boolean = false) {
             val wd = wd0 * fit
             box(c, x, pad, x + wd, pad + topH, 1f, if (lit) color else EDGE)
@@ -183,7 +183,7 @@ object ClipField {
         val recLit = m.audioRec == Transport.Rec.RECORDING || ((m.audioRec == Transport.Rec.ARMED || m.armedAny) && blink)
         top("rec", K_REC, if (m.audioRec == Transport.Rec.ARMED) "● ${m.beat}" else "● Rec", Px.dp(92f), REC, recLit)
         top("shuffle", K_SHUFFLE, "⤨ Shuffle", Px.dp(106f), WHITE)
-        val sr = w - pad - TopKeys.WIDTH   // the top right corner holds the radio and notebook keys
+        val sr = w - pad - TopKeys.WIDTH - NoodlerKey.WIDTH   // the top right corner holds the Noodler, radio and notebook keys
         if (sr - x > Px.dp(80f)) {
             box(c, x, pad, sr, pad + topH, 0.85f, if (m.taping) REC else EDGE)
             label(c, if (m.taping) "● Mixing down to tape  ·  ${m.status}" else m.status, (x + sr) / 2, pad + topH / 2, txt, if (m.taping) 0xFFFFB0A8.toInt() else WHITE, sr - x - Px.dp(16f))

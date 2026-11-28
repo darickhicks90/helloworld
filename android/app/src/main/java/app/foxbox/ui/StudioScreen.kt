@@ -24,6 +24,8 @@ interface Host {
     fun showClibbins()
     /** The Fire Escape: the song laid out in time. */
     fun showFireEscape()
+    /** Hold the tempo: tap tempo, metronome settings and tempo / key detection from a file. */
+    fun tempoTools()
     /** Pop up the tuner listening to `source` (see Audio.tunerSource). */
     fun showTuner(source: Int)
     /** Load audio into "reflections", "leaves" or "pad<i>" (a Pickup pad). */
@@ -153,9 +155,11 @@ class StudioScreen(c: Context, private val host: Host) : FrameLayout(c) {
         val stopBtn = Btn(c, "■", Pal.BROWN_L, 40).apply { onClick = { Studio.stop() } }
         val bpm = Stepper(c, "BPM", if (narrow) 78 else 92, { Studio.project.bpm.toInt().toString() }) { Studio.setBpm(Studio.project.bpm + it) }
         bpm.onMiddle = { host.bpmDialog() }
+        bpm.onLong = { host.tempoTools() }
         metroBtn = Btn(c, "Click", Pal.AQUA).apply { onClick = { Studio.setMetronome(!t.metronome) } }
         val left = LinearLayout(c).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
-        listOf(nameBtn, playBtn, stopBtn, Position(c), bpm, metroBtn).forEach { left.addView(it, lp(WRAP, Px.dp(44))) }
+        // (on narrow phones the metronome switch lives in the tempo's long-press menu, so everything fits)
+        (if (narrow) listOf(nameBtn, playBtn, stopBtn, Position(c), bpm) else listOf(nameBtn, playBtn, stopBtn, Position(c), bpm, metroBtn)).forEach { left.addView(it, lp(WRAP, Px.dp(44))) }
         left.addView(View(c), lp(Px.dp(if (narrow) 4 else 10), 1))
         left.addView(instr, lp(WRAP, Px.dp(44)))
         val menu = Btn(c, if (narrow) "☰" else "☰ Menu", Snes.PURPLE, if (narrow) 44 else 0).apply { onClick = { host.mainMenu() } }
@@ -164,7 +168,7 @@ class StudioScreen(c: Context, private val host: Host) : FrameLayout(c) {
             addView(HorizontalScrollView(c).apply { isHorizontalScrollBarEnabled = false; addView(left) }, lp(0, Px.dp(48), 1f))
             addView(menu, lp(WRAP, Px.dp(44)))
             // the corner where the radio and notebook keys live
-            setPadding(0, 0, TopKeys.WIDTH.toInt(), 0)
+            setPadding(0, 0, (TopKeys.WIDTH + NoodlerKey.WIDTH + Px.dp(4f)).toInt(), 0)
         }
     }
 

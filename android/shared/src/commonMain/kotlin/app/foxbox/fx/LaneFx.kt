@@ -31,6 +31,14 @@ class LaneFx(val sources: List<String>) {
     /** Audio tracks: record and play input 1 left / input 2 right, or mono. */
     val stereo = p.toggle("stereo", "Stereo")
 
+    init { p.section("Pitch Correct") }
+    val pcOn = p.toggle("pcOn", "Pitch Correct")
+    val pcSpeed = p.num("pcSpeed", "Retune", 0.001f, 0.4f, 0.02f, Fmt.SEC, exp = true)
+    val pcMix = p.num("pcMix", "Correct Mix", 0f, 1f, 1f, Fmt.PCT)
+    /** In the project's scale (the default) or to every semitone. */
+    val pcScale = p.choice("pcScale", "Notes", listOf("Project scale", "Chromatic"))
+    val pitchCorrect = PitchCorrect()
+
     init { p.section("Filter") }
     val fOn = p.toggle("fOn", "Filter")
     val fMode = p.choice("fMode", "Type", listOf("Low pass", "High pass", "Band pass"))
@@ -112,7 +120,7 @@ class LaneFx(val sources: List<String>) {
     /** Which lane the compressor / multiband listen to: -1 for itself, else an index into `sources`. */
     val compKey get() = cSide.index - 1
     val bandKey get() = mSide.index - 1
-    val active get() = fOn.on || cOn.on || mOn.on || wraith.on.on || flowerOn
+    val active get() = pcOn.on || fOn.on || cOn.on || mOn.on || wraith.on.on || flowerOn
 
     /** Gain reduction right now, dB (compressor, and the deepest band), for meters. */
     var compReduction = 0f; private set
@@ -127,7 +135,7 @@ class LaneFx(val sources: List<String>) {
     val bandGr = FloatArray(3)
 
     /** The effects that can be added to a lane, by name, with their on switches (Flowers' effects included). */
-    val effects get() = listOf("Filter" to fOn, "Compressor" to cOn, "Multiband" to mOn, "Wraith" to wraith.on) + flowerFx.map { it.name to it.toggle }
+    val effects get() = listOf("Pitch Correct" to pcOn, "Filter" to fOn, "Compressor" to cOn, "Multiband" to mOn, "Wraith" to wraith.on) + flowerFx.map { it.name to it.toggle }
     /** Set where both compressors listen (-1 itself, else an index into `sources`). */
     fun setSidechain(k: Int) { cSide.set((k + 1).toFloat()); mSide.set((k + 1).toFloat()) }
 
@@ -231,6 +239,7 @@ class LaneFx(val sources: List<String>) {
      * sidechain lanes' sound (mono), or null to listen to this lane itself.
      */
     fun process(l: FloatArray, r: FloatArray, n: Int, compKeyBuf: FloatArray?, bandKeyBuf: FloatArray?, bpm: Float, tick: Double, scaleMask: Int) {
+        if (pcOn.on) pitchCorrect.process(l, r, n, pcSpeed.value, pcMix.value, if (pcScale.index == 0) scaleMask else 0xFFF)
         if (fOn.on) filter(l, r, n) else fCutNow = -1f
         if (cOn.on) compress(l, r, n, compKeyBuf) else { cEnv = 0f; cGr = 0f; compReduction = 0f }
         if (mOn.on) multiband(l, r, n, bandKeyBuf) else bandReduction = 0f

@@ -32,6 +32,11 @@ class Transport {
 
     @Volatile var bpm = 110f
     @Volatile var metronome = true
+    /** Metronome settings: level, sound (0 beep, 1 wood, 2 tick), an accent on beat 1, and clicking whenever playing. */
+    @Volatile var clickVolume = 1f
+    @Volatile var clickSound = 0
+    @Volatile var clickAccent = true
+    @Volatile var clickAlways = false
     @Volatile var quantize = false
     /** Audio take on the armed biplanes: OFF, counting in (ARMED) or RECORDING. */
     @Volatile var audioRec = Rec.OFF; private set
@@ -346,7 +351,7 @@ class Transport {
         // the Studio's sequencers (step patterns, drum patterns) stay quiet while the Fire Escape plays the song
         if (s >= 0 && arrangement == null) for (i in engines.indices) engines[i].onStep(s)
         val counting = audioRec == Rec.ARMED || rec == Rec.ARMED || (sampRec == Rec.ARMED && s < 0) || chopRec == Rec.ARMED
-        if ((counting || (metronome && (rec != Rec.OFF || audioRec != Rec.OFF))) && Math.floorMod(s, 4L) == 0L) click(Math.floorMod(s, 16L) == 0L)
+        if ((counting || (metronome && (rec != Rec.OFF || audioRec != Rec.OFF || clickAlways))) && Math.floorMod(s, 4L) == 0L) click(clickAccent && Math.floorMod(s, 16L) == 0L)
     }
 
     private fun finish() {
@@ -482,14 +487,30 @@ class Transport {
 
     private var clickPhase = 0f; private var clickEnv = 0f; private var clickFreq = 1000f
     private val clickDecay = exp(-1f / (0.02f * SR))
-    private fun click(accent: Boolean) { clickEnv = if (accent) 0.5f else 0.32f; clickFreq = if (accent) 1760f else 1175f; clickPhase = 0f }
+    private var clickNoise = 22222
+    private var clickHp = 0f
+    private fun click(accent: Boolean) {
+        clickEnv = (if (accent) 0.5f else 0.32f) * clickVolume
+        clickFreq = when (clickSound) { 1 -> if (accent) 1100f else 800f; 2 -> if (accent) 3200f else 2600f; else -> if (accent) 1760f else 1175f }
+        clickPhase = 0f
+    }
 
     fun renderClick(l: FloatArray, r: FloatArray, n: Int) {
         if (clickEnv < 0.001f) return
+        val snd = clickSound
+        // wood dies away faster, the tick faster still
+        val decay = when (snd) { 1 -> clickDecay * clickDecay; 2 -> clickDecay * clickDecay * clickDecay; else -> clickDecay }
         for (i in 0 until n) {
-            val v = sin(TAU * clickPhase) * clickEnv
+            var v = sin(TAU * clickPhase) * clickEnv
+            if (snd == 1) v = (v + sin(TAU * clickPhase * 2.7f) * clickEnv * 0.4f) * 0.8f
+            if (snd == 2) {
+                clickNoise = clickNoise * 1103515245 + 12345
+                val nz = ((clickNoise ushr 16) and 0x7FFF) / 16384f - 1f
+                clickHp = nz - clickHp * 0.2f
+                v = (clickHp * 0.6f * clickEnv + v * 0.3f) * 2f
+            }
             clickPhase += clickFreq / SR; if (clickPhase >= 1f) clickPhase -= 1f
-            clickEnv *= clickDecay
+            clickEnv *= decay
             l[i] += v; r[i] += v
         }
     }

@@ -336,6 +336,23 @@ object Studio : Transport.Listener, MidiInput.Sink {
      * recording), what comes in on each armed Red/Yellow/Blue track goes on
      * its meter and into the mixdown.
      */
+    /** Noodler is listening to the input. */
+    var noodlerListening = false
+        set(v) { field = v; refreshLive() }
+
+    /** A clip made from notes (Noodler): onto a block's tray, picked, with its MIDI file saved. */
+    fun addNoodleClip(e: Engine, notes: List<Clip.Note>, lengthTicks: Int): Clip? {
+        if (clipsFor(e).size >= MAX_TRAY) { message("${e.title} holds $MAX_TRAY clips. Delete one (hold it) to make room."); return null }
+        val n = clipsFor(e).size + 1
+        val c = Clip(engine = e.id, name = "${e.title} noodle $n", lengthTicks = lengthTicks, notes = notes.toMutableList())
+        c.variant = n - 1
+        project.clips += c
+        selectedClip = c
+        runCatching { ProjectStore.saveClipMidi(project, c) }
+        save(); changed()
+        return c
+    }
+
     /** The tuner is listening to the input: keep it open (heard nowhere unless a track monitors it). */
     var tunerListening = false
         set(v) { field = v; refreshLive() }
@@ -345,7 +362,7 @@ object Studio : Transport.Listener, MidiInput.Sink {
         for (ch in 0 until 3) { Audio.liveArm[ch] = armed[ch]; Audio.liveMonitor[ch] = monitor[ch]; Audio.liveInput[ch] = AudioPrefs.planeInput(ch) }
         val take = t.audioIn as AudioIn?
         if (take != null) { monitorIn?.close(); monitorIn = null; Audio.liveIn = take; return }
-        val need = (tape != null && armed.any { it }) || monitor.any { it } || tunerListening
+        val need = (tape != null && armed.any { it }) || monitor.any { it } || tunerListening || noodlerListening
         if (need && monitorIn == null) {
             if (app.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 message("Allow the microphone (tap ● Rec once) so armed tracks can be mixed down"); return

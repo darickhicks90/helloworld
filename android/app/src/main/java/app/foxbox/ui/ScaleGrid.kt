@@ -26,7 +26,7 @@ class ScaleGrid(
     private val nameP = Px.text(12f, Snes.INK, headFont = true)
     private val noteP = Px.text(12f, Snes.INK, headFont = true)
     private val rowH get() = Px.dp(42f)
-    private val nameW get() = minOf(Px.dp(150f), width * 0.36f)
+    private val nameW get() = minOf(Px.dp(190f), width * 0.32f)
     private val gap get() = Px.dp(6f)
     var picked = initial; private set
     // which key each finger is holding: row*8+k, or -1
@@ -57,7 +57,9 @@ class ScaleGrid(
                 c.fill(lx, cy - s / 2, lx + s, cy + s / 2, INK)
                 c.fill(lx + u * 0.6f, cy - s / 2 + u * 0.6f, lx + s - u * 0.6f, cy + s / 2 - u * 0.6f, if (sel) GREEN else SHADE)
                 nameP.color = if (sel) PURPLE_D else INK
-                c.textFit("${Theory.NOTE_NAMES[root]} ${sc.name}", Px.dp(22f) + (nameW - Px.dp(30f)) / 2, cy, nameW - Px.dp(32f), nameP)
+                val pcs = sc.steps.map { (root + it) % 12 }
+                val off = sung.count { it !in pcs }
+                c.textFit("${Theory.NOTE_NAMES[root]} ${sc.name}" + (if (off > 0) " (−$off)" else ""), Px.dp(22f) + (nameW - Px.dp(30f)) / 2, cy, nameW - Px.dp(32f), nameP)
                 // its notes, low to high (and the root again an octave up): play them to hear it
                 for (k in 0..sc.steps.size) {
                     val pc = (root + (if (k < sc.steps.size) sc.steps[k] else 0)) % 12

@@ -135,11 +135,11 @@ class NoodleForge(private val a: Activity) {
                     onPick = { i -> picked = i; art.invalidate() },
                     noteOn = { id, n -> Audio.post { Audio.preview.noteOn(0x7D000040 + id, n, 0.8f) } },
                     noteOff = { id -> Audio.post { Audio.preview.noteOff(0x7D000040 + id) } })
-                // the scales get the right side, top to bottom
+                // every scale, stacked top to bottom, the full width
                 middle.addView(ScrollView(a).apply { addView(grid); isVerticalScrollBarEnabled = true },
                     FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT).apply {
-                        topMargin = barH + Px.dp(10); bottomMargin = keysH + Px.dp(4)
-                        leftMargin = (a.resources.displayMetrics.widthPixels * 0.36f).toInt(); rightMargin = Px.dp(20)
+                        topMargin = barH + Px.dp(84); bottomMargin = keysH + Px.dp(4)
+                        leftMargin = Px.dp(20); rightMargin = Px.dp(20)
                     })
             }
             St.FAIL -> key("Try again", Snes.GREEN) { restart() }
@@ -323,25 +323,22 @@ class NoodleForge(private val a: Activity) {
         private fun resultPanel(c: Canvas, w: Float, top: Float, bottom: Float) { with(Snes) {
             val r = result ?: return
             val (root, si) = r.cands[picked.coerceIn(0, r.cands.size - 1)]
-            val pr = w * 0.36f - Px.dp(14f)
-            val l = Px.dp(20f)
-            window(c, l, top, pr, top + Px.dp(72f))
-            lcd.textSize = Px.dp(24f); lcd.color = YELLOW
-            c.textCentered("${r.bpm} BPM", (l + pr) / 2, top + Px.dp(22f), lcd)
-            lcd.textSize = Px.dp(18f); lcd.color = GREEN
-            textFitLcd(c, "${Theory.NOTE_NAMES[root]} ${Theory.SCALES[si].name}", (l + pr) / 2, top + Px.dp(52f), pr - l - Px.dp(12f))
+            // the strip on top: what was forged, and how to choose
+            val l = Px.dp(20f); val wr = l + Px.dp(220f)
+            window(c, l, top - Px.dp(4f), wr, top + Px.dp(62f))
+            lcd.textSize = Px.dp(20f); lcd.color = YELLOW
+            c.textCentered("${r.bpm} BPM", (l + wr) / 2, top + Px.dp(14f), lcd)
+            lcd.textSize = Px.dp(17f); lcd.color = GREEN
+            textFitLcd(c, "${Theory.NOTE_NAMES[root]} ${Theory.SCALES[si].name}", (l + wr) / 2, top + Px.dp(42f), wr - l - Px.dp(12f))
             lcd.color = YELLOW
             val tune = when {
-                r.cents <= -8 -> "You were ${-r.cents} cents flat, so your idea was tuned up."
-                r.cents >= 8 -> "You were ${r.cents} cents sharp, so your idea was tuned down."
+                r.cents <= -8 -> "You were ${-r.cents} cents flat, so your idea was tuned up. "
+                r.cents >= 8 -> "You were ${r.cents} cents sharp, so your idea was tuned down. "
                 else -> ""
             }
-            val how = (if (r.sure) "Your idea points to this scale. " else "Your idea fits ${r.cands.size} scales. ") +
-                "Play the notes beside a scale to hear it, and tap its name to choose it."
+            val how = tune + "Scales for your idea, best first. Lit notes are the ones you used. Play a scale's notes to hear it, and tap its name to choose it."
             body.textSize = Px.dp(13f); body.textAlign = Paint.Align.LEFT
-            var y = top + Px.dp(96f)
-            if (tune.isNotEmpty()) y = wrap(c, tune, l, y, pr - l, body, Px.dp(18f)) + Px.dp(6f)
-            wrap(c, how, l, y, pr - l, body, Px.dp(18f))
+            wrap(c, how, wr + Px.dp(16f), top + Px.dp(10f), w - wr - Px.dp(40f), body, Px.dp(18f))
             body.textAlign = Paint.Align.CENTER; body.textSize = Px.dp(14f)
         } }
 

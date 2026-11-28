@@ -249,7 +249,7 @@ class FireEscapeScreen(c: Context, private val host: Host, private val fire: Fir
             strip.addView(pn, lp(WRAP, WRAP).apply { rightMargin = Px.dp(6) })
         }
         fun flow(params: List<app.foxbox.audio.Param>, accent: Int) = Flow(context).apply { params.forEach { addView(Knob(context, it, accent)) } }
-        if (fx.pcOn.on) box("Pitch Correct", 2, { fx.pcOn.set(0f) }) { pn, acc -> pn.addView(flow(knobs("Pitch Correct"), acc), lp(Px.dp(74) * 2, WRAP)) }
+        if (fx.pcOn.on) box("Pitch Correct", 4, { fx.pcOn.set(0f) }) { pn, acc -> pn.addView(flow(knobs("Pitch Correct"), acc), lp(Px.dp(74) * 4, WRAP)) }
         if (fx.fOn.on) box("Filter", 3, { fx.fOn.set(0f) }) { pn, acc -> pn.addView(flow(knobs("Filter"), acc), lp(Px.dp(74) * 3, WRAP)) }
         if (fx.cOn.on) box("Compressor", 3, { fx.cOn.set(0f) }) { pn, acc ->
             pn.addView(CompMeter(context, fx), lp(Px.dp(74) * 3, Px.dp(70)).apply { bottomMargin = Px.dp(4) })

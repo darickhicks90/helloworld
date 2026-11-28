@@ -14,6 +14,7 @@ import app.foxbox.audio.Audio
 import app.foxbox.audio.SR
 import kotlin.math.abs
 import kotlin.math.ln
+import kotlin.math.pow
 import kotlin.math.roundToInt
 
 /**
@@ -61,7 +62,7 @@ object Tuner {
         val n = buf.size / 2
         val x = FloatArray(n) { (buf[it * 2] + buf[it * 2 + 1]) * 0.5f }
         var rms = 0f; for (v in x) rms += v * v; rms = kotlin.math.sqrt(rms / n)
-        if (rms < 0.004f) return 0f to rms
+        if (rms < gate) return 0f to rms
         val tauMax = minOf(n / 2, (rate / 38f).toInt()); val tauMin = (rate / 1400f).toInt().coerceAtLeast(2)
         val w = n - tauMax
         val d = FloatArray(tauMax + 1)
@@ -78,6 +79,17 @@ object Tuner {
         val shift = if (abs(den) > 1e-9f) 0.5f * (a0 - c0) / den else 0f
         return rate / (best + shift) to rms
     }
+
+    /** Quieter than this the tuner doesn't try (rms; set from dB in the panel). */
+    @Volatile private var gate = 0.004f
+    private val prefs get() = Studio.app.getSharedPreferences("tuner", android.content.Context.MODE_PRIVATE)
+    private var gateDb: Float
+        get() = prefs.getFloat("gateDb", -48f)
+        set(v) { val x = v.coerceIn(-72f, -24f); prefs.edit().putFloat("gateDb", x).apply(); gate = 10f.pow(x / 20f) }
+    /** How quickly the needle follows (0.1 steady .. 0.8 quick). */
+    private var response: Float
+        get() = prefs.getFloat("resp", 0.35f)
+        set(v) = prefs.edit().putFloat("resp", v.coerceIn(0.1f, 0.8f)).apply()
 
     private val NAMES = listOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
 
@@ -103,7 +115,10 @@ object Tuner {
             addView(head, lp(MATCH, Px.dp(36)))
             addView(face, lp(MATCH, 0, 1f).apply { topMargin = Px.dp(4) })
             val foot = LinearLayout(a).apply { orientation = HORIZONTAL }
-            foot.addView(Stepper(a, "A4", 110, { "${a4.roundToInt()} Hz" }) { a4 = (a4 + it).coerceIn(415f, 466f) }, lp(MATCH, Px.dp(36)))
+            gate = 10f.pow(gateDb / 20f)
+            foot.addView(Stepper(a, "A4", 110, { "${a4.roundToInt()} Hz" }) { a4 = (a4 + it).coerceIn(415f, 466f) }, lp(0, Px.dp(36), 1f))
+            foot.addView(Stepper(a, "Sens", 110, { "${gateDb.roundToInt()} dB" }) { gateDb -= it * 3f }, lp(0, Px.dp(36), 1f).apply { leftMargin = Px.dp(4) })
+            foot.addView(Stepper(a, "Needle", 110, { if (response < 0.25f) "steady" else if (response < 0.5f) "normal" else "quick" }) { response += it * 0.15f }, lp(0, Px.dp(36), 1f).apply { leftMargin = Px.dp(4) })
             addView(foot, lp(MATCH, Px.dp(38)).apply { topMargin = Px.dp(4) })
             worker = Thread {
                 val buf = FloatArray(4096)
@@ -175,7 +190,7 @@ object Tuner {
                 val midi = if (ok) 69f + 12f * (ln(f / a4) / ln(2f)) else 0f
                 val near = midi.roundToInt()
                 val cents = if (ok) (midi - near) * 100f else 0f
-                if (ok) shownCents += (cents - shownCents) * 0.35f else shownCents *= 0.9f
+                if (ok) shownCents += (cents - shownCents) * response else shownCents *= 0.9f
                 // the scale: -50 .. +50 cents
                 val cy = h * 0.72f; val l = Px.dp(14f); val r = w - Px.dp(14f)
                 for (k in -5..5) {

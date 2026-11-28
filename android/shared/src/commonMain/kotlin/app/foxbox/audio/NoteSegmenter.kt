@@ -25,7 +25,12 @@ object NoteSegmenter {
      * `t` times (ms), `m` pitch as a fractional MIDI note (NaN where there was no clear
      * pitch), `db` loudness; `n` frames. `mask`: the scale to land on (0 = any semitone).
      */
-    fun segment(t: DoubleArray, m: FloatArray, db: FloatArray, n: Int, mask: Int = 0, minMs: Double = 110.0): Result {
+    /**
+     * `settleMs`: how long the voice must hold a note before it counts; `stick`: how far
+     * (in semitones) it must move, steadily, before it changes note; `minMs`: the
+     * shortest note kept.
+     */
+    fun segment(t: DoubleArray, m: FloatArray, db: FloatArray, n: Int, mask: Int = 0, minMs: Double = 110.0, settleMs: Double = 60.0, stick: Float = 0.7f): Result {
         if (n < 3) return Result(emptyList(), 0)
         // 1. tuning: where the steady parts sit between semitones (on a circle, so +0.5 and -0.5 meet)
         var sx = 0.0; var sy = 0.0
@@ -54,8 +59,8 @@ object NoteSegmenter {
         var away = -1; var awayStart = 0; var awayN = 0
         var gap = 0
         var peak = -120f; var dipped = false
-        val settle = 6       // ~60 ms on one note before it counts
-        val leave = 7        // ~70 ms clearly elsewhere before moving
+        val settle = (settleMs / 10.0).toInt().coerceAtLeast(2)   // looks on one note before it counts
+        val leave = settle + 1                                      // looks clearly elsewhere before moving
         for (i in 0 until n) {
             val x = c[i]
             if (x.isNaN()) {
@@ -79,7 +84,7 @@ object NoteSegmenter {
                 cu.e = i - 1; segs += cu; cur = Seg(cu.note, i, i, true); peak = db[i]; dipped = false; away = -1; awayN = 0
                 continue
             }
-            if (abs(x - cu.note) < 0.7f) { cu.e = i; away = -1; awayN = 0; continue }
+            if (abs(x - cu.note) < stick) { cu.e = i; away = -1; awayN = 0; continue }
             if (q == away) awayN++ else { away = q; awayStart = i; awayN = 1 }
             if (awayN >= leave) {
                 cu.e = awayStart - 1; segs += cu

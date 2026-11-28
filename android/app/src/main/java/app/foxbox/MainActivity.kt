@@ -452,7 +452,15 @@ class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost, app.foxbox.ui
             box.addView(app.foxbox.ui.Stepper(this, "Listens to sounds louder than", 200, { "${Noodler.sensitivity.toInt()} dB" }) { Noodler.sensitivity = (Noodler.sensitivity + it * 3f).coerceIn(-66f, -18f) },
                 android.widget.LinearLayout.LayoutParams(-1, Px.dp(44)).apply { bottomMargin = Px.dp(4) })
             box.addView(app.foxbox.ui.Stepper(this, "Octave", 200, { (if (Noodler.octave > 0) "+" else "") + Noodler.octave }) { Noodler.octave = Noodler.octave + it },
-                android.widget.LinearLayout.LayoutParams(-1, Px.dp(44)))
+                android.widget.LinearLayout.LayoutParams(-1, Px.dp(44)).apply { bottomMargin = Px.dp(4) })
+            // how eagerly it lands on notes
+            fun step(label: String, value: () -> String, change: (Int) -> Unit) = box.addView(app.foxbox.ui.Stepper(this, label, 200, value, change),
+                android.widget.LinearLayout.LayoutParams(-1, Px.dp(44)).apply { bottomMargin = Px.dp(4) })
+            step("Pitch confidence (higher: only clear notes)", { "${Math.round(Noodler.confidence * 100)}%" }) { Noodler.confidence = Noodler.confidence + it * 0.03f }
+            step("Settle time (hold before a note counts)", { "${Noodler.settleMs} ms" }) { Noodler.settleMs = Noodler.settleMs + it * 10 }
+            step("Stickiness (move this far to change note)", { "${Noodler.stickCents} ct" }) { Noodler.stickCents = Noodler.stickCents + it * 5 }
+            step("Shortest note kept", { "${Noodler.shortestMs} ms" }) { Noodler.shortestMs = Noodler.shortestMs + it * 10 }
+            row("Reset note detection to default", app.foxbox.ui.Snes.YELLOW) { Noodler.resetDetection(); rebuild() }
         }
         rebuild()
         d.view(box)

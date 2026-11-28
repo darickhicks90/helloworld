@@ -37,6 +37,14 @@ class LaneFx(val sources: List<String>) {
     val pcMix = p.num("pcMix", "Correct Mix", 0f, 1f, 1f, Fmt.PCT)
     /** In the project's scale (the default) or to every semitone. */
     val pcScale = p.choice("pcScale", "Notes", listOf("Project scale", "Chromatic"))
+    /** How readily it trusts a pitch it hears (higher catches breathy, unclear sounds too). */
+    val pcSens = p.num("pcSens", "Sensitivity", 0f, 1f, 0.6f, Fmt.PCT)
+    /** Sounds quieter than this are left alone. */
+    val pcGate = p.num("pcGate", "Gate", -80f, -20f, -60f, Fmt.DB)
+    /** How much of the way to the note it pulls. */
+    val pcStrength = p.num("pcStrength", "Strength", 0f, 1f, 1f, Fmt.PCT)
+    /** Notes already this close (cents) are left as they are. */
+    val pcTol = p.num("pcTol", "Tolerance", 0f, 50f, 0f, Fmt.CT)
     val pitchCorrect = PitchCorrect()
 
     init { p.section("Filter") }
@@ -239,7 +247,8 @@ class LaneFx(val sources: List<String>) {
      * sidechain lanes' sound (mono), or null to listen to this lane itself.
      */
     fun process(l: FloatArray, r: FloatArray, n: Int, compKeyBuf: FloatArray?, bandKeyBuf: FloatArray?, bpm: Float, tick: Double, scaleMask: Int) {
-        if (pcOn.on) pitchCorrect.process(l, r, n, pcSpeed.value, pcMix.value, if (pcScale.index == 0) scaleMask else 0xFFF)
+        if (pcOn.on) pitchCorrect.process(l, r, n, pcSpeed.value, pcMix.value, if (pcScale.index == 0) scaleMask else 0xFFF,
+            pcSens.value, pcGate.value, pcStrength.value, pcTol.value)
         if (fOn.on) filter(l, r, n) else fCutNow = -1f
         if (cOn.on) compress(l, r, n, compKeyBuf) else { cEnv = 0f; cGr = 0f; compReduction = 0f }
         if (mOn.on) multiband(l, r, n, bandKeyBuf) else bandReduction = 0f

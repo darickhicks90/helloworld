@@ -53,6 +53,23 @@ object Noodler {
     var sensitivity: Float
         get() = prefs.getFloat("sens", -42f)
         set(v) = prefs.edit().putFloat("sens", v).apply()
+    /** How sure the pitch must be before it counts (0.5 catches more, 0.95 only very clear notes). */
+    var confidence: Float
+        get() = prefs.getFloat("conf", 0.72f)
+        set(v) = prefs.edit().putFloat("conf", v.coerceIn(0.5f, 0.95f)).apply()
+    /** How long a note must hold before it counts (ms). */
+    var settleMs: Int
+        get() = prefs.getInt("settle", 60)
+        set(v) = prefs.edit().putInt("settle", v.coerceIn(20, 250)).apply()
+    /** How far the voice must move, steadily, to change note (cents): higher holds on through slides and vibrato. */
+    var stickCents: Int
+        get() = prefs.getInt("stick", 70)
+        set(v) = prefs.edit().putInt("stick", v.coerceIn(50, 95)).apply()
+    /** The shortest note kept (ms). */
+    var shortestMs: Int
+        get() = prefs.getInt("shortest", 110)
+        set(v) = prefs.edit().putInt("shortest", v.coerceIn(40, 400)).apply()
+    fun resetDetection() { confidence = 0.72f; settleMs = 60; stickCents = 70; shortestMs = 110 }
     var octave: Int
         get() = prefs.getInt("octave", 0)
         set(v) = prefs.edit().putInt("octave", v.coerceIn(-2, 2)).apply()
@@ -183,6 +200,8 @@ object Noodler {
         var cur = -1; var curStart = 0.0; var silentFrames = 0
         var envFloor = 0f; var lastOnset = -1e9
         val mask = Audio.scaleMask
+        val conf = confidence
+        val settleLooks = if (runMode == Mode.LIVE) (settleMs / 20).coerceAtLeast(2) else (settleMs / 10).coerceAtLeast(2)
         // how far off concert pitch the person is overall (everything a little flat or sharp),
         // as the average of where pitches sit between semitones (on a circle, so +0.5 and -0.5 meet)
         var tx = 0.0; var ty = 0.0
@@ -206,7 +225,7 @@ object Noodler {
             var raw = Float.NaN
             if (voiced) {
                 val hz = tracker.detect(win, 0, 1024, SR / 2f, 60f, 1200f)
-                if (hz > 0f && tracker.clarity > 0.72f) {
+                if (hz > 0f && tracker.clarity > conf) {
                     raw = PitchTrack.midi(hz) + 12 * octave
                     val f = raw - Math.round(raw)
                     tx = tx * 0.998 + cos(2 * PI * f); ty = ty * 0.998 + sin(2 * PI * f)
@@ -220,7 +239,7 @@ object Noodler {
             // on screen: a new note has to hold a moment before it shows (live play answers quicker)
             if (n >= 0 && n == cand) candFrames++ else { cand = n; candFrames = if (n >= 0) 1 else 0 }
             if (n >= 0) silentFrames = 0 else silentFrames++
-            if (candFrames >= (if (runMode == Mode.LIVE) 3 else 6) && cand != cur) {
+            if (candFrames >= settleLooks && cand != cur) {
                 if (cur >= 0) noteOff(cur, now)
                 cur = cand; curStart = now
                 noteOn(cur, now, ((db + 50f) / 40f).coerceIn(0.35f, 1f))
@@ -298,7 +317,8 @@ object Noodler {
     private fun settleNotes(fromMs: Double, mask: Int) {
         val n = fN
         var s = 0; while (s < n && fT[s] < fromMs) s++
-        val r = NoteSegmenter.segment(fT.copyOfRange(s, n), fM.copyOfRange(s, n), fDb.copyOfRange(s, n), n - s, mask)
+        val r = NoteSegmenter.segment(fT.copyOfRange(s, n), fM.copyOfRange(s, n), fDb.copyOfRange(s, n), n - s, mask,
+            minMs = shortestMs.toDouble(), settleMs = settleMs.toDouble(), stick = stickCents / 100f)
         lastCents = r.cents
         synchronized(notes) { notes.clear(); for (x in r.notes) notes += N(x.note, x.startMs, x.endMs, x.vel) }
     }
@@ -361,38 +381,43 @@ object Noodler {
         val sung = (0 until 12).filter { share[it] / tot >= 0.06 }.toSet().ifEmpty { all.map { Math.floorMod(it.note, 12) }.toSet() }
         val sure = sung.size >= 7 && conf >= 0.3f
         // the guess first, then every other scale that holds all the notes
-        val cands = (listOf(root to scale) + candidates(all)).distinct().filter { (r, si) -> sung.all { pc -> Theory.SCALES[si].steps.any { (r + it) % 12 == pc } } }
-            .ifEmpty { listOf(root to scale) }
-        val res = ForgeResult(bpm, cn, len, if (sure) listOf(root to scale) + cands.drop(1).take(5) else cands, sung, sure, cents, target)
+        // the key guess first when it holds everything sung, then the rest
+        val fitsAll = { r: Int, si: Int -> sung.all { pc -> Theory.SCALES[si].steps.any { (r + it) % 12 == pc } } }
+        val cands = ((if (fitsAll(root, scale)) listOf(root to scale) else emptyList()) + candidates(all)).distinct()
+        val res = ForgeResult(bpm, cn, len, cands, sung, sure && cands.firstOrNull() == (root to scale), cents, target)
         main.post { onForged?.invoke(res, "") }
     }
 
     /**
-     * Every scale (any root) that holds all the notes that were sung, best first: ones
-     * whose root was sung (especially first or last), longest-held notes on strong
-     * degrees, and the everyday scales before the rarer ones.
+     * Scales for the idea, best first: every scale (any root) holding all the notes that
+     * were sung come first; then, so there's always a choice, the nearest misses (scales
+     * leaving out the least of what was sung). Within those: ones whose root was sung
+     * (especially first or last), with the fifth and root held a while, and everyday
+     * scales before rarer ones.
      */
     private fun candidates(list: List<N>): List<Pair<Int, Int>> {
         val dur = DoubleArray(12)
         for (nn in list) dur[Math.floorMod(nn.note, 12)] += (nn.endMs - nn.startMs).coerceAtLeast(60.0)
-        val sung = (0 until 12).filter { dur[it] / dur.sum().coerceAtLeast(1.0) >= 0.06 }
+        val total = dur.sum().coerceAtLeast(1.0)
+        val sung = (0 until 12).filter { dur[it] / total >= 0.06 }
         val firstPc = list.firstOrNull()?.let { Math.floorMod(it.note, 12) } ?: -1
         val lastPc = list.lastOrNull()?.let { Math.floorMod(it.note, 12) } ?: -1
-        val total = dur.sum().coerceAtLeast(1.0)
-        val out = ArrayList<Triple<Int, Int, Double>>()
+        class C(val root: Int, val si: Int, val miss: Double, val score: Double)
+        val out = ArrayList<C>()
         for ((si, sc) in Theory.SCALES.withIndex()) for (root in 0 until 12) {
             val pcs = sc.steps.map { (root + it) % 12 }.toSet()
-            if (!sung.all { it in pcs }) continue
+            val miss = sung.filter { it !in pcs }.sumOf { dur[it] } / total
             var score = 0.0
             if (root in sung) score += 2.0
             if (root == firstPc) score += 1.0
             if (root == lastPc) score += 1.5
-            // the fifth and third held a while are good signs
             score += dur[(root + 7) % 12] / total + dur[root] / total * 1.5
-            score -= si * 0.12        // everyday scales first (Major, Minor, then the modes)
+            score -= si * 0.12
             score -= (sc.steps.size - sung.size) * 0.05
-            out += Triple(root, si, score)
+            out += C(root, si, miss, score)
         }
-        return out.sortedByDescending { it.third }.take(14).map { it.first to it.second }
+        val fits = out.filter { it.miss < 1e-9 }.sortedByDescending { it.score }
+        val near = out.filter { it.miss >= 1e-9 }.sortedWith(compareBy<C> { Math.round(it.miss * 20) }.thenByDescending { it.score })
+        return (fits.take(14) + near.take((10 - fits.size.coerceAtMost(14)).coerceAtLeast(0))).map { it.root to it.si }
     }
 }

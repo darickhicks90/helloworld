@@ -163,6 +163,7 @@ class SnesDialog(private val a: Activity, title: String, private val wide: Float
     private val body = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
     private val keys = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.END }
     private var msgView: TextView? = null
+    private var full = false
 
     init {
         dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
@@ -200,12 +201,28 @@ class SnesDialog(private val a: Activity, title: String, private val wide: Float
         return this
     }
 
+    /** Take up the whole screen, with a small ✕ in the title bar to close it whenever. */
+    fun fullScreen(onClose: () -> Unit = {}): SnesDialog {
+        full = true
+        val x = SnesKey(a, "✕", Snes.RED).apply { onClick = { dialog.dismiss(); onClose() } }
+        val row = LinearLayout(a).apply { gravity = Gravity.END; addView(x, LinearLayout.LayoutParams(Px.dp(36), Px.dp(24))) }
+        frame.addView(row, 0, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Px.dp(24)).apply { topMargin = -Px.dp(27) })
+        return this
+    }
+
     fun cancelable(on: Boolean): SnesDialog { dialog.setCancelable(on); return this }
     fun onDismiss(fn: () -> Unit): SnesDialog { dialog.setOnDismissListener { fn() }; return this }
 
     fun show(): SnesDialog {
         dialog.show()
         val dm = a.resources.displayMetrics
+        if (full) {
+            dialog.window?.decorView?.setPadding(0, 0, 0, 0)
+            dialog.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+            @Suppress("DEPRECATION")
+            dialog.window?.decorView?.systemUiVisibility = a.window.decorView.systemUiVisibility
+            return this
+        }
         dialog.window?.setLayout(minOf((dm.widthPixels * wide).toInt(), Px.dp(560)).coerceAtLeast(minOf(dm.widthPixels - Px.dp(16), Px.dp(300))), ViewGroup.LayoutParams.WRAP_CONTENT)
         // keep the app full screen while a dialog is up
         @Suppress("DEPRECATION")

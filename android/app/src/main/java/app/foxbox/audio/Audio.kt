@@ -59,6 +59,8 @@ object Audio {
     // ---------------------------------------------------------------- the tuner's ear
     /** What Noodler listens to: -1 nothing, 0..2 the input (1, 2, both). Written to [noodleRing] (mono). */
     @Volatile var noodleSource = -1
+    /** A plain tone for hearing notes back in Noodle Forge (not a block, not recorded into clips). */
+    val preview = PreviewVoice()
     val noodleRing = FloatArray(16384)
     @Volatile var noodleWrite = 0
     /** What the tuner listens to: -1 nothing, 0..2 the input (1, 2, both), 100 + n the block at engines[n]. */
@@ -232,6 +234,7 @@ object Audio {
             for (i in 0 until n) { mixL[i] += l[i]; mixR[i] += r[i] }
         }
         reverbFx.process(revL, revR, mixL, mixR, n)
+        preview.render(mixL, mixR, n)
         rack.processAudition(mixL, mixR, n)
         masterFx.process(mixL, mixR, n)
         transport.renderClick(mixL, mixR, n)

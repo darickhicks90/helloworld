@@ -17,15 +17,16 @@ import android.widget.ScrollView
 import app.foxbox.Noodler
 import app.foxbox.Studio
 import app.foxbox.audio.Audio
-import app.foxbox.seq.Clip
 import app.foxbox.seq.Theory
 import app.foxbox.seq.Ticks
+import app.foxbox.ui.Snes.lamps
+import app.foxbox.ui.Snes.plate
 
 /**
- * Noodle Forge: its own full-screen mode for starting a song from a quick idea.
- * Tap four steady beats (that's the tempo), sing or play the idea (that's the
- * scale), then choose the scale and keep it. Nothing in the song changes until
- * "Keep it" is tapped. The ✕ closes it at any time.
+ * Noodle Forge: a one-time set-up for a song, in its own full-screen wizard while
+ * everything else waits. Knock four steady beats (the tempo), sing or play the idea
+ * (the scale), choose the scale and keep it. Nothing in the song changes until
+ * "Keep it". The ✕ leaves at any time.
  */
 class NoodleForge(private val a: Activity) {
     private enum class St { READY, COUNT, IDEA, WORKING, RESULT, FAIL, DONE }
@@ -39,18 +40,19 @@ class NoodleForge(private val a: Activity) {
     private val dialog = Dialog(a, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
     private val root = FrameLayout(a)
     private val art = ForgeView()
-    private val keys = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+    private val keys = LinearLayout(a).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.END or Gravity.CENTER_VERTICAL }
     private val middle = FrameLayout(a)
     private val play = Handler(Looper.getMainLooper())
 
+    private val barH get() = Px.dp(44)
+    private val keysH get() = Px.dp(56)
+
     init {
         root.addView(art, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-        root.addView(middle, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT).apply {
-            topMargin = Px.dp(98); bottomMargin = Px.dp(64); leftMargin = Px.dp(16); rightMargin = Px.dp(16)
-        })
-        root.addView(keys, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Px.dp(48), Gravity.BOTTOM).apply { bottomMargin = Px.dp(10) })
-        val x = Btn(a, "✕", Pal.ROSE).apply { onClick = { close() } }
-        root.addView(x, FrameLayout.LayoutParams(Px.dp(40), Px.dp(32), Gravity.TOP or Gravity.END).apply { topMargin = Px.dp(6); rightMargin = Px.dp(8) })
+        root.addView(middle, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        root.addView(keys, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Px.dp(42), Gravity.BOTTOM).apply { bottomMargin = Px.dp(10); rightMargin = Px.dp(16); leftMargin = Px.dp(16) })
+        val x = SnesKey(a, "✕", Snes.RED).apply { onClick = { close() } }
+        root.addView(x, FrameLayout.LayoutParams(Px.dp(40), Px.dp(30), Gravity.TOP or Gravity.END).apply { topMargin = Px.dp(7); rightMargin = Px.dp(10) })
         dialog.setContentView(root)
         dialog.setOnCancelListener { close() }
         dialog.window?.let { w ->
@@ -92,10 +94,10 @@ class NoodleForge(private val a: Activity) {
             prefs.edit().putBoolean("forge_intro", true).apply()
             SnesDialog(a, "Welcome to Noodle Forge", wide = 0.8f)
                 .message("Noodle Forge sets up your song from a quick idea. Everything else waits while you're here.\n\n" +
-                    "1. Tap, clap or knock 4 steady beats. That sets the tempo.\n" +
+                    "1. Knock or tap 4 steady beats. That sets the tempo.\n" +
                     "2. Straight after, sing or play your idea, one note at a time, and tap Done.\n" +
                     "3. Pick the scale that sounds right and tap Keep it.\n\n" +
-                    "Your song's tempo and scale are set, and your idea is saved as a clip. Nothing in your song changes until you tap Keep it.")
+                    "Nothing in your song changes until you tap Keep it.")
                 .key("Let's forge", Snes.GREEN, then = null).show()
         }
     }
@@ -109,36 +111,42 @@ class NoodleForge(private val a: Activity) {
         resumeAll()
     }
 
-    // ------------------------------------------------------------------ states
+    // ------------------------------------------------------------------ the steps
 
     private fun go(s: St) {
         st = s; stSince = System.nanoTime()
         keys.removeAllViews(); middle.removeAllViews()
-        fun key(text: String, accent: Int, w: Int = 150, fn: () -> Unit) =
-            keys.addView(Btn(a, text, accent).apply { onClick = fn }, LinearLayout.LayoutParams(Px.dp(w), ViewGroup.LayoutParams.MATCH_PARENT).apply { leftMargin = Px.dp(6); rightMargin = Px.dp(6) })
+        fun key(text: String, color: Int, fn: () -> Unit) =
+            keys.addView(SnesKey(a, text, color).apply { onClick = fn }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT).apply { leftMargin = Px.dp(10) })
         when (s) {
-            St.READY -> key("Start", Pal.GREEN, 180) { stopPlaying(); Noodler.start(Noodler.Mode.FORGE); go(St.COUNT) }
-            St.COUNT -> key("Start over", Pal.ORANGE) { restart() }
+            St.READY -> key("Start", Snes.GREEN) { stopPlaying(); Noodler.start(Noodler.Mode.FORGE); go(St.COUNT) }
+            St.COUNT -> key("Start over", Snes.YELLOW) { restart() }
             St.IDEA -> {
-                key("Start over", Pal.ORANGE) { restart() }
-                key("✓ Done", Pal.GREEN) { go(St.WORKING); Noodler.stop() }
+                key("Start over", Snes.YELLOW) { restart() }
+                key("Done", Snes.GREEN) { go(St.WORKING); Noodler.stop() }
             }
             St.WORKING -> {}
             St.RESULT -> {
                 val r = result!!
-                key("Try again", Pal.ORANGE) { restart() }
-                key("▶ My idea", Pal.AQUA) { playIdea(r) }
-                key("✓ Keep it", Pal.GREEN) { keep(r) }
+                key("Try again", Snes.YELLOW) { restart() }
+                key("▶ My idea", Snes.PURPLE) { playIdea(r) }
+                key("Keep it", Snes.GREEN) { keep(r) }
                 val grid = ScaleGrid(a, r.cands, r.sung, initial = 0,
                     onPick = { i -> picked = i; art.invalidate() },
-                    noteOn = { id, n -> val e = r.engine; Audio.post { e.noteOn(0x7D000040 + id, n, 0.75f) } },
-                    noteOff = { id -> val e = r.engine; Audio.post { e.noteOff(0x7D000040 + id) } })
-                middle.addView(ScrollView(a).apply { addView(grid); isVerticalScrollBarEnabled = false })
+                    noteOn = { id, n -> Audio.post { Audio.preview.noteOn(0x7D000040 + id, n, 0.8f) } },
+                    noteOff = { id -> Audio.post { Audio.preview.noteOff(0x7D000040 + id) } })
+                // the scales get the right side, top to bottom
+                middle.addView(ScrollView(a).apply { addView(grid); isVerticalScrollBarEnabled = true },
+                    FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT).apply {
+                        topMargin = barH + Px.dp(10); bottomMargin = keysH + Px.dp(4)
+                        leftMargin = (a.resources.displayMetrics.widthPixels * 0.36f).toInt(); rightMargin = Px.dp(20)
+                    })
             }
-            St.FAIL -> key("Try again", Pal.GREEN, 180) { restart() }
-            St.DONE -> key("Start making music", Pal.GREEN, 220) { close() }
+            St.FAIL -> key("Try again", Snes.GREEN) { restart() }
+            St.DONE -> key("Start making music", Snes.GREEN) { close() }
         }
-        art.animated = true
+        // only the listening steps change by themselves (lights, the note, the meter)
+        art.animated = s == St.COUNT || s == St.IDEA
         art.invalidate()
     }
 
@@ -158,229 +166,216 @@ class NoodleForge(private val a: Activity) {
         Studio.project.forged = true
         Studio.save()
         doneText = listOf("${r.bpm} BPM", "${Theory.NOTE_NAMES[root]} ${Theory.SCALES[si].name}",
-            if (clip != null) "Your idea is the clip \"${clip.name}\" on ${r.engine.title}" else "${r.engine.title} had no room for your idea's clip")
+            if (clip != null) "Your idea is saved as the clip \"${clip.name}\" on ${r.engine.title}." else "${r.engine.title} had no room for your idea's clip.")
         go(St.DONE)
     }
 
+    /** The idea as it was sung (tuned), on a plain soft tone. */
     private fun playIdea(r: Noodler.ForgeResult) {
         stopPlaying()
-        val e = r.engine
         val msPerTick = 60000.0 / r.bpm / Ticks.PPQ
-        r.notes.take(64).forEachIndexed { k, n ->
-            val on = (n.tick * msPerTick).toLong(); val off = on + (n.dur * msPerTick).toLong().coerceAtLeast(80)
-            play.postDelayed({ Audio.post { e.noteOn(0x7D000010 + k, n.note, n.vel) } }, on)
-            play.postDelayed({ Audio.post { e.noteOff(0x7D000010 + k) } }, off)
+        r.notes.take(96).forEachIndexed { k, n ->
+            val on = (n.tick * msPerTick).toLong(); val off = on + (n.dur * msPerTick).toLong().coerceAtLeast(90)
+            play.postDelayed({ Audio.post { Audio.preview.noteOn(0x7D000100 + k, n.note, n.vel) } }, on)
+            play.postDelayed({ Audio.post { Audio.preview.noteOff(0x7D000100 + k) } }, off)
         }
     }
 
     private fun stopPlaying() {
         play.removeCallbacksAndMessages(null)
-        val e = result?.engine ?: return
-        Audio.post { for (k in 0 until 80) e.noteOff(0x7D000010 + k) }
+        Audio.post { Audio.preview.allOff() }
     }
 
     // ------------------------------------------------------------------ the picture
 
     @SuppressLint("ViewConstructor")
     private inner class ForgeView : PixelView(a) {
-        private val t0 = System.nanoTime()
-        private val title = Px.text(20f, Pal.CREAM, headFont = true, align = Paint.Align.LEFT)
-        private val step = Px.text(11f, 0xFFB8A6C0.toInt(), headFont = true, align = Paint.Align.LEFT)
-        private val head = Px.text(17f, Pal.CREAM, headFont = true)
-        private val body = Px.text(14f, 0xFFE8DCEA.toInt())
-        private val big = Px.text(64f, Pal.SUN, headFont = true)
-        private val small = Px.text(12f, Pal.CREAM, headFont = true)
-        private val bg = intArrayOf(0xFF15101B.toInt(), 0xFF18121E.toInt(), 0xFF1C1420.toInt(), 0xFF211621.toInt(), 0xFF291821.toInt(), 0xFF361B1F.toInt(), 0xFF4A201B.toInt(), 0xFF642917.toInt())
+        private val title = Px.text(13f, Snes.INK, headFont = true, align = Paint.Align.LEFT)
+        private val head = Px.text(16f, Snes.INK, headFont = true)
+        private val body = Px.text(14f, Snes.INK)
+        private val small = Px.text(12f, Snes.INK, headFont = true)
+        private val lcd = Px.text(40f, Snes.YELLOW, headFont = true)
 
-        override fun paint(c: Canvas) {
+        override fun paint(c: Canvas) { with(Snes) {
             val w = width.toFloat(); val h = height.toFloat()
-            val time = (System.nanoTime() - t0) / 1e9f
-            // the forge: dark up top, ember glow along the bottom, sparks drifting up
-            c.bands(0f, 0f, w, h, bg)
-            for (k in 0 until 36) {
-                val sx = ((k * 7919) % 1000) / 1000f * w
-                val sp = 0.25f + ((k * 131) % 100) / 160f
-                val life = ((time * sp + k * 0.137f) % 1f)
-                val y = h - life * h * 0.75f
-                val x = sx + kotlin.math.sin(time * 1.3f + k) * Px.dp(6f)
-                val col = if (life < 0.3f) 0xFFFFD27A.toInt() else if (life < 0.65f) 0xFFF08A3A.toInt() else 0xFF8A3A2A.toInt()
-                c.fill(x, y, x + u * 2, y + u * 2, col)
-            }
-            // the title, flickering like the key that opened it
-            c.fill(0f, 0f, w, Px.dp(44f), 0xCC0E0A12.toInt())
-            c.fill(0f, Px.dp(44f), w, Px.dp(44f) + u, 0xFF6A3A7A.toInt())
-            title.color = NoodlerKey.flicker(time)
-            c.drawText("NOODLE FORGE", Px.dp(16f), Px.dp(30f), title)
-            val stepText = when (st) {
-                St.READY -> "A new song from a quick idea"
-                St.COUNT -> "Step 1 of 3 · The beat"
-                St.IDEA -> "Step 2 of 3 · Your idea"
-                St.WORKING -> "Working it out…"
-                St.RESULT -> "Step 3 of 3 · The scale"
-                St.FAIL -> "That one didn't take"
-                St.DONE -> "Your song is set up"
-            }
-            c.drawText(stepText, Px.dp(16f) + title.measureText("NOODLE FORGE") + Px.dp(16f), Px.dp(29f), step)
-            // where you are in the set-up
+            val bh = barH.toFloat()
+            c.fill(0f, 0f, w, h, DEEP)
+            c.plate(0f, 0f, w, h, FACE)
+            // the title bar, like every panel's, with the steps along it
+            c.fill(u * 3, u * 3, w - u * 3, bh, FACE_D)
+            c.fill(u * 3, bh, w - u * 3, bh + u, PURPLE)
+            c.lamps(Px.dp(12f), bh / 2, Px.dp(8f))
+            title.textSize = Px.dp(14f)
+            c.drawText("NOODLE FORGE", Px.dp(68f), bh / 2 - (title.descent() + title.ascent()) / 2, title)
             val at = when (st) { St.READY -> 0; St.COUNT -> 1; St.IDEA, St.WORKING -> 2; St.RESULT, St.FAIL -> 3; St.DONE -> 4 }
-            val names = listOf("Beat", "Idea", "Scale")
-            val pw = Px.dp(62f); var px = w - Px.dp(64f) - pw * 3
+            val names = listOf("1 Beat", "2 Idea", "3 Scale")
+            val pw = Px.dp(76f); var px = w - Px.dp(64f) - pw * 3
             for ((i, nm) in names.withIndex()) {
                 val done = at > i + 1; val now = at == i + 1
-                c.fill(px, Px.dp(16f), px + pw - Px.dp(6f), Px.dp(30f), if (now) Pal.ORANGE else if (done) Pal.GREEN else 0xFF2E2430.toInt())
-                small.color = if (now || done) Pal.CREAM else 0xFF6A5A70.toInt(); small.textSize = Px.dp(10f)
-                c.textCentered((if (done) "✓ " else "") + nm, px + (pw - Px.dp(6f)) / 2, Px.dp(23f), small)
+                c.plate(px, Px.dp(9f), px + pw - Px.dp(6f), bh - Px.dp(7f), if (now) HI else FACE)
+                val lx = px + Px.dp(8f); val ly = (Px.dp(9f) + bh - Px.dp(7f)) / 2
+                c.fill(lx, ly - Px.dp(4f), lx + Px.dp(8f), ly + Px.dp(4f), INK)
+                c.fill(lx + u, ly - Px.dp(4f) + u, lx + Px.dp(8f) - u, ly + Px.dp(4f) - u, if (done) GREEN else if (now) YELLOW else SHADE)
+                small.textSize = Px.dp(11f); small.color = if (now || done) INK else DEEP; small.textAlign = Paint.Align.LEFT
+                c.drawText(nm, lx + Px.dp(13f), ly - (small.descent() + small.ascent()) / 2, small)
                 px += pw
             }
-            small.textSize = Px.dp(12f)
+            small.textAlign = Paint.Align.CENTER; small.color = INK
 
+            val top = bh + Px.dp(14f); val bottom = h - keysH - Px.dp(6f)
             val since = (System.nanoTime() - stSince) / 1e9f
             when (st) {
-                St.READY -> ready(c, w, h)
+                St.READY -> ready(c, w, top, bottom)
                 St.COUNT -> {
-                    if (Noodler.phase == 1) { post { if (st == St.COUNT) go(St.IDEA) } }
-                    count(c, w, h, since)
+                    if (Noodler.phase == 1) post { if (st == St.COUNT) go(St.IDEA) }
+                    count(c, w, top, bottom, since)
                 }
-                St.IDEA -> idea(c, w, h, since)
-                St.WORKING -> c.textCentered("Hammering it into shape…", w / 2, h / 2, head)
-                St.RESULT -> resultHead(c, w)
-                St.DONE -> done(c, w, h)
+                St.IDEA -> idea(c, w, top, bottom, since)
+                St.WORKING -> c.textCentered("Listening back carefully…", w / 2, (top + bottom) / 2, head)
+                St.RESULT -> resultPanel(c, w, top, bottom)
                 St.FAIL -> {
-                    c.textCentered("Hmm, that didn't take.", w / 2, Px.dp(86f), head)
-                    wrap(c, failWhy, w / 2, Px.dp(124f), minOf(w - Px.dp(48f), Px.dp(560f)), body, Px.dp(22f))
+                    c.textCentered("That one didn't take.", w / 2, top + Px.dp(30f), head)
+                    wrap(c, failWhy, w / 2, top + Px.dp(64f), minOf(w - Px.dp(64f), Px.dp(560f)), body, Px.dp(22f))
+                }
+                St.DONE -> {
+                    c.textCentered("Your song is set up.", w / 2, top + Px.dp(30f), head)
+                    if (doneText.size >= 3) {
+                        window(c, w / 2 - Px.dp(170f), top + Px.dp(56f), w / 2 + Px.dp(170f), top + Px.dp(116f))
+                        lcd.textSize = Px.dp(28f)
+                        c.textCentered(doneText[0] + "  ·  " + doneText[1], w / 2, top + Px.dp(86f), lcd)
+                        wrap(c, doneText[2], w / 2, top + Px.dp(150f), minOf(w - Px.dp(64f), Px.dp(560f)), body, Px.dp(22f))
+                    }
                 }
             }
+        } }
+
+        /** A dark backlit window, like the knobs' value windows. */
+        private fun window(c: Canvas, l: Float, t: Float, r: Float, b: Float) {
+            c.fill(l, t, r, b, Snes.INK)
+            c.fill(l + u * 2, t + u * 2, r - u * 2, b - u * 2, 0xFF1A1A24.toInt())
         }
 
-        private fun ready(c: Canvas, w: Float, h: Float) {
-            c.textCentered("Hum it, and we'll build the song around it.", w / 2, Px.dp(76f), head)
-            val steps = listOf("1" to "Tap, clap or knock\n4 steady beats", "2" to "Sing or play\nyour idea", "3" to "Pick the scale\nand keep it")
-            val bw = minOf(Px.dp(190f), (w - Px.dp(64f)) / 3f); val gap = Px.dp(14f)
+        private fun ready(c: Canvas, w: Float, top: Float, bottom: Float) { with(Snes) {
+            c.textCentered("Set up your song from a quick idea", w / 2, top + Px.dp(22f), head)
+            val steps = listOf("Knock or tap\n4 steady beats", "Sing or play\nyour idea", "Pick the scale\nand keep it")
+            val gap = Px.dp(14f)
+            val bw = minOf(Px.dp(200f), (w - Px.dp(64f) - gap * 2) / 3f)
             val total = bw * 3 + gap * 2
-            val top = Px.dp(104f); val bh = minOf(Px.dp(120f), h - top - Px.dp(84f))
+            val t = top + Px.dp(48f); val bh = minOf(Px.dp(118f), bottom - t - Px.dp(8f))
             for ((i, sp) in steps.withIndex()) {
                 val l = (w - total) / 2 + i * (bw + gap)
-                c.pixelBox(l, top, l + bw, top + bh, 0xFF2A2033.toInt(), border = 0xFF0C080F.toInt())
-                big.textSize = Px.dp(30f); big.color = Pal.SUN
-                c.textCentered(sp.first, l + bw / 2, top + bh * 0.3f, big)
-                body.textSize = Px.dp(13f)
-                sp.second.split('\n').forEachIndexed { j, line -> c.textCentered(line, l + bw / 2, top + bh * 0.62f + j * Px.dp(18f), body) }
+                c.plate(l, t, l + bw, t + bh, FACE)
+                val s = Px.dp(22f)
+                c.fill(l + bw / 2 - s / 2, t + Px.dp(12f), l + bw / 2 + s / 2, t + Px.dp(12f) + s, INK)
+                c.fill(l + bw / 2 - s / 2 + u, t + Px.dp(12f) + u, l + bw / 2 + s / 2 - u, t + Px.dp(12f) + s - u, ACCENTS[i])
+                small.color = HI; c.textCentered("${i + 1}", l + bw / 2, t + Px.dp(12f) + s / 2, small); small.color = INK
+                body.textSize = Px.dp(14f)
+                sp.split('\n').forEachIndexed { j, line -> c.textCentered(line, l + bw / 2, t + Px.dp(56f) + j * Px.dp(20f), body) }
             }
-            body.textSize = Px.dp(14f)
-        }
+        } }
 
-        private fun count(c: Canvas, w: Float, h: Float, since: Float) {
-            c.textCentered("Tap, clap or knock 4 steady beats", w / 2, Px.dp(76f), head)
+        private fun count(c: Canvas, w: Float, top: Float, bottom: Float, since: Float) { with(Snes) {
+            c.textCentered("Knock or tap 4 steady beats", w / 2, top + Px.dp(22f), head)
             val lit = Noodler.beatsLit
-            val sz = minOf(Px.dp(76f), (h - Px.dp(260f)).coerceAtLeast(Px.dp(44f))); val gap = Px.dp(18f)
-            val l0 = (w - sz * 4 - gap * 3) / 2; val top = Px.dp(108f)
+            val sz = minOf(Px.dp(72f), (bottom - top - Px.dp(130f)).coerceAtLeast(Px.dp(40f))); val gap = Px.dp(18f)
+            val l0 = (w - sz * 4 - gap * 3) / 2; val t = top + Px.dp(44f)
             for (k in 0 until 4) {
                 val l = l0 + k * (sz + gap)
-                val on = k < lit
-                if (on) c.fill(l - Px.dp(6f), top - Px.dp(6f), l + sz + Px.dp(6f), top + sz + Px.dp(6f), 0x55F4A259)
-                c.pixelBox(l, top, l + sz, top + sz, if (on) Pal.ORANGE else 0xFF2E2430.toInt(), border = 0xFF0C080F.toInt())
-                big.textSize = sz * 0.5f; big.color = if (on) Pal.CREAM else 0xFF5A4A60.toInt()
-                c.textCentered("${k + 1}", l + sz / 2, top + sz / 2, big)
+                c.plate(l, t, l + sz, t + sz, FACE)
+                val m = sz * 0.22f
+                c.fill(l + m, t + m, l + sz - m, t + sz - m, INK)
+                c.fill(l + m + u, t + m + u, l + sz - m - u, t + sz - m - u, if (k < lit) ACCENTS[k] else DEEP)
+                small.color = if (k < lit) HI else SHADE
+                c.textCentered("${k + 1}", l + sz / 2, t + sz / 2, small)
             }
+            small.color = INK
             val hint = Noodler.countHint.ifEmpty { quietHint(since) }
-            if (hint.isNotEmpty()) { small.color = Pal.SUN; c.textCentered(hint, w / 2, top + sz + Px.dp(26f), small) }
-            meter(c, w, h)
-        }
+            if (hint.isNotEmpty()) { body.color = PURPLE_D; c.textCentered(hint, w / 2, t + sz + Px.dp(28f), body); body.color = INK }
+            meter(c, w, bottom)
+        } }
 
-        private fun idea(c: Canvas, w: Float, h: Float, since: Float) {
-            c.textCentered("Now sing or play your idea. Tap Done when you've finished.", w / 2, Px.dp(76f), head)
-            // the tempo the count set, with its beat pulsing along
-            val bpm = Noodler.countBpm
-            val beat = 60000.0 / bpm.coerceAtLeast(1.0)
-            val pos = (Noodler.clockMs() - Noodler.downbeat) / beat
-            val inBar = Math.floorMod(kotlin.math.floor(pos).toInt(), 4)
-            val frac = (pos - kotlin.math.floor(pos)).toFloat()
-            val lx = Px.dp(28f); val top = Px.dp(104f)
-            small.color = 0xFFB8A6C0.toInt(); small.textAlign = Paint.Align.LEFT
-            c.drawText("TEMPO", lx, top + Px.dp(10f), small)
-            big.textSize = Px.dp(38f); big.color = Pal.SUN; big.textAlign = Paint.Align.LEFT
-            c.drawText("${Math.round(bpm)}", lx, top + Px.dp(52f), big)
-            small.color = Pal.CREAM
-            c.drawText("BPM", lx + big.measureText("${Math.round(bpm)}") + Px.dp(6f), top + Px.dp(52f), small)
-            big.textAlign = Paint.Align.CENTER; small.textAlign = Paint.Align.CENTER
-            for (k in 0 until 4) {
-                val bx = lx + k * Px.dp(22f)
-                val on = k == inBar && pos >= 0
-                val s = if (on) Px.dp(16f) * (1f - frac * 0.4f) else Px.dp(10f)
-                c.fill(bx + (Px.dp(16f) - s) / 2, top + Px.dp(70f) + (Px.dp(16f) - s) / 2, bx + (Px.dp(16f) + s) / 2, top + Px.dp(70f) + (Px.dp(16f) + s) / 2,
-                    if (on) (if (k == 0) Pal.ORANGE else Pal.SUN) else 0xFF4A3A50.toInt())
-            }
-            // the note it hears now
+        private fun idea(c: Canvas, w: Float, top: Float, bottom: Float, since: Float) { with(Snes) {
+            c.textCentered("Now sing or play your idea, then tap Done", w / 2, top + Px.dp(22f), head)
+            val t = top + Px.dp(42f)
+            // the tempo the knocks set, and the note heard right now
+            window(c, Px.dp(24f), t, Px.dp(150f), t + Px.dp(66f))
+            lcd.textSize = Px.dp(30f); lcd.color = YELLOW
+            c.textCentered("${Math.round(Noodler.countBpm)}", Px.dp(87f), t + Px.dp(28f), lcd)
+            small.color = SHADE; c.textCentered("BPM", Px.dp(87f), t + Px.dp(54f), small); small.color = INK
             val n = Noodler.noteNow
-            big.textSize = Px.dp(64f); big.color = if (n >= 0) Pal.SUN else 0xFF4A3A50.toInt()
-            c.textCentered(if (n >= 0) Theory.NOTE_NAMES[Math.floorMod(n, 12)] + (n / 12 - 1) else "…", w / 2, top + Px.dp(44f), big)
-            // the notes caught so far
-            val trail = Noodler.caught().takeLast(12)
-            val cw = Px.dp(36f); val tl = (w - trail.size * cw) / 2; val ty = top + Px.dp(96f)
+            window(c, w / 2 - Px.dp(70f), t, w / 2 + Px.dp(70f), t + Px.dp(66f))
+            lcd.textSize = Px.dp(40f); lcd.color = if (n >= 0) GREEN else DEEP
+            c.textCentered(if (n >= 0) Theory.NOTE_NAMES[Math.floorMod(n, 12)] else "–", w / 2, t + Px.dp(33f), lcd)
+            lcd.color = YELLOW
+            // the notes heard so far (a rough look; they're worked out properly when you tap Done)
+            val trail = Noodler.caught().takeLast(14)
+            val cw = Px.dp(32f); val tl = (w - trail.size * cw) / 2; val ty = t + Px.dp(80f)
             for ((i, m) in trail.withIndex()) {
-                c.pixelBox(tl + i * cw, ty, tl + i * cw + cw - Px.dp(4f), ty + Px.dp(28f), if (i == trail.size - 1) Pal.ORANGE_L else Pal.PAPER, shade = false)
-                small.color = Pal.BROWN_D
+                c.plate(tl + i * cw, ty, tl + i * cw + cw - Px.dp(4f), ty + Px.dp(28f), if (i == trail.size - 1) HI else FACE)
                 c.textCentered(Theory.NOTE_NAMES[Math.floorMod(m, 12)], tl + i * cw + (cw - Px.dp(4f)) / 2, ty + Px.dp(14f), small)
             }
-            if (trail.isEmpty()) { small.color = 0xFFB8A6C0.toInt(); c.textCentered("Notes you sing or play show up here", w / 2, ty + Px.dp(14f), small) }
+            if (trail.isEmpty()) { small.color = DEEP; c.textCentered("Notes you sing or play show up here", w / 2, ty + Px.dp(14f), small); small.color = INK }
             val hint = quietHint(since)
-            if (hint.isNotEmpty()) { small.color = Pal.SUN; c.textCentered(hint, w / 2, ty + Px.dp(46f), small) }
-            meter(c, w, h)
-        }
+            if (hint.isNotEmpty()) { body.color = PURPLE_D; c.textCentered(hint, w / 2, ty + Px.dp(50f), body); body.color = INK }
+            meter(c, w, bottom)
+        } }
 
-        private fun done(c: Canvas, w: Float, h: Float) {
-            head.color = Pal.SUN
-            c.textCentered("Your song is set up!", w / 2, Px.dp(92f), head)
-            head.color = Pal.CREAM
-            big.textSize = Px.dp(34f); big.color = Pal.SUN
-            if (doneText.size >= 2) {
-                c.textCentered(doneText[0] + "  ·  " + doneText[1], w / 2, Px.dp(146f), big)
-                body.textSize = Px.dp(14f)
-                c.textCentered(doneText[2], w / 2, Px.dp(190f), body)
-            }
-        }
-
-        private fun resultHead(c: Canvas, w: Float) {
+        private fun resultPanel(c: Canvas, w: Float, top: Float, bottom: Float) { with(Snes) {
             val r = result ?: return
             val (root, si) = r.cands[picked.coerceIn(0, r.cands.size - 1)]
-            head.color = Pal.SUN
-            c.textCentered("Forged!  ${r.bpm} BPM · ${Theory.NOTE_NAMES[root]} ${Theory.SCALES[si].name}", w / 2, Px.dp(64f), head)
-            head.color = Pal.CREAM
+            val pr = w * 0.36f - Px.dp(14f)
+            val l = Px.dp(20f)
+            window(c, l, top, pr, top + Px.dp(72f))
+            lcd.textSize = Px.dp(24f); lcd.color = YELLOW
+            c.textCentered("${r.bpm} BPM", (l + pr) / 2, top + Px.dp(22f), lcd)
+            lcd.textSize = Px.dp(18f); lcd.color = GREEN
+            textFitLcd(c, "${Theory.NOTE_NAMES[root]} ${Theory.SCALES[si].name}", (l + pr) / 2, top + Px.dp(52f), pr - l - Px.dp(12f))
+            lcd.color = YELLOW
             val tune = when {
-                r.cents <= -8 -> "You were ${-r.cents} cents flat, so your idea was tuned up. "
-                r.cents >= 8 -> "You were ${r.cents} cents sharp, so your idea was tuned down. "
+                r.cents <= -8 -> "You were ${-r.cents} cents flat, so your idea was tuned up."
+                r.cents >= 8 -> "You were ${r.cents} cents sharp, so your idea was tuned down."
                 else -> ""
             }
-            val how = if (r.sure) "Tap a scale's name to choose it, and play its notes to hear it."
-                else "Your idea fits more than one scale. Tap a name to choose it, and play its notes to hear it."
-            small.color = 0xFFE8DCEA.toInt()
-            c.textFit(tune + how, w / 2, Px.dp(86f), w - Px.dp(40f), small)
+            val how = (if (r.sure) "Your idea points to this scale. " else "Your idea fits ${r.cands.size} scales. ") +
+                "Play the notes beside a scale to hear it, and tap its name to choose it."
+            body.textSize = Px.dp(13f); body.textAlign = Paint.Align.LEFT
+            var y = top + Px.dp(96f)
+            if (tune.isNotEmpty()) y = wrap(c, tune, l, y, pr - l, body, Px.dp(18f)) + Px.dp(6f)
+            wrap(c, how, l, y, pr - l, body, Px.dp(18f))
+            body.textAlign = Paint.Align.CENTER; body.textSize = Px.dp(14f)
+        } }
+
+        private fun textFitLcd(c: Canvas, s: String, cx: Float, cy: Float, maxW: Float) {
+            while (lcd.measureText(s) > maxW && lcd.textSize > Px.dp(10f)) lcd.textSize -= Px.dp(1f)
+            c.textCentered(s, cx, cy, lcd)
         }
 
         /** After a few seconds of hearing nothing loud enough, say so. */
         private fun quietHint(since: Float): String =
-            if (since > 3f && Noodler.peakDb < Noodler.sensitivity) "Can't hear you yet. Get closer to the mic, or lower the threshold in Noodler's settings." else ""
+            if (since > 3f && Noodler.peakDb < Noodler.sensitivity) "Can't hear you yet. Get closer to the mic, or lower the threshold (hold NOODLE)." else ""
 
         /** How loud the mic is, with the line a sound has to cross to count. */
-        private fun meter(c: Canvas, w: Float, h: Float) {
-            val mw = minOf(Px.dp(320f), w * 0.5f); val l = (w - mw) / 2; val y = h - Px.dp(84f)
-            small.color = 0xFFB8A6C0.toInt(); small.textAlign = Paint.Align.RIGHT
+        private fun meter(c: Canvas, w: Float, bottom: Float) { with(Snes) {
+            val mw = minOf(Px.dp(300f), w * 0.45f); val l = (w - mw) / 2; val y = bottom - Px.dp(18f)
+            small.textAlign = Paint.Align.RIGHT
             c.drawText("MIC", l - Px.dp(8f), y + Px.dp(10f), small); small.textAlign = Paint.Align.CENTER
-            c.fill(l, y, l + mw, y + Px.dp(12f), 0xFF0C080F.toInt())
-            fun xOf(db: Float) = l + mw * ((db + 70f) / 64f).coerceIn(0f, 1f)
+            c.fill(l, y, l + mw, y + Px.dp(12f), INK)
+            fun xOf(db: Float) = l + u + (mw - u * 2) * ((db + 70f) / 64f).coerceIn(0f, 1f)
             val lv = Noodler.levelDb
-            c.fill(l + u, y + u, xOf(lv), y + Px.dp(12f) - u, if (lv > Noodler.sensitivity) Pal.GREEN_L else 0xFF5A6A40.toInt())
+            c.fill(l + u, y + u, xOf(lv), y + Px.dp(12f) - u, if (lv > Noodler.sensitivity) GREEN else DEEP)
             val tx = xOf(Noodler.sensitivity)
-            c.fill(tx - u / 2, y - Px.dp(3f), tx + u / 2, y + Px.dp(15f), Pal.CREAM)
-        }
+            c.fill(tx - u / 2, y - Px.dp(3f), tx + u / 2, y + Px.dp(15f), RED)
+        } }
 
-        private fun wrap(c: Canvas, s: String, cx: Float, top: Float, maxW: Float, p: Paint, lineH: Float) {
+        /** Word-wrapped text; returns the y below it. */
+        private fun wrap(c: Canvas, s: String, x: Float, top: Float, maxW: Float, p: Paint, lineH: Float): Float {
             var line = ""; var y = top
             for (word in s.split(' ')) {
                 val t = if (line.isEmpty()) word else "$line $word"
-                if (p.measureText(t) > maxW && line.isNotEmpty()) { c.drawText(line, cx, y, p); y += lineH; line = word } else line = t
+                if (p.measureText(t) > maxW && line.isNotEmpty()) { c.drawText(line, x, y, p); y += lineH; line = word } else line = t
             }
-            if (line.isNotEmpty()) c.drawText(line, cx, y, p)
+            if (line.isNotEmpty()) { c.drawText(line, x, y, p); y += lineH }
+            return y
         }
     }
 }

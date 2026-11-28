@@ -6,6 +6,7 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.view.MotionEvent
 import app.foxbox.seq.Theory
+import app.foxbox.ui.Snes.plate
 
 /**
  * Noodle Forge's scales: every scale the idea could be in, stacked. Each row's
@@ -22,9 +23,9 @@ class ScaleGrid(
     private val noteOn: (id: Int, note: Int) -> Unit,
     private val noteOff: (id: Int) -> Unit,
 ) : PixelView(c) {
-    private val nameP = Px.text(12f, Pal.BROWN_D, headFont = true)
-    private val noteP = Px.text(12f, Pal.BROWN_D, headFont = true)
-    private val rowH get() = Px.dp(46f)
+    private val nameP = Px.text(12f, Snes.INK, headFont = true)
+    private val noteP = Px.text(12f, Snes.INK, headFont = true)
+    private val rowH get() = Px.dp(42f)
     private val nameW get() = minOf(Px.dp(150f), width * 0.36f)
     private val gap get() = Px.dp(6f)
     var picked = initial; private set
@@ -43,27 +44,30 @@ class ScaleGrid(
     }
 
     override fun paint(c: Canvas) {
-        val cw = cellW()
-        for ((i, pair) in cands.withIndex()) {
-            val (root, si) = pair
-            val sc = Theory.SCALES[si]
-            val y = i * rowH
-            val sel = i == picked
-            // the choice button
-            val face = if (sel) Pal.GREEN else if (nameDown == i) Pal.SUN else Pal.CREAM
-            c.pixelBox(u, y + Px.dp(4f), nameW - u, y + rowH - Px.dp(4f), face)
-            nameP.color = if (sel) Pal.CREAM else Pal.BROWN_D
-            c.textFit((if (sel) "✓ " else "") + "${Theory.NOTE_NAMES[root]} ${sc.name}", nameW / 2, y + rowH / 2, nameW - Px.dp(14f), nameP)
-            // its notes, playable, low to high (and the root again an octave up)
-            for (k in 0..sc.steps.size) {
-                val pc = (root + (if (k < sc.steps.size) sc.steps[k] else 0)) % 12
-                val l = nameW + gap + cw * k; val r = l + cw - Px.dp(3f)
-                val down = held.any { it == i * 8 + k }
-                val lit = pc in sung
-                val col = if (down) Pal.SUN else if (lit) Pal.ORANGE_L else Pal.PAPER
-                c.pixelBox(l, y + Px.dp(4f), r, y + rowH - Px.dp(4f), col, shade = !down)
-                noteP.color = if (lit || down) Pal.BROWN_D else Pal.BROWN_L
-                c.textFit(Theory.NOTE_NAMES[pc], (l + r) / 2, y + rowH / 2, r - l - Px.dp(2f), noteP)
+        with(Snes) {
+            val cw = cellW()
+            for ((i, pair) in cands.withIndex()) {
+                val (root, si) = pair
+                val sc = Theory.SCALES[si]
+                val y = i * rowH
+                val sel = i == picked
+                // the choice: a key with a lamp that lights green when chosen
+                c.plate(0f, y + Px.dp(3f), nameW - u * 2, y + rowH - Px.dp(3f), if (nameDown == i) HI else if (sel) FACE_D else FACE)
+                val s = Px.dp(9f); val lx = Px.dp(9f); val cy = y + rowH / 2
+                c.fill(lx, cy - s / 2, lx + s, cy + s / 2, INK)
+                c.fill(lx + u * 0.6f, cy - s / 2 + u * 0.6f, lx + s - u * 0.6f, cy + s / 2 - u * 0.6f, if (sel) GREEN else SHADE)
+                nameP.color = if (sel) PURPLE_D else INK
+                c.textFit("${Theory.NOTE_NAMES[root]} ${sc.name}", Px.dp(22f) + (nameW - Px.dp(30f)) / 2, cy, nameW - Px.dp(32f), nameP)
+                // its notes, low to high (and the root again an octave up): play them to hear it
+                for (k in 0..sc.steps.size) {
+                    val pc = (root + (if (k < sc.steps.size) sc.steps[k] else 0)) % 12
+                    val l = nameW + gap + cw * k; val r = l + cw - Px.dp(3f)
+                    val down = held.any { it == i * 8 + k }
+                    val lit = pc in sung
+                    c.plate(l, y + Px.dp(5f), r, y + rowH - Px.dp(5f), if (down) HI else if (lit) YELLOW else FACE)
+                    noteP.color = INK
+                    c.textFit(Theory.NOTE_NAMES[pc], (l + r) / 2, cy, r - l - Px.dp(6f), noteP)
+                }
             }
         }
     }

@@ -6,6 +6,7 @@ import android.os.Looper
 import app.foxbox.audio.Analysis
 import app.foxbox.audio.Audio
 import app.foxbox.audio.Engine
+import app.foxbox.audio.NoteSegmenter
 import app.foxbox.audio.PitchTrack
 import app.foxbox.audio.SR
 import app.foxbox.seq.Clip
@@ -108,6 +109,11 @@ object Noodler {
     private var runMode = Mode.CAPTURE
     private var target: Engine = Audio.gusts
 
+    // every look the listener takes (about every 10 ms), for working out the notes carefully at the end
+    private const val MAXF = 36000
+    private val fT = DoubleArray(MAXF); private val fM = FloatArray(MAXF); private val fDb = FloatArray(MAXF)
+    @Volatile private var fN = 0
+
     private class N(var note: Int, val startMs: Double, var endMs: Double, val vel: Float) { var pSum = 0.0; var pW = 0.0 }
     private val notes = ArrayList<N>()
     private val onsets = ArrayList<Double>()
@@ -126,7 +132,7 @@ object Noodler {
         if (active) return
         runMode = asMode; target = targetEngine()
         notes.clear(); onsets.clear(); phase = 0; beatMs = 0.0; downbeatMs = 0.0
-        beatsLit = 0; countHint = ""; levelDb = -120f; peakDb = -120f
+        beatsLit = 0; countHint = ""; levelDb = -120f; peakDb = -120f; fN = 0
         t0 = System.nanoTime()
         Audio.noodleSource = input
         Studio.noodlerListening = true
@@ -209,18 +215,16 @@ object Noodler {
                     n = if (runMode == Mode.FORGE || !snap) Math.round(m) else PitchTrack.nearestInScale(m, mask)
                 }
             }
-            // a new note has to hold for two looks (about 20 ms) before it counts
+            // remember the look (the notes are worked out properly from these at the end)
+            if (fN < MAXF) { fT[fN] = now; fM[fN] = raw; fDb[fN] = db; fN++ }
+            // on screen: a new note has to hold a moment before it shows (live play answers quicker)
             if (n >= 0 && n == cand) candFrames++ else { cand = n; candFrames = if (n >= 0) 1 else 0 }
             if (n >= 0) silentFrames = 0 else silentFrames++
-            if (candFrames >= 2 && cand != cur) {
+            if (candFrames >= (if (runMode == Mode.LIVE) 3 else 6) && cand != cur) {
                 if (cur >= 0) noteOff(cur, now)
                 cur = cand; curStart = now
                 noteOn(cur, now, ((db + 50f) / 40f).coerceIn(0.35f, 1f))
-            } else if (cur >= 0 && silentFrames >= 3) { noteOff(cur, now); cur = -1 }
-            // remember the note's true pitch, to tune the whole idea at the end
-            if (cur >= 0 && !raw.isNaN() && runMode != Mode.LIVE) synchronized(notes) {
-                notes.lastOrNull()?.let { if (it.note == cur) { it.pSum += raw; it.pW += 1.0 } }
-            }
+            } else if (cur >= 0 && silentFrames >= 6) { noteOff(cur, now); cur = -1 }
             noteNow = cur
             sleep()
         }
@@ -290,33 +294,25 @@ object Noodler {
      * notes. Returns a few words saying what was done, or "" if it was already in tune.
      */
     private var lastCents = 0
-    private fun retune(list: List<N>, mask: Int?): String {
-        lastCents = 0
-        var sx = 0.0; var sy = 0.0
-        for (nn in list) if (nn.pW > 0) {
-            val p = nn.pSum / nn.pW; val f = p - Math.round(p)
-            val w = (nn.endMs - nn.startMs).coerceAtLeast(40.0)
-            sx += w * cos(2 * PI * f); sy += w * sin(2 * PI * f)
-        }
-        if (sx == 0.0 && sy == 0.0) return ""
-        val off = atan2(sy, sx) / (2 * PI)
-        for (nn in list) if (nn.pW > 0) {
-            val p = (nn.pSum / nn.pW - off).toFloat()
-            nn.note = if (mask != null) PitchTrack.nearestInScale(p, mask) else Math.round(p)
-        }
-        val cents = Math.round(off * 100).toInt()
-        lastCents = cents
-        return when {
-            cents <= -8 -> " You were about ${-cents} cents flat, so it was tuned up to fit."
-            cents >= 8 -> " You were about $cents cents sharp, so it was tuned down to fit."
-            else -> ""
-        }
+    /** Work out the notes from the looks taken since `fromMs`, carefully, and make them the notes. */
+    private fun settleNotes(fromMs: Double, mask: Int) {
+        val n = fN
+        var s = 0; while (s < n && fT[s] < fromMs) s++
+        val r = NoteSegmenter.segment(fT.copyOfRange(s, n), fM.copyOfRange(s, n), fDb.copyOfRange(s, n), n - s, mask)
+        lastCents = r.cents
+        synchronized(notes) { notes.clear(); for (x in r.notes) notes += N(x.note, x.startMs, x.endMs, x.vel) }
+    }
+    private fun tunedWords() = when {
+        lastCents <= -8 -> " You were about ${-lastCents} cents flat, so it was tuned up to fit."
+        lastCents >= 8 -> " You were about $lastCents cents sharp, so it was tuned down to fit."
+        else -> ""
     }
 
     private fun finishCapture() {
+        settleNotes(0.0, if (snap) Audio.scaleMask else 0)
         val list = synchronized(notes) { notes.toList() }
         if (list.isEmpty()) { val why = nothingHeard(); main.post { onCaptured?.invoke(null, "Didn't catch any notes. $why") }; return }
-        val tuned = retune(list, if (snap) Audio.scaleMask else null)
+        val tuned = tunedWords()
         val bpm = Studio.project.bpm.toDouble()
         val msPerTick = 60000.0 / bpm / Ticks.PPQ
         // start on the beat the first note fell in
@@ -342,10 +338,10 @@ object Noodler {
     private fun finishForge() {
         fun fail(why: String) { main.post { onForged?.invoke(null, why) } }
         if (phase == 0 || beatMs <= 0.0) return fail("The count didn't land. Tap 4 steady beats first, then your idea.")
-        val all = synchronized(notes) { notes.filter { it.startMs >= downbeatMs - beatMs * 0.25 && it.endMs - it.startMs > 40 }.toList() }
+        settleNotes(downbeatMs - beatMs * 0.5, 0)
+        val all = synchronized(notes) { notes.toList() }
         if (all.isEmpty()) return fail("Got the beat, but no notes after it. " + nothingHeard())
         val bpm = Math.round(60000.0 / beatMs).toInt().coerceIn(40, 220)
-        retune(all, null)
         val cents = lastCents
         // the key: which pitch classes the idea dwelt on
         val chroma = DoubleArray(12)
@@ -359,7 +355,10 @@ object Noodler {
         val msPerTick = 60000.0 / bpm / Ticks.PPQ
         synchronized(notes) { notes.clear(); notes.addAll(all) }
         val (cn, len) = clipNotes(startMs, msPerTick, Ticks.STEP)
-        val sung = all.map { Math.floorMod(it.note, 12) }.toSet()
+        // matching scales ignores stray notes (a pitch class held for under 6% of the idea)
+        val share = DoubleArray(12); for (nn in all) share[Math.floorMod(nn.note, 12)] += nn.endMs - nn.startMs
+        val tot = share.sum().coerceAtLeast(1.0)
+        val sung = (0 until 12).filter { share[it] / tot >= 0.06 }.toSet().ifEmpty { all.map { Math.floorMod(it.note, 12) }.toSet() }
         val sure = sung.size >= 7 && conf >= 0.3f
         // the guess first, then every other scale that holds all the notes
         val cands = (listOf(root to scale) + candidates(all)).distinct().filter { (r, si) -> sung.all { pc -> Theory.SCALES[si].steps.any { (r + it) % 12 == pc } } }
@@ -376,7 +375,7 @@ object Noodler {
     private fun candidates(list: List<N>): List<Pair<Int, Int>> {
         val dur = DoubleArray(12)
         for (nn in list) dur[Math.floorMod(nn.note, 12)] += (nn.endMs - nn.startMs).coerceAtLeast(60.0)
-        val sung = (0 until 12).filter { dur[it] > 0 }
+        val sung = (0 until 12).filter { dur[it] / dur.sum().coerceAtLeast(1.0) >= 0.06 }
         val firstPc = list.firstOrNull()?.let { Math.floorMod(it.note, 12) } ?: -1
         val lastPc = list.lastOrNull()?.let { Math.floorMod(it.note, 12) } ?: -1
         val total = dur.sum().coerceAtLeast(1.0)

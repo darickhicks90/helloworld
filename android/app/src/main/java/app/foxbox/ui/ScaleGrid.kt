@@ -17,6 +17,7 @@ class ScaleGrid(
     c: Context,
     private val cands: List<Pair<Int, Int>>,
     private val sung: Set<Int>,
+    initial: Int = -1,
     private val onPick: (Int) -> Unit,
     private val noteOn: (id: Int, note: Int) -> Unit,
     private val noteOff: (id: Int) -> Unit,
@@ -26,7 +27,7 @@ class ScaleGrid(
     private val rowH get() = Px.dp(46f)
     private val nameW get() = minOf(Px.dp(150f), width * 0.36f)
     private val gap get() = Px.dp(6f)
-    var picked = -1; private set
+    var picked = initial; private set
     // which key each finger is holding: row*8+k, or -1
     private val held = IntArray(16) { -1 }
     private var nameDown = -1

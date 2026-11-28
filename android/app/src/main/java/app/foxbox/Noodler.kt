@@ -70,11 +70,39 @@ object Noodler {
     /** Forge: 0 counting in, 1 hearing the idea. */
     @Volatile var phase = 0; private set
     var onChange: (() -> Unit)? = null
-    /**
-     * Noodle Forge couldn't tell the key from so few notes: the activity shows the
-     * song set-up wizard with these candidates (root, scale index), best first.
-     */
-    var onChooseScale: ((candidates: List<Pair<Int, Int>>, idea: Clip?, sung: Set<Int>) -> Unit)? = null
+    /** How loud the input is right now, and the loudest it has been this time (dBFS). */
+    @Volatile var levelDb = -120f; private set
+    @Volatile var peakDb = -120f; private set
+    /** Forge's count-in: how many steady beats in a row it has heard so far (0..4). */
+    @Volatile var beatsLit = 0; private set
+    /** Forge's count-in: a word about the count (e.g. that it wasn't steady), or "". */
+    @Volatile var countHint = ""; private set
+    /** Forge: the tempo the count set (0 until it has). */
+    val countBpm get() = if (beatMs > 0) 60000.0 / beatMs else 0.0
+    /** Forge: when the idea's first bar starts, in the listener's clock (ms), and that clock now. */
+    val downbeat get() = downbeatMs
+    fun clockMs() = (System.nanoTime() - t0) / 1e6
+    @Volatile private var t0 = System.nanoTime()
+
+    /** The notes caught so far (newest last), for the screen. */
+    fun caught(): List<Int> = synchronized(notes) { notes.filter { it.endMs - it.startMs > 40 || it === notes.last() }.map { it.note } }
+
+    /** What Noodle Forge made of the count and the idea. Nothing is changed until it's kept. */
+    class ForgeResult(
+        val bpm: Int, val notes: List<Clip.Note>, val lengthTicks: Int,
+        /** Scales the idea could be in (root, scale index), the best guess first. */
+        val cands: List<Pair<Int, Int>>,
+        val sung: Set<Int>,
+        /** Every note of a scale was there and the key was clear. */
+        val sure: Boolean,
+        /** How out of tune it was, in cents (+ sharp, - flat); it has been put right. */
+        val cents: Int,
+        val engine: Engine,
+    )
+    /** Forge finished: the result, or null with a reason. On the main thread. */
+    var onForged: ((ForgeResult?, String) -> Unit)? = null
+    /** Capture finished: the clip (or null) and what to tell the person. On the main thread. */
+    var onCaptured: ((Clip?, String) -> Unit)? = null
 
     private var thread: Thread? = null
     private var runMode = Mode.CAPTURE
@@ -93,19 +121,33 @@ object Noodler {
         return if (id.isNotEmpty() && Studio.isOpen && id in Studio.project.blocks) Audio.engine(id) else Studio.melodic
     }
 
-    fun start() {
+    /** Start listening, in `as` mode (default: the mode chosen in settings). */
+    fun start(asMode: Mode = mode) {
         if (active) return
-        runMode = mode; target = targetEngine()
-        notes.clear(); onsets.clear(); phase = 0; beatMs = 0.0
+        runMode = asMode; target = targetEngine()
+        notes.clear(); onsets.clear(); phase = 0; beatMs = 0.0; downbeatMs = 0.0
+        beatsLit = 0; countHint = ""; levelDb = -120f; peakDb = -120f
+        t0 = System.nanoTime()
         Audio.noodleSource = input
         Studio.noodlerListening = true
         active = true
-        Studio.message(when (runMode) {
-            Mode.CAPTURE -> "Noodler: sing or play your idea for ${target.title}. Tap Noodler again when you're done."
-            Mode.LIVE -> "Noodler live: ${target.title} follows your voice. Tap Noodler to stop."
-            Mode.FORGE -> "Noodle Forge: count in by clapping or tapping 4 even beats, then sing or play your idea. Tap Noodler when you're done."
-        })
+        when (runMode) {
+            Mode.CAPTURE -> Studio.message("Noodler is listening: sing or play your idea, one note at a time. Tap NOODLE again to finish.")
+            Mode.LIVE -> Studio.message("Noodler live: ${target.title} follows your voice. Tap NOODLE to stop.")
+            Mode.FORGE -> {}
+        }
         thread = Thread({ listen() }, "Noodler").apply { start() }
+        changed()
+    }
+
+    /** Stop listening and throw away what was heard. */
+    fun cancel() {
+        if (!active) return
+        active = false
+        thread?.join(500); thread = null
+        Audio.noodleSource = -1
+        Studio.noodlerListening = false
+        noteNow = -1
         changed()
     }
 
@@ -131,7 +173,6 @@ object Noodler {
     private fun listen() {
         val tracker = PitchTrack(2048)
         val win = FloatArray(1024)
-        val t0 = System.nanoTime()
         var cand = -1; var candFrames = 0
         var cur = -1; var curStart = 0.0; var silentFrames = 0
         var envFloor = 0f; var lastOnset = -1e9
@@ -147,6 +188,7 @@ object Noodler {
             var e = 0f; for (v in win) e += v * v
             val rms = sqrt(e / win.size)
             val db = if (rms > 1e-6f) 20f * log10(rms) else -120f
+            levelDb = db; if (db > peakDb) peakDb = db
             // Forge's count-in: sudden jumps in loudness are its beats
             if (runMode == Mode.FORGE && phase == 0) {
                 if (db > sensitivity && db - envFloor > 9f && now - lastOnset > 160) { lastOnset = now; onsets += now; checkCount() }
@@ -197,17 +239,32 @@ object Noodler {
         else synchronized(notes) { notes.lastOrNull { it.note == note }?.endMs = ms }
     }
 
-    /** Four claps in a steady rhythm set the beat. */
+    /** Four claps in a steady rhythm set the beat. Lights one more beat each time; uneven starts it over. */
     private fun checkCount() {
-        if (onsets.size < 4) { Studio.message("Count in: ${onsets.size}…"); return }
-        val last = onsets.takeLast(4)
-        val gaps = (1..3).map { last[it] - last[it - 1] }
-        val mean = gaps.average()
-        if (mean in 300.0..1500.0 && gaps.all { kotlin.math.abs(it - mean) < mean * 0.18 }) {
+        // the run of steady beats at the end: each gap within 18% of the run's first gap
+        val o = onsets
+        var run = 1
+        if (o.size >= 2) {
+            val g0 = o[o.size - 1] - o[o.size - 2]
+            if (g0 in 250.0..1600.0) {
+                run = 2
+                var i = o.size - 2
+                while (run < 4 && i >= 1) {
+                    val g = o[i] - o[i - 1]
+                    if (kotlin.math.abs(g - g0) < g0 * 0.18) { run++; i-- } else break
+                }
+            }
+        }
+        val prev = beatsLit
+        countHint = if (prev >= 2 && run <= prev) "Not quite steady. Counting again from here." else ""
+        beatsLit = run
+        if (run >= 4) {
+            val last = o.takeLast(4)
+            val mean = (last[3] - last[0]) / 3.0
             beatMs = mean; downbeatMs = last[3] + mean; phase = 1
-            Studio.message("Got it: about ${(60000 / mean).toInt()} BPM. Now your idea…")
-            changed()
-        } else Studio.message("Count in: keep the 4 beats even…")
+            countHint = ""
+        }
+        changed()
     }
 
     // ------------------------------------------------------------------ turning it into a clip
@@ -232,7 +289,9 @@ object Noodler {
      * true pitch, weighted by how long it was held) and move the whole idea onto the right
      * notes. Returns a few words saying what was done, or "" if it was already in tune.
      */
+    private var lastCents = 0
     private fun retune(list: List<N>, mask: Int?): String {
+        lastCents = 0
         var sx = 0.0; var sy = 0.0
         for (nn in list) if (nn.pW > 0) {
             val p = nn.pSum / nn.pW; val f = p - Math.round(p)
@@ -246,6 +305,7 @@ object Noodler {
             nn.note = if (mask != null) PitchTrack.nearestInScale(p, mask) else Math.round(p)
         }
         val cents = Math.round(off * 100).toInt()
+        lastCents = cents
         return when {
             cents <= -8 -> " You were about ${-cents} cents flat, so it was tuned up to fit."
             cents >= 8 -> " You were about $cents cents sharp, so it was tuned down to fit."
@@ -255,7 +315,7 @@ object Noodler {
 
     private fun finishCapture() {
         val list = synchronized(notes) { notes.toList() }
-        if (list.isEmpty()) return Studio.message("Noodler didn't hear any notes. Try a little louder, or raise the sensitivity (hold Noodler).")
+        if (list.isEmpty()) { val why = nothingHeard(); main.post { onCaptured?.invoke(null, "Didn't catch any notes. $why") }; return }
         val tuned = retune(list, if (snap) Audio.scaleMask else null)
         val bpm = Studio.project.bpm.toDouble()
         val msPerTick = 60000.0 / bpm / Ticks.PPQ
@@ -264,39 +324,48 @@ object Noodler {
         val grid = when (quantize) { 1 -> Ticks.STEP; 2 -> Ticks.STEP * 2; else -> 1 }
         val (cn, len) = clipNotes(first - 20.0, msPerTick, grid)
         main.post {
-            Studio.addNoodleClip(target, cn, len)?.let { Studio.message("Noodled ${cn.size} notes into ${it.name}.$tuned") }
+            val clip = Studio.addNoodleClip(target, cn, len)
+            onCaptured?.invoke(clip, if (clip != null) "Caught ${cn.size} notes. They're in the clip \"${clip.name}\" on ${target.title}.$tuned" else "Caught ${cn.size} notes, but ${target.title} has no room for another clip. Delete one and try again.")
+        }
+    }
+
+    /** Why nothing was caught, in words that help: was it too quiet? */
+    fun nothingHeard(): String {
+        val pk = peakDb
+        return when {
+            pk < -90f -> "The input was silent the whole time. Check that the right input is chosen (hold NOODLE) and that 5 Eye Yeti may use the microphone."
+            pk < sensitivity -> "The loudest sound was ${pk.toInt()} dB, but Noodler only listens to sounds above ${sensitivity.toInt()} dB. Sing closer, or lower the threshold (hold NOODLE)."
+            else -> "It heard sound but no clear notes. Sing or play one note at a time, held steady, without chords or lots of noise."
         }
     }
 
     private fun finishForge() {
-        if (phase == 0 || beatMs <= 0.0) return Studio.message("Noodle Forge needs a steady count of 4 first. Nothing was changed.")
-        val list = synchronized(notes) { notes.filter { it.startMs >= downbeatMs - beatMs * 0.25 }.toList() }
-        if (list.isEmpty()) return Studio.message("Noodle Forge heard the count but no idea. Nothing was changed.")
-        val bpm = (60000.0 / beatMs).toFloat().coerceIn(40f, 220f)
-        val tuned = retune(list, null)
+        fun fail(why: String) { main.post { onForged?.invoke(null, why) } }
+        if (phase == 0 || beatMs <= 0.0) return fail("The count didn't land. Tap 4 steady beats first, then your idea.")
+        val all = synchronized(notes) { notes.filter { it.startMs >= downbeatMs - beatMs * 0.25 && it.endMs - it.startMs > 40 }.toList() }
+        if (all.isEmpty()) return fail("Got the beat, but no notes after it. " + nothingHeard())
+        val bpm = Math.round(60000.0 / beatMs).toInt().coerceIn(40, 220)
+        retune(all, null)
+        val cents = lastCents
         // the key: which pitch classes the idea dwelt on
         val chroma = DoubleArray(12)
-        for (nn in list) chroma[Math.floorMod(nn.note, 12)] += (nn.endMs - nn.startMs).coerceAtLeast(60.0)
+        for (nn in all) chroma[Math.floorMod(nn.note, 12)] += (nn.endMs - nn.startMs).coerceAtLeast(60.0)
         val (root, minor, conf) = Analysis.key(chroma)
         val scale = Theory.SCALES.indexOfFirst { it.name == if (minor) "Minor" else "Major" }.coerceAtLeast(0)
+        // start the clip on the bar the idea started in
+        val barMs = beatMs * 4
+        var startMs = downbeatMs
+        while (all.first().startMs - startMs > barMs - beatMs * 0.25) startMs += barMs
         val msPerTick = 60000.0 / bpm / Ticks.PPQ
-        synchronized(notes) { notes.clear(); notes.addAll(list) }
-        val (cn, len) = clipNotes(downbeatMs, msPerTick, Ticks.STEP)
-        val sung = list.map { Math.floorMod(it.note, 12) }.toSet()
-        // not every note of a scale was sung (or played), so more than one scale fits: let the person choose
-        val unsure = sung.size < 7 || conf < 0.3f
-        val cands = if (unsure) candidates(list) else emptyList()
-        main.post {
-            Studio.setBpm(bpm.let { Math.round(it).toFloat() })
-            val clip = Studio.addNoodleClip(target, cn, len)
-            if (unsure && cands.isNotEmpty() && onChooseScale != null) {
-                onChooseScale?.invoke(cands, clip, sung)
-                Studio.message("Noodle Forge: ${Math.round(bpm)} BPM. Now choose the scale.$tuned")
-            } else {
-                Studio.setKey(root = root, scale = scale)
-                Studio.message("Noodle Forge: ${Math.round(bpm)} BPM, ${Theory.NOTE_NAMES[root]} ${Theory.SCALES[scale].name}. Your idea is on ${target.title}.$tuned")
-            }
-        }
+        synchronized(notes) { notes.clear(); notes.addAll(all) }
+        val (cn, len) = clipNotes(startMs, msPerTick, Ticks.STEP)
+        val sung = all.map { Math.floorMod(it.note, 12) }.toSet()
+        val sure = sung.size >= 7 && conf >= 0.3f
+        // the guess first, then every other scale that holds all the notes
+        val cands = (listOf(root to scale) + candidates(all)).distinct().filter { (r, si) -> sung.all { pc -> Theory.SCALES[si].steps.any { (r + it) % 12 == pc } } }
+            .ifEmpty { listOf(root to scale) }
+        val res = ForgeResult(bpm, cn, len, if (sure) listOf(root to scale) + cands.drop(1).take(5) else cands, sung, sure, cents, target)
+        main.post { onForged?.invoke(res, "") }
     }
 
     /**

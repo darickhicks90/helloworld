@@ -71,7 +71,7 @@ class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost, app.foxbox.ui
         app.foxbox.data.WraithPresets.init(this)
         Noodler.init(this)
         Noodler.onChange = { noodleKey?.invalidate() }
-        Noodler.onChooseScale = { cands, idea, sung -> runOnUiThread { songWizard(cands, idea, sung) } }
+        Noodler.onCaptured = { clip, msg -> noodlerCaught(clip, msg) }
         applyMetronomePrefs()
         app.foxbox.data.Banks.init(this)
         Store.init(this)
@@ -410,8 +410,7 @@ class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost, app.foxbox.ui
         when (Noodler.mode) {
             Noodler.Mode.LIVE -> ask("Headphones needed", "Live Noodler plays ${Noodler.targetEngine().title} as you sing. Headphones (or keeping the mic well away from the instrument's sound) are needed for it to work properly, or it will hear the synth and follow itself.",
                 "Cancel" to null, "Headphones on: start" to { Noodler.start() })
-            Noodler.Mode.FORGE -> ask("Noodle Forge", "Noodle Forge will change this project's tempo and scale to match your count and your idea. Do you want to do that?",
-                "No" to null, "Yes, forge it" to { Noodler.start() })
+            Noodler.Mode.FORGE -> app.foxbox.ui.NoodleForge(this).show()
             else -> Noodler.start()
         }
     }
@@ -425,6 +424,7 @@ class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost, app.foxbox.ui
             row("Mode: ${Noodler.mode.label}", app.foxbox.ui.Snes.PURPLE) {
                 choose("Noodler mode", Noodler.Mode.entries.map { it.label }, Noodler.mode.ordinal) { i -> Noodler.mode = Noodler.Mode.entries[i]; rebuild() }
             }
+            row("⚒ Open Noodle Forge", app.foxbox.ui.Pal.ROSE) { d.dismiss(); withMic { app.foxbox.ui.NoodleForge(this).show() } }
             val blocks = Studio.project.blocks.filter { app.foxbox.blocks.Blocks.get(it)?.melodic == true }
             row("Block: " + (if (Noodler.block.isEmpty()) "the one in front (${Noodler.targetEngine().title})" else Audio.engine(Noodler.block).title), app.foxbox.ui.Pal.ORANGE) {
                 choose("Noodle into which block?", listOf("The melodic block in front") + blocks.map { Audio.engine(it).title }) { i -> Noodler.block = if (i == 0) "" else blocks[i - 1]; rebuild() }
@@ -436,7 +436,7 @@ class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost, app.foxbox.ui
             row("Capture grid: " + listOf("off (as played)", "1/16 notes", "1/8 notes")[Noodler.quantize], app.foxbox.ui.Pal.GREEN) {
                 choose("Line captured notes up to", listOf("Off (as played)", "1/16 notes", "1/8 notes"), Noodler.quantize) { i -> Noodler.quantize = i; rebuild() }
             }
-            box.addView(app.foxbox.ui.Stepper(this, "Sensitivity (hears sounds above)", 200, { "${Noodler.sensitivity.toInt()} dB" }) { Noodler.sensitivity = (Noodler.sensitivity + it * 3f).coerceIn(-66f, -18f) },
+            box.addView(app.foxbox.ui.Stepper(this, "Listens to sounds louder than", 200, { "${Noodler.sensitivity.toInt()} dB" }) { Noodler.sensitivity = (Noodler.sensitivity + it * 3f).coerceIn(-66f, -18f) },
                 android.widget.LinearLayout.LayoutParams(-1, Px.dp(44)).apply { bottomMargin = Px.dp(4) })
             box.addView(app.foxbox.ui.Stepper(this, "Octave", 200, { (if (Noodler.octave > 0) "+" else "") + Noodler.octave }) { Noodler.octave = Noodler.octave + it },
                 android.widget.LinearLayout.LayoutParams(-1, Px.dp(44)))
@@ -452,26 +452,12 @@ class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost, app.foxbox.ui
      * so it lists the scales they fit. Tap one to try it (it plays the scale and then
      * your idea in it, and the chords and strum follow it), then keep the one you like.
      */
-    private fun songWizard(cands: List<Pair<Int, Int>>, idea: app.foxbox.seq.Clip?, sung: Set<Int>) {
-        val names = app.foxbox.seq.Theory.NOTE_NAMES; val scales = app.foxbox.seq.Theory.SCALES
-        val d = SnesDialog(this, "Noodle Forge")
-        d.message("Your idea used " + sung.sorted().joinToString(", ") { names[it] } + " (${sung.size} of a scale's 7 notes), so it could be in any of these scales. " +
-            "Play the notes beside a scale to hear it, and tap a scale's name to choose it for the song.")
-        // every possible scale stacked: its name is the choice, its notes beside it are playable
-        val e = Noodler.targetEngine()
-        val grid = app.foxbox.ui.ScaleGrid(this, cands, sung,
-            onPick = { i ->
-                val (root, si) = cands[i]
-                Studio.setKey(root = root, scale = si)
-                Studio.message("The song is in ${names[root]} ${scales[si].name}")
-            },
-            noteOn = { id, n -> Audio.post { e.noteOn(0x7D000040 + id, n, 0.75f) } },
-            noteOff = { id -> Audio.post { e.noteOff(0x7D000040 + id) } })
-        d.view(grid)
-        d.fullScreen()
-        d.onDismiss { stopAudition(); Audio.post { for (k in 0 until 16) e.noteOff(0x7D000040 + k) } }
-        if (idea != null && idea.notes.isNotEmpty()) d.key("▶ My idea", app.foxbox.ui.Snes.YELLOW, close = false) { playIdea(idea) }
-        d.show()
+    /** What Capture caught, said plainly, with a way to hear it. */
+    private fun noodlerCaught(clip: app.foxbox.seq.Clip?, msg: String) {
+        val d = SnesDialog(this, if (clip != null) "Noodler caught your idea" else "Noodler", wide = 0.7f).message(msg)
+        if (clip != null && clip.notes.isNotEmpty()) d.key("▶ Play it", app.foxbox.ui.Snes.YELLOW, close = false) { playIdea(clip) }
+        d.onDismiss { stopAudition() }
+        d.key("OK", app.foxbox.ui.Snes.GREEN, then = null).show()
     }
 
     private val auditionHandler = android.os.Handler(android.os.Looper.getMainLooper())

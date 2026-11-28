@@ -458,21 +458,15 @@ class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost, app.foxbox.ui
         var tried = -1
         val d = SnesDialog(this, "Noodle Forge: the scale", wide = 0.84f)
         d.message("Your idea used " + sung.sorted().joinToString(", ") { names[it] } + " (${sung.size} of the notes a scale has), so it could be in any of these. " +
-            "Tap one to try it: you'll hear the scale and then your idea in it, and the chords and strum follow it. Then keep the one you like.")
-        val list = android.widget.LinearLayout(this).apply { orientation = android.widget.LinearLayout.VERTICAL }
-        val buttons = ArrayList<app.foxbox.ui.Btn>()
-        cands.forEachIndexed { i, (root, si) ->
-            val b = app.foxbox.ui.Btn(this, "${names[root]} ${scales[si].name}" + if (i == 0) "  (best fit)" else "", if (i == 0) app.foxbox.ui.Pal.GREEN else app.foxbox.ui.Pal.AQUA).apply {
-                onClick = {
-                    tried = i
-                    buttons.forEachIndexed { k, bb -> bb.on = k == i; bb.invalidate() }
-                    Studio.setKey(root = root, scale = si)
-                    auditionScale(root, si, idea)
-                }
-            }
-            buttons += b
-            list.addView(b, android.widget.LinearLayout.LayoutParams(-1, Px.dp(40)).apply { bottomMargin = Px.dp(3) })
+            "Tap a scale's name to choose it: you'll hear the scale and then your idea in it, and the chords and strum follow it. Then keep the one you like.")
+        // every possible scale, stacked; its notes run left to right, the ones you sang lit up
+        val grid = app.foxbox.ui.ScaleGrid(this, cands, sung) { i ->
+            tried = i
+            val (root, si) = cands[i]
+            Studio.setKey(root = root, scale = si)
+            auditionScale(root, si, idea)
         }
+        val list = android.widget.ScrollView(this).apply { addView(grid) }
         d.view(list)
         d.cancelable(false)
         d.key("Cancel", app.foxbox.ui.Snes.RED) { stopAudition(); Studio.setKey(root = before.first, scale = before.second); Studio.message("Scale left as it was") }

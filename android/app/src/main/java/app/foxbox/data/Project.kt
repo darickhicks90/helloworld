@@ -39,6 +39,8 @@ class DaisyChain(val flowerId: String, val clipIds: MutableList<String> = mutabl
 class Project(val dir: File) {
     var name = "New Song"
     var bpm = 110f
+    /** Set up with Noodle Forge (it's a one-time set-up for a song). */
+    var forged = false
     var root = 0
     var scale = 1
     var seventh = false
@@ -72,7 +74,7 @@ class Project(val dir: File) {
     val takesDir get() = File(dir, "takes")
 
     fun toJson() = JSONObject().apply {
-        put("name", name); put("bpm", bpm.toDouble()); put("root", root); put("scale", scale)
+        put("name", name); put("forged", forged); put("bpm", bpm.toDouble()); put("root", root); put("scale", scale)
         put("seventh", seventh); put("octave", octave); put("loopBars", loopBars)
         put("metronome", metronome); put("modified", modified)
         put("blocks", JSONArray(blocks))
@@ -95,7 +97,7 @@ class Project(val dir: File) {
     private var mixState: JSONObject? = null
 
     fun fromJson(o: JSONObject) {
-        name = o.optString("name", name); bpm = o.optDouble("bpm", 110.0).toFloat()
+        name = o.optString("name", name); forged = o.optBoolean("forged"); bpm = o.optDouble("bpm", 110.0).toFloat()
         root = o.optInt("root"); scale = o.optInt("scale", 1); seventh = o.optBoolean("seventh")
         octave = o.optInt("octave"); loopBars = o.optInt("loopBars", 4)
         metronome = o.optBoolean("metronome", true)

@@ -28,12 +28,13 @@ import app.foxbox.seq.Ticks
  * "Keep it" is tapped. The ✕ closes it at any time.
  */
 class NoodleForge(private val a: Activity) {
-    private enum class St { READY, COUNT, IDEA, WORKING, RESULT, FAIL }
+    private enum class St { READY, COUNT, IDEA, WORKING, RESULT, FAIL, DONE }
     private var st = St.READY
     private var stSince = System.nanoTime()
     private var result: Noodler.ForgeResult? = null
     private var failWhy = ""
     private var picked = 0
+    private var doneText = listOf<String>()
 
     private val dialog = Dialog(a, android.R.style.Theme_Black_NoTitleBar_Fullscreen)
     private val root = FrameLayout(a)
@@ -64,7 +65,25 @@ class NoodleForge(private val a: Activity) {
         go(St.READY)
     }
 
+    // everything else waits while the song is being set up
+    private var radioWas = false
+    private val monitorWas = BooleanArray(Studio.monitor.size)
+    private fun suspendAll() {
+        Studio.stop()
+        Audio.post { for (e in Audio.engines) e.allOff() }
+        radioWas = app.foxbox.radio.Radio.playing
+        if (radioWas) app.foxbox.radio.Radio.stop()
+        for (i in monitorWas.indices) { monitorWas[i] = Studio.monitor[i]; Studio.monitor[i] = false }
+        Studio.refreshLive()
+    }
+    private fun resumeAll() {
+        for (i in monitorWas.indices) Studio.monitor[i] = monitorWas[i]
+        Studio.refreshLive()
+        if (radioWas) app.foxbox.radio.Radio.play()
+    }
+
     fun show() {
+        suspendAll()
         dialog.show()
         @Suppress("DEPRECATION")
         dialog.window?.decorView?.systemUiVisibility = a.window.decorView.systemUiVisibility
@@ -72,7 +91,7 @@ class NoodleForge(private val a: Activity) {
         if (!prefs.getBoolean("forge_intro", false)) {
             prefs.edit().putBoolean("forge_intro", true).apply()
             SnesDialog(a, "Welcome to Noodle Forge", wide = 0.8f)
-                .message("Noodle Forge starts a new song from a quick idea.\n\n" +
+                .message("Noodle Forge sets up your song from a quick idea. Everything else waits while you're here.\n\n" +
                     "1. Tap, clap or knock 4 steady beats. That sets the tempo.\n" +
                     "2. Straight after, sing or play your idea, one note at a time, and tap Done.\n" +
                     "3. Pick the scale that sounds right and tap Keep it.\n\n" +
@@ -87,6 +106,7 @@ class NoodleForge(private val a: Activity) {
         Noodler.onForged = null
         art.animated = false
         dialog.dismiss()
+        resumeAll()
     }
 
     // ------------------------------------------------------------------ states
@@ -116,6 +136,7 @@ class NoodleForge(private val a: Activity) {
                 middle.addView(ScrollView(a).apply { addView(grid); isVerticalScrollBarEnabled = false })
             }
             St.FAIL -> key("Try again", Pal.GREEN, 180) { restart() }
+            St.DONE -> key("Start making music", Pal.GREEN, 220) { close() }
         }
         art.animated = true
         art.invalidate()
@@ -134,9 +155,11 @@ class NoodleForge(private val a: Activity) {
         Studio.setBpm(r.bpm.toFloat())
         Studio.setKey(root = root, scale = si)
         val clip = Studio.addNoodleClip(r.engine, r.notes, r.lengthTicks)
-        Studio.message("Song set to ${r.bpm} BPM in ${Theory.NOTE_NAMES[root]} ${Theory.SCALES[si].name}" +
-            (if (clip != null) ". Your idea is the clip \"${clip.name}\" on ${r.engine.title}." else "."))
-        close()
+        Studio.project.forged = true
+        Studio.save()
+        doneText = listOf("${r.bpm} BPM", "${Theory.NOTE_NAMES[root]} ${Theory.SCALES[si].name}",
+            if (clip != null) "Your idea is the clip \"${clip.name}\" on ${r.engine.title}" else "${r.engine.title} had no room for your idea's clip")
+        go(St.DONE)
     }
 
     private fun playIdea(r: Noodler.ForgeResult) {
@@ -195,8 +218,21 @@ class NoodleForge(private val a: Activity) {
                 St.WORKING -> "Working it out…"
                 St.RESULT -> "Step 3 of 3 · The scale"
                 St.FAIL -> "That one didn't take"
+                St.DONE -> "Your song is set up"
             }
             c.drawText(stepText, Px.dp(16f) + title.measureText("NOODLE FORGE") + Px.dp(16f), Px.dp(29f), step)
+            // where you are in the set-up
+            val at = when (st) { St.READY -> 0; St.COUNT -> 1; St.IDEA, St.WORKING -> 2; St.RESULT, St.FAIL -> 3; St.DONE -> 4 }
+            val names = listOf("Beat", "Idea", "Scale")
+            val pw = Px.dp(62f); var px = w - Px.dp(64f) - pw * 3
+            for ((i, nm) in names.withIndex()) {
+                val done = at > i + 1; val now = at == i + 1
+                c.fill(px, Px.dp(16f), px + pw - Px.dp(6f), Px.dp(30f), if (now) Pal.ORANGE else if (done) Pal.GREEN else 0xFF2E2430.toInt())
+                small.color = if (now || done) Pal.CREAM else 0xFF6A5A70.toInt(); small.textSize = Px.dp(10f)
+                c.textCentered((if (done) "✓ " else "") + nm, px + (pw - Px.dp(6f)) / 2, Px.dp(23f), small)
+                px += pw
+            }
+            small.textSize = Px.dp(12f)
 
             val since = (System.nanoTime() - stSince) / 1e9f
             when (st) {
@@ -208,6 +244,7 @@ class NoodleForge(private val a: Activity) {
                 St.IDEA -> idea(c, w, h, since)
                 St.WORKING -> c.textCentered("Hammering it into shape…", w / 2, h / 2, head)
                 St.RESULT -> resultHead(c, w)
+                St.DONE -> done(c, w, h)
                 St.FAIL -> {
                     c.textCentered("Hmm, that didn't take.", w / 2, Px.dp(86f), head)
                     wrap(c, failWhy, w / 2, Px.dp(124f), minOf(w - Px.dp(48f), Px.dp(560f)), body, Px.dp(22f))
@@ -289,6 +326,18 @@ class NoodleForge(private val a: Activity) {
             val hint = quietHint(since)
             if (hint.isNotEmpty()) { small.color = Pal.SUN; c.textCentered(hint, w / 2, ty + Px.dp(46f), small) }
             meter(c, w, h)
+        }
+
+        private fun done(c: Canvas, w: Float, h: Float) {
+            head.color = Pal.SUN
+            c.textCentered("Your song is set up!", w / 2, Px.dp(92f), head)
+            head.color = Pal.CREAM
+            big.textSize = Px.dp(34f); big.color = Pal.SUN
+            if (doneText.size >= 2) {
+                c.textCentered(doneText[0] + "  ·  " + doneText[1], w / 2, Px.dp(146f), big)
+                body.textSize = Px.dp(14f)
+                c.textCentered(doneText[2], w / 2, Px.dp(190f), body)
+            }
         }
 
         private fun resultHead(c: Canvas, w: Float) {

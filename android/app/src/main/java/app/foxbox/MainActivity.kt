@@ -312,7 +312,20 @@ class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost, app.foxbox.ui
 
     private fun ask(title: String, msg: String, vararg keys: Pair<String, (() -> Unit)?>) = SnesDialog.ask(this, title, msg, *keys)
 
-    private fun newProject() = textDialog("Name your project", "Song ${ProjectStore.list().size + 1}") { openProject(ProjectStore.create(it)) }
+    private fun newProject() = textDialog("Name your project", "Song ${ProjectStore.list().size + 1}") { name ->
+        openProject(ProjectStore.create(name))
+        ask("How do you want to start?", "Noodle Forge can set up your new song from a quick idea: tap a beat, hum a tune, and it picks the tempo and scale. Or start with a blank song.",
+            "Blank song" to null, "⚒ Noodle Forge" to { forgeSong() })
+    }
+
+    /** Noodle Forge: a one-time set-up for a song. A song that's already set up asks first. */
+    private fun forgeSong() {
+        if (!projectOpen) return
+        val open = { withMic { app.foxbox.ui.NoodleForge(this).show() } }
+        if (Studio.project.forged) ask("Set this song up again?", "This song was already set up with Noodle Forge. Doing it again will replace its tempo and scale (your clips stay).",
+            "Cancel" to null, "Forge again" to open)
+        else open()
+    }
 
     private fun manageProject(p: Project) {
         choose(p.name, listOf("Open", "Rename", "Duplicate", "Delete")) { which ->
@@ -410,7 +423,6 @@ class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost, app.foxbox.ui
         when (Noodler.mode) {
             Noodler.Mode.LIVE -> ask("Headphones needed", "Live Noodler plays ${Noodler.targetEngine().title} as you sing. Headphones (or keeping the mic well away from the instrument's sound) are needed for it to work properly, or it will hear the synth and follow itself.",
                 "Cancel" to null, "Headphones on: start" to { Noodler.start() })
-            Noodler.Mode.FORGE -> app.foxbox.ui.NoodleForge(this).show()
             else -> Noodler.start()
         }
     }
@@ -422,9 +434,10 @@ class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost, app.foxbox.ui
             box.removeAllViews()
             fun row(text: String, color: Int, then: () -> Unit) = box.addView(app.foxbox.ui.Btn(this, text, color).apply { onClick = then }, android.widget.LinearLayout.LayoutParams(-1, Px.dp(42)).apply { bottomMargin = Px.dp(4) })
             row("Mode: ${Noodler.mode.label}", app.foxbox.ui.Snes.PURPLE) {
-                choose("Noodler mode", Noodler.Mode.entries.map { it.label }, Noodler.mode.ordinal) { i -> Noodler.mode = Noodler.Mode.entries[i]; rebuild() }
+                val modes = listOf(Noodler.Mode.CAPTURE, Noodler.Mode.LIVE)
+                choose("Noodler mode", modes.map { it.label }, modes.indexOf(Noodler.mode)) { i -> Noodler.mode = modes[i]; rebuild() }
             }
-            row("⚒ Open Noodle Forge", app.foxbox.ui.Pal.ROSE) { d.dismiss(); withMic { app.foxbox.ui.NoodleForge(this).show() } }
+            row("⚒ Set up this song with Noodle Forge", app.foxbox.ui.Pal.ROSE) { d.dismiss(); forgeSong() }
             val blocks = Studio.project.blocks.filter { app.foxbox.blocks.Blocks.get(it)?.melodic == true }
             row("Block: " + (if (Noodler.block.isEmpty()) "the one in front (${Noodler.targetEngine().title})" else Audio.engine(Noodler.block).title), app.foxbox.ui.Pal.ORANGE) {
                 choose("Noodle into which block?", listOf("The melodic block in front") + blocks.map { Audio.engine(it).title }) { i -> Noodler.block = if (i == 0) "" else blocks[i - 1]; rebuild() }

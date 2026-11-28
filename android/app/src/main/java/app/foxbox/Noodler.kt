@@ -38,7 +38,7 @@ object Noodler {
     fun init(c: Context) { prefs = c.getSharedPreferences("noodler", Context.MODE_PRIVATE) }
 
     var mode: Mode
-        get() = runCatching { Mode.valueOf(prefs.getString("mode", "CAPTURE")!!) }.getOrDefault(Mode.CAPTURE)
+        get() = runCatching { Mode.valueOf(prefs.getString("mode", "CAPTURE")!!) }.getOrDefault(Mode.CAPTURE).let { if (it == Mode.FORGE) Mode.CAPTURE else it }
         set(v) = prefs.edit().putString("mode", v.name).apply()
     /** Snap notes to the project's scale (on by default; Noodle Forge always ignores it). */
     var snap: Boolean

@@ -238,15 +238,15 @@ object Noodler {
         synchronized(notes) { notes.clear(); notes.addAll(list) }
         val (cn, len) = clipNotes(downbeatMs, msPerTick, Ticks.STEP)
         val sung = list.map { Math.floorMod(it.note, 12) }.toSet()
-        // too few notes (or too even a spread) to be sure of the key: let the person choose
-        val unsure = list.size < 6 || sung.size < 4 || conf < 0.3f
+        // not every note of a scale was sung (or played), so more than one scale fits: let the person choose
+        val unsure = sung.size < 7 || conf < 0.3f
         val cands = if (unsure) candidates(list) else emptyList()
         main.post {
             Studio.setBpm(bpm.let { Math.round(it).toFloat() })
             val clip = Studio.addNoodleClip(target, cn, len)
             if (unsure && cands.isNotEmpty() && onChooseScale != null) {
                 onChooseScale?.invoke(cands, clip, sung)
-                Studio.message("Noodle Forge: ${Math.round(bpm)} BPM. Not enough notes to be sure of the key: choose one.")
+                Studio.message("Noodle Forge: ${Math.round(bpm)} BPM. Now choose the scale.")
             } else {
                 Studio.setKey(root = root, scale = scale)
                 Studio.message("Noodle Forge: ${Math.round(bpm)} BPM, ${Theory.NOTE_NAMES[root]} ${Theory.SCALES[scale].name}. Your idea is on ${target.title}.")

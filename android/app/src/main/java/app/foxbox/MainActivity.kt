@@ -456,9 +456,9 @@ class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost, app.foxbox.ui
         val names = app.foxbox.seq.Theory.NOTE_NAMES; val scales = app.foxbox.seq.Theory.SCALES
         val before = Studio.project.root to Studio.project.scale
         var tried = -1
-        val d = SnesDialog(this, "Song set-up", wide = 0.84f)
-        d.message("Noodle Forge heard " + sung.sorted().joinToString(", ") { names[it] } + ". That's too few notes to be sure of the key, " +
-            "but these scales hold everything you sang. Tap one to try it: you'll hear the scale and then your idea in it, and the chords and strum follow it. Then keep the one you like.")
+        val d = SnesDialog(this, "Noodle Forge: the scale", wide = 0.84f)
+        d.message("Your idea used " + sung.sorted().joinToString(", ") { names[it] } + " (${sung.size} of the notes a scale has), so it could be in any of these. " +
+            "Tap one to try it: you'll hear the scale and then your idea in it, and the chords and strum follow it. Then keep the one you like.")
         val list = android.widget.LinearLayout(this).apply { orientation = android.widget.LinearLayout.VERTICAL }
         val buttons = ArrayList<app.foxbox.ui.Btn>()
         cands.forEachIndexed { i, (root, si) ->

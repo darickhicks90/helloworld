@@ -71,6 +71,7 @@ class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost, app.foxbox.ui
         app.foxbox.data.WraithPresets.init(this)
         Noodler.init(this)
         Noodler.onChange = { noodleKey?.invalidate() }
+        Noodler.onChooseScale = { cands, idea, sung -> runOnUiThread { songWizard(cands, idea, sung) } }
         applyMetronomePrefs()
         app.foxbox.data.Banks.init(this)
         Store.init(this)
@@ -444,6 +445,75 @@ class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost, app.foxbox.ui
         d.view(box)
         d.key("Done", app.foxbox.ui.Snes.GREEN, then = null)
         d.show()
+    }
+
+    /**
+     * The song set-up wizard: Noodle Forge heard too few notes to be sure of the key,
+     * so it lists the scales they fit. Tap one to try it (it plays the scale and then
+     * your idea in it, and the chords and strum follow it), then keep the one you like.
+     */
+    private fun songWizard(cands: List<Pair<Int, Int>>, idea: app.foxbox.seq.Clip?, sung: Set<Int>) {
+        val names = app.foxbox.seq.Theory.NOTE_NAMES; val scales = app.foxbox.seq.Theory.SCALES
+        val before = Studio.project.root to Studio.project.scale
+        var tried = -1
+        val d = SnesDialog(this, "Song set-up", wide = 0.84f)
+        d.message("Noodle Forge heard " + sung.sorted().joinToString(", ") { names[it] } + ". That's too few notes to be sure of the key, " +
+            "but these scales hold everything you sang. Tap one to try it: you'll hear the scale and then your idea in it, and the chords and strum follow it. Then keep the one you like.")
+        val list = android.widget.LinearLayout(this).apply { orientation = android.widget.LinearLayout.VERTICAL }
+        val buttons = ArrayList<app.foxbox.ui.Btn>()
+        cands.forEachIndexed { i, (root, si) ->
+            val b = app.foxbox.ui.Btn(this, "${names[root]} ${scales[si].name}" + if (i == 0) "  (best fit)" else "", if (i == 0) app.foxbox.ui.Pal.GREEN else app.foxbox.ui.Pal.AQUA).apply {
+                onClick = {
+                    tried = i
+                    buttons.forEachIndexed { k, bb -> bb.on = k == i; bb.invalidate() }
+                    Studio.setKey(root = root, scale = si)
+                    auditionScale(root, si, idea)
+                }
+            }
+            buttons += b
+            list.addView(b, android.widget.LinearLayout.LayoutParams(-1, Px.dp(40)).apply { bottomMargin = Px.dp(3) })
+        }
+        d.view(list)
+        d.cancelable(false)
+        d.key("Cancel", app.foxbox.ui.Snes.RED) { stopAudition(); Studio.setKey(root = before.first, scale = before.second); Studio.message("Scale left as it was") }
+        d.key("Keep this scale", app.foxbox.ui.Snes.GREEN) {
+            stopAudition()
+            val (root, si) = cands[if (tried >= 0) tried else 0]
+            Studio.setKey(root = root, scale = si)
+            Studio.message("The song is in ${names[root]} ${scales[si].name}")
+        }
+        d.show()
+    }
+
+    private val auditionHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private fun stopAudition() {
+        auditionHandler.removeCallbacksAndMessages(null)
+        val e = Noodler.targetEngine()
+        Audio.post { for (k in 0 until 64) e.noteOff(0x7D000000 + k) }
+    }
+
+    /** Play a scale up an octave, then the idea, on the Noodler's block. */
+    private fun auditionScale(root: Int, si: Int, idea: app.foxbox.seq.Clip?) {
+        stopAudition()
+        val e = Noodler.targetEngine()
+        val steps = app.foxbox.seq.Theory.SCALES[si].steps
+        val base = 60 + root - (if (root > 6) 12 else 0)
+        val run = steps.map { base + it } + (base + 12)
+        var t = 0L
+        run.forEachIndexed { k, n ->
+            auditionHandler.postDelayed({ Audio.post { e.noteOn(0x7D000000 + k, n, 0.7f) } }, t)
+            auditionHandler.postDelayed({ Audio.post { e.noteOff(0x7D000000 + k) } }, t + 170)
+            t += 190
+        }
+        // then the idea as it was sung
+        val c = idea ?: return
+        val msPerTick = 60000.0 / Studio.project.bpm / app.foxbox.seq.Ticks.PPQ
+        t += 400
+        c.notes.take(48).forEachIndexed { k, n ->
+            val on = t + (n.tick * msPerTick).toLong(); val off = on + (n.dur * msPerTick).toLong().coerceAtLeast(80)
+            auditionHandler.postDelayed({ Audio.post { e.noteOn(0x7D000010 + k, n.note, n.vel) } }, on)
+            auditionHandler.postDelayed({ Audio.post { e.noteOff(0x7D000010 + k) } }, off)
+        }
     }
 
     // ------------------------------------------------------------------ tempo tools (hold the tempo)

@@ -65,6 +65,11 @@ object Noodler {
     /** Forge: 0 counting in, 1 hearing the idea. */
     @Volatile var phase = 0; private set
     var onChange: (() -> Unit)? = null
+    /**
+     * Noodle Forge couldn't tell the key from so few notes: the activity shows the
+     * song set-up wizard with these candidates (root, scale index), best first.
+     */
+    var onChooseScale: ((candidates: List<Pair<Int, Int>>, idea: Clip?, sung: Set<Int>) -> Unit)? = null
 
     private var thread: Thread? = null
     private var runMode = Mode.CAPTURE
@@ -227,16 +232,54 @@ object Noodler {
         // the key: which pitch classes the idea dwelt on
         val chroma = DoubleArray(12)
         for (nn in list) chroma[Math.floorMod(nn.note, 12)] += (nn.endMs - nn.startMs).coerceAtLeast(60.0)
-        val (root, minor, _) = Analysis.key(chroma)
+        val (root, minor, conf) = Analysis.key(chroma)
         val scale = Theory.SCALES.indexOfFirst { it.name == if (minor) "Minor" else "Major" }.coerceAtLeast(0)
         val msPerTick = 60000.0 / bpm / Ticks.PPQ
         synchronized(notes) { notes.clear(); notes.addAll(list) }
         val (cn, len) = clipNotes(downbeatMs, msPerTick, Ticks.STEP)
+        val sung = list.map { Math.floorMod(it.note, 12) }.toSet()
+        // too few notes (or too even a spread) to be sure of the key: let the person choose
+        val unsure = list.size < 6 || sung.size < 4 || conf < 0.3f
+        val cands = if (unsure) candidates(list) else emptyList()
         main.post {
             Studio.setBpm(bpm.let { Math.round(it).toFloat() })
-            Studio.setKey(root = root, scale = scale)
-            Studio.addNoodleClip(target, cn, len)
-            Studio.message("Noodle Forge: ${Math.round(bpm)} BPM, ${Theory.NOTE_NAMES[root]} ${Theory.SCALES[scale].name}. Your idea is on ${target.title}.")
+            val clip = Studio.addNoodleClip(target, cn, len)
+            if (unsure && cands.isNotEmpty() && onChooseScale != null) {
+                onChooseScale?.invoke(cands, clip, sung)
+                Studio.message("Noodle Forge: ${Math.round(bpm)} BPM. Not enough notes to be sure of the key: choose one.")
+            } else {
+                Studio.setKey(root = root, scale = scale)
+                Studio.message("Noodle Forge: ${Math.round(bpm)} BPM, ${Theory.NOTE_NAMES[root]} ${Theory.SCALES[scale].name}. Your idea is on ${target.title}.")
+            }
         }
+    }
+
+    /**
+     * Every scale (any root) that holds all the notes that were sung, best first: ones
+     * whose root was sung (especially first or last), longest-held notes on strong
+     * degrees, and the everyday scales before the rarer ones.
+     */
+    private fun candidates(list: List<N>): List<Pair<Int, Int>> {
+        val dur = DoubleArray(12)
+        for (nn in list) dur[Math.floorMod(nn.note, 12)] += (nn.endMs - nn.startMs).coerceAtLeast(60.0)
+        val sung = (0 until 12).filter { dur[it] > 0 }
+        val firstPc = list.firstOrNull()?.let { Math.floorMod(it.note, 12) } ?: -1
+        val lastPc = list.lastOrNull()?.let { Math.floorMod(it.note, 12) } ?: -1
+        val total = dur.sum().coerceAtLeast(1.0)
+        val out = ArrayList<Triple<Int, Int, Double>>()
+        for ((si, sc) in Theory.SCALES.withIndex()) for (root in 0 until 12) {
+            val pcs = sc.steps.map { (root + it) % 12 }.toSet()
+            if (!sung.all { it in pcs }) continue
+            var score = 0.0
+            if (root in sung) score += 2.0
+            if (root == firstPc) score += 1.0
+            if (root == lastPc) score += 1.5
+            // the fifth and third held a while are good signs
+            score += dur[(root + 7) % 12] / total + dur[root] / total * 1.5
+            score -= si * 0.12        // everyday scales first (Major, Minor, then the modes)
+            score -= (sc.steps.size - sung.size) * 0.05
+            out += Triple(root, si, score)
+        }
+        return out.sortedByDescending { it.third }.take(14).map { it.first to it.second }
     }
 }

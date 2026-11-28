@@ -11,7 +11,12 @@ import app.foxbox.audio.SR
 import app.foxbox.seq.Clip
 import app.foxbox.seq.Theory
 import app.foxbox.seq.Ticks
+import kotlin.math.PI
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.hypot
 import kotlin.math.log10
+import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
@@ -75,7 +80,7 @@ object Noodler {
     private var runMode = Mode.CAPTURE
     private var target: Engine = Audio.gusts
 
-    private class N(val note: Int, val startMs: Double, var endMs: Double, val vel: Float)
+    private class N(var note: Int, val startMs: Double, var endMs: Double, val vel: Float) { var pSum = 0.0; var pW = 0.0 }
     private val notes = ArrayList<N>()
     private val onsets = ArrayList<Double>()
     private var beatMs = 0.0
@@ -131,6 +136,9 @@ object Noodler {
         var cur = -1; var curStart = 0.0; var silentFrames = 0
         var envFloor = 0f; var lastOnset = -1e9
         val mask = Audio.scaleMask
+        // how far off concert pitch the person is overall (everything a little flat or sharp),
+        // as the average of where pitches sit between semitones (on a circle, so +0.5 and -0.5 meet)
+        var tx = 0.0; var ty = 0.0
         while (active) {
             val now = (System.nanoTime() - t0) / 1e6
             // the newest ~43 ms, at half the sample rate
@@ -147,10 +155,15 @@ object Noodler {
             }
             val voiced = db > sensitivity
             var n = -1
+            var raw = Float.NaN
             if (voiced) {
                 val hz = tracker.detect(win, 0, 1024, SR / 2f, 60f, 1200f)
                 if (hz > 0f && tracker.clarity > 0.72f) {
-                    val m = PitchTrack.midi(hz) + 12 * octave
+                    raw = PitchTrack.midi(hz) + 12 * octave
+                    val f = raw - Math.round(raw)
+                    tx = tx * 0.998 + cos(2 * PI * f); ty = ty * 0.998 + sin(2 * PI * f)
+                    val off = if (hypot(tx, ty) > 3.0) (atan2(ty, tx) / (2 * PI)).toFloat() else 0f
+                    val m = raw - off
                     n = if (runMode == Mode.FORGE || !snap) Math.round(m) else PitchTrack.nearestInScale(m, mask)
                 }
             }
@@ -162,6 +175,10 @@ object Noodler {
                 cur = cand; curStart = now
                 noteOn(cur, now, ((db + 50f) / 40f).coerceIn(0.35f, 1f))
             } else if (cur >= 0 && silentFrames >= 3) { noteOff(cur, now); cur = -1 }
+            // remember the note's true pitch, to tune the whole idea at the end
+            if (cur >= 0 && !raw.isNaN() && runMode != Mode.LIVE) synchronized(notes) {
+                notes.lastOrNull()?.let { if (it.note == cur) { it.pSum += raw; it.pW += 1.0 } }
+            }
             noteNow = cur
             sleep()
         }
@@ -210,9 +227,36 @@ object Noodler {
         return out to len
     }
 
+    /**
+     * If everything was a little flat or sharp, find by how much (from every note's average
+     * true pitch, weighted by how long it was held) and move the whole idea onto the right
+     * notes. Returns a few words saying what was done, or "" if it was already in tune.
+     */
+    private fun retune(list: List<N>, mask: Int?): String {
+        var sx = 0.0; var sy = 0.0
+        for (nn in list) if (nn.pW > 0) {
+            val p = nn.pSum / nn.pW; val f = p - Math.round(p)
+            val w = (nn.endMs - nn.startMs).coerceAtLeast(40.0)
+            sx += w * cos(2 * PI * f); sy += w * sin(2 * PI * f)
+        }
+        if (sx == 0.0 && sy == 0.0) return ""
+        val off = atan2(sy, sx) / (2 * PI)
+        for (nn in list) if (nn.pW > 0) {
+            val p = (nn.pSum / nn.pW - off).toFloat()
+            nn.note = if (mask != null) PitchTrack.nearestInScale(p, mask) else Math.round(p)
+        }
+        val cents = Math.round(off * 100).toInt()
+        return when {
+            cents <= -8 -> " You were about ${-cents} cents flat, so it was tuned up to fit."
+            cents >= 8 -> " You were about $cents cents sharp, so it was tuned down to fit."
+            else -> ""
+        }
+    }
+
     private fun finishCapture() {
         val list = synchronized(notes) { notes.toList() }
         if (list.isEmpty()) return Studio.message("Noodler didn't hear any notes. Try a little louder, or raise the sensitivity (hold Noodler).")
+        val tuned = retune(list, if (snap) Audio.scaleMask else null)
         val bpm = Studio.project.bpm.toDouble()
         val msPerTick = 60000.0 / bpm / Ticks.PPQ
         // start on the beat the first note fell in
@@ -220,7 +264,7 @@ object Noodler {
         val grid = when (quantize) { 1 -> Ticks.STEP; 2 -> Ticks.STEP * 2; else -> 1 }
         val (cn, len) = clipNotes(first - 20.0, msPerTick, grid)
         main.post {
-            Studio.addNoodleClip(target, cn, len)?.let { Studio.message("Noodled ${cn.size} notes into ${it.name}") }
+            Studio.addNoodleClip(target, cn, len)?.let { Studio.message("Noodled ${cn.size} notes into ${it.name}.$tuned") }
         }
     }
 
@@ -229,6 +273,7 @@ object Noodler {
         val list = synchronized(notes) { notes.filter { it.startMs >= downbeatMs - beatMs * 0.25 }.toList() }
         if (list.isEmpty()) return Studio.message("Noodle Forge heard the count but no idea. Nothing was changed.")
         val bpm = (60000.0 / beatMs).toFloat().coerceIn(40f, 220f)
+        val tuned = retune(list, null)
         // the key: which pitch classes the idea dwelt on
         val chroma = DoubleArray(12)
         for (nn in list) chroma[Math.floorMod(nn.note, 12)] += (nn.endMs - nn.startMs).coerceAtLeast(60.0)
@@ -246,10 +291,10 @@ object Noodler {
             val clip = Studio.addNoodleClip(target, cn, len)
             if (unsure && cands.isNotEmpty() && onChooseScale != null) {
                 onChooseScale?.invoke(cands, clip, sung)
-                Studio.message("Noodle Forge: ${Math.round(bpm)} BPM. Now choose the scale.")
+                Studio.message("Noodle Forge: ${Math.round(bpm)} BPM. Now choose the scale.$tuned")
             } else {
                 Studio.setKey(root = root, scale = scale)
-                Studio.message("Noodle Forge: ${Math.round(bpm)} BPM, ${Theory.NOTE_NAMES[root]} ${Theory.SCALES[scale].name}. Your idea is on ${target.title}.")
+                Studio.message("Noodle Forge: ${Math.round(bpm)} BPM, ${Theory.NOTE_NAMES[root]} ${Theory.SCALES[scale].name}. Your idea is on ${target.title}.$tuned")
             }
         }
     }

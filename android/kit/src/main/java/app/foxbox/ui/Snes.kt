@@ -214,19 +214,14 @@ class SnesDialog(private val a: Activity, title: String, private val wide: Float
     fun onDismiss(fn: () -> Unit): SnesDialog { dialog.setOnDismissListener { fn() }; return this }
 
     fun show(): SnesDialog {
-        dialog.show()
+        Immersive.show(dialog)
         val dm = a.resources.displayMetrics
         if (full) {
             dialog.window?.decorView?.setPadding(0, 0, 0, 0)
             dialog.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
-            @Suppress("DEPRECATION")
-            dialog.window?.decorView?.systemUiVisibility = a.window.decorView.systemUiVisibility
             return this
         }
         dialog.window?.setLayout(minOf((dm.widthPixels * wide).toInt(), Px.dp(560)).coerceAtLeast(minOf(dm.widthPixels - Px.dp(16), Px.dp(300))), ViewGroup.LayoutParams.WRAP_CONTENT)
-        // keep the app full screen while a dialog is up
-        @Suppress("DEPRECATION")
-        dialog.window?.decorView?.systemUiVisibility = a.window.decorView.systemUiVisibility
         frame.post {
             val maxH = (dm.heightPixels * 0.92f).toInt()
             if (frame.height > maxH) dialog.window?.setLayout(dialog.window!!.attributes.width, maxH)
@@ -349,5 +344,33 @@ class KnobFace(classic: Boolean = false) {
         val r = (c shr 16 and 255); val g = (c shr 8 and 255); val b = (c and 255)
         fun up(v: Int) = (v + (255 - v) * 0.35f).toInt()
         return Color.rgb(up(r), up(g), up(b))
+    }
+}
+
+/** Keep a window (a dialog's too) full screen: status and navigation bars hidden, a swipe shows them briefly. */
+object Immersive {
+    fun apply(w: Window?) {
+        w ?: return
+        if (android.os.Build.VERSION.SDK_INT >= 30) {
+            w.setDecorFitsSystemWindows(false)
+            w.insetsController?.let {
+                it.hide(android.view.WindowInsets.Type.systemBars())
+                it.systemBarsBehavior = android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            w.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or View.SYSTEM_UI_FLAG_FULLSCREEN or
+                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+        }
+    }
+
+    /** Show a dialog without letting the bars come back: hidden before it takes focus, and again whenever it regains it. */
+    fun show(d: Dialog) {
+        val w = d.window
+        w?.addFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
+        d.show()
+        apply(w)
+        w?.clearFlags(WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE)
+        w?.decorView?.viewTreeObserver?.addOnWindowFocusChangeListener { if (it) apply(w) }
     }
 }

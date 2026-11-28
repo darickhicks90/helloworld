@@ -86,9 +86,7 @@ class NoodleForge(private val a: Activity) {
 
     fun show() {
         suspendAll()
-        dialog.show()
-        @Suppress("DEPRECATION")
-        dialog.window?.decorView?.systemUiVisibility = a.window.decorView.systemUiVisibility
+        Immersive.show(dialog)
         val prefs = a.getSharedPreferences("noodler", Activity.MODE_PRIVATE)
         if (!prefs.getBoolean("forge_intro", false)) {
             prefs.edit().putBoolean("forge_intro", true).apply()
@@ -99,6 +97,23 @@ class NoodleForge(private val a: Activity) {
                     "3. Pick the scale that sounds right and tap Keep it.\n\n" +
                     "Nothing in your song changes until you tap Keep it.")
                 .key("Let's forge", Snes.GREEN, then = null).show()
+        }
+    }
+
+    /** For the beta check's screenshots: show a step with made-up results. */
+    fun demo(which: String) {
+        val e = Noodler.targetEngine()
+        val notes = listOf(57, 60, 64, 62, 60, 59, 57).mapIndexed { i, n -> app.foxbox.seq.Clip.Note(i * Ticks.PPQ, Ticks.PPQ, n, 0.8f) }
+        val cands = listOf(9 to 1, 0 to 0, 2 to 2, 4 to 3, 9 to 4, 7 to 0, 2 to 5, 5 to 0, 9 to 6, 4 to 1)
+            .filter { it.second < Theory.SCALES.size }
+        result = Noodler.ForgeResult(96, notes, Ticks.BAR * 2, cands, setOf(9, 0, 4, 2, 11), false, -23, e)
+        when (which) {
+            "result" -> go(St.RESULT)
+            "done" -> { doneText = listOf("96 BPM", "A Minor", "Your idea is saved as the clip \"Gusts noodle 1\" on Gusts."); go(St.DONE) }
+            "fail" -> { failWhy = "Got the beat, but no notes after it. The loudest sound was -51 dB, but Noodler only listens to sounds above -42 dB. Sing closer, or lower the threshold (hold NOODLE)."; go(St.FAIL) }
+            "count" -> go(St.COUNT)
+            "idea" -> go(St.IDEA)
+            "working" -> go(St.WORKING)
         }
     }
 
@@ -125,7 +140,7 @@ class NoodleForge(private val a: Activity) {
                 key("Start over", Snes.YELLOW) { restart() }
                 key("Done", Snes.GREEN) { go(St.WORKING); Noodler.stop() }
             }
-            St.WORKING -> {}
+            St.WORKING -> key("Cancel", Snes.RED) { restart() }
             St.RESULT -> {
                 val r = result!!
                 key("Try again", Snes.YELLOW) { restart() }
@@ -146,7 +161,7 @@ class NoodleForge(private val a: Activity) {
             St.DONE -> key("Start making music", Snes.GREEN) { close() }
         }
         // only the listening steps change by themselves (lights, the note, the meter)
-        art.animated = s == St.COUNT || s == St.IDEA
+        art.animated = s == St.COUNT || s == St.IDEA || s == St.WORKING
         art.invalidate()
     }
 
@@ -231,7 +246,7 @@ class NoodleForge(private val a: Activity) {
                     count(c, w, top, bottom, since)
                 }
                 St.IDEA -> idea(c, w, top, bottom, since)
-                St.WORKING -> c.textCentered("Listening back carefully…", w / 2, (top + bottom) / 2, head)
+                St.WORKING -> working(c, w, top, bottom)
                 St.RESULT -> resultPanel(c, w, top, bottom)
                 St.FAIL -> {
                     c.textCentered("That one didn't take.", w / 2, top + Px.dp(30f), head)
@@ -247,6 +262,21 @@ class NoodleForge(private val a: Activity) {
                     }
                 }
             }
+        } }
+
+        /** The careful listen-back: a bar that fills, so it's clear the app is working, not stuck. */
+        private fun working(c: Canvas, w: Float, top: Float, bottom: Float) { with(Snes) {
+            val cy = (top + bottom) / 2
+            c.textCentered("Listening back to your idea carefully…", w / 2, cy - Px.dp(40f), head)
+            val bw = minOf(Px.dp(360f), w * 0.6f); val l = (w - bw) / 2
+            c.fill(l, cy - Px.dp(10f), l + bw, cy + Px.dp(10f), INK)
+            val p = Noodler.workProgress.coerceIn(0f, 1f)
+            c.fill(l + u * 2, cy - Px.dp(10f) + u * 2, l + u * 2 + (bw - u * 4) * p, cy + Px.dp(10f) - u * 2, GREEN)
+            small.color = INK
+            c.textCentered("${Math.round(p * 100)}%", w / 2, cy + Px.dp(30f), small)
+            body.color = DEEP
+            c.textCentered("This can take a few seconds for a long idea.", w / 2, cy + Px.dp(58f), body)
+            body.color = INK
         } }
 
         /** A dark backlit window, like the knobs' value windows. */

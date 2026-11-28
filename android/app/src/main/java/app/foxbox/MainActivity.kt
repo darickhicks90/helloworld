@@ -109,6 +109,19 @@ class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost, app.foxbox.ui
                 if (target == "fireescape") showFireEscape()
             }
             "notebook" -> openNotebook()
+            // Noodle Forge and the Noodler's settings, for checking their text fits
+            "forge", "noodler" -> {
+                Studio.open(p)
+                studio = StudioScreen(this, this); showStudio()
+                val step = intent.getStringExtra("forge") ?: ""
+                main.postDelayed({
+                    if (target == "noodler") noodlerSettings()
+                    else {
+                        getSharedPreferences("noodler", MODE_PRIVATE).edit().putBoolean("forge_intro", step != "intro").apply()
+                        app.foxbox.ui.NoodleForge(this).apply { show(); if (step.isNotEmpty() && step != "intro") demo(step) }
+                    }
+                }, 1500)
+            }
         }
         return true
     }
@@ -405,7 +418,12 @@ class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost, app.foxbox.ui
     private var warnedMetronome = false
 
     private fun noodlerPressed() {
-        if (Noodler.active) { Noodler.stop(); return }
+        if (Noodler.active) {
+            val capture = Noodler.mode == Noodler.Mode.CAPTURE
+            Noodler.stop()
+            if (capture) noodlerWorking()
+            return
+        }
         withMic { noodlerChecks() }
     }
 
@@ -473,8 +491,25 @@ class MainActivity : Activity(), Host, app.foxbox.radio.RadioHost, app.foxbox.ui
      * so it lists the scales they fit. Tap one to try it (it plays the scale and then
      * your idea in it, and the chords and strum follow it), then keep the one you like.
      */
+    private var workingDialog: SnesDialog? = null
+    /** Capture's listen-back: a box that counts up, so it's clear the app is working. */
+    private fun noodlerWorking() {
+        val d = SnesDialog(this, "Noodler", wide = 0.6f).message("Listening back to your idea carefully… 0%").cancelable(false)
+        workingDialog = d
+        d.show()
+        val tick = object : Runnable {
+            override fun run() {
+                if (workingDialog !== d) return
+                d.message("Listening back to your idea carefully… ${Math.round(Noodler.workProgress * 100)}%")
+                main.postDelayed(this, 150)
+            }
+        }
+        main.postDelayed(tick, 150)
+    }
+
     /** What Capture caught, said plainly, with a way to hear it. */
     private fun noodlerCaught(clip: app.foxbox.seq.Clip?, msg: String) {
+        workingDialog?.dismiss(); workingDialog = null
         val d = SnesDialog(this, if (clip != null) "Noodler caught your idea" else "Noodler", wide = 0.7f).message(msg)
         if (clip != null && clip.notes.isNotEmpty()) d.key("▶ Play it", app.foxbox.ui.Snes.YELLOW, close = false) { playIdea(clip) }
         d.onDismiss { stopAudition() }

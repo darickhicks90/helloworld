@@ -33,6 +33,13 @@ for pg in reflections leaves minds bumble pickup flowers; do start --es screen s
 start --es screen clibbins; shot 04-clibbins 6
 start --es screen fireescape; shot 04b-fireescape 7
 start --es screen notebook; shot 05-notebook 6
+# Noodle Forge (each step) and the Noodler's settings
+start --es screen forge --es forge intro; shot 08a-forge-intro 6
+for st in ready count idea working result done fail; do
+  if [ $st = ready ]; then start --es screen forge; else start --es screen forge --es forge $st; fi
+  shot 08-forge-$st 6
+done
+start --es screen noodler; shot 09-noodler-settings 6
 start --es screen studio --es page gusts; sleep 5; adb shell input tap $RX $RY; shot 06-radio 4
 adb shell input keyevent KEYCODE_BACK; sleep 1
 # the menu (top bar, just left of the radio/notebook keys)

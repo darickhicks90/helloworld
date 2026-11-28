@@ -47,6 +47,10 @@ class NoodlerKey(c: Context, private val onTap: () -> Unit, private val onHold: 
         val note = Noodler.noteNow
         g.color = if (on) flicker(time) else Snes.INK
         g.textSize = r.height() * (if (on && note >= 0) 0.3f else 0.34f)
+        // fit NOODLE across the key, whatever the font and screen
+        val room = r.width() - 8 * d
+        val tw = g.measureText("NOODLE")
+        if (tw > room) g.textSize *= room / tw
         c.drawText("NOODLE", r.centerX(), r.centerY() + g.textSize * (if (on && note >= 0) -0.1f else 0.36f), g)
         if (on && note >= 0) {
             g.textSize = r.height() * 0.32f

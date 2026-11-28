@@ -7,6 +7,7 @@ import app.foxbox.audio.Analysis
 import app.foxbox.audio.Audio
 import app.foxbox.audio.Engine
 import app.foxbox.audio.NoteSegmenter
+import app.foxbox.audio.TakeAnalyzer
 import app.foxbox.audio.PitchTrack
 import app.foxbox.audio.SR
 import app.foxbox.seq.Clip
@@ -36,7 +37,11 @@ object Noodler {
 
     private val main = Handler(Looper.getMainLooper())
     private lateinit var prefs: android.content.SharedPreferences
-    fun init(c: Context) { prefs = c.getSharedPreferences("noodler", Context.MODE_PRIVATE) }
+    fun init(c: Context) {
+        prefs = c.getSharedPreferences("noodler", Context.MODE_PRIVATE)
+        // detection got calmer by default: move everyone onto it once
+        if (prefs.getInt("detv", 0) < 2) { resetDetection(); prefs.edit().putInt("detv", 2).apply() }
+    }
 
     var mode: Mode
         get() = runCatching { Mode.valueOf(prefs.getString("mode", "CAPTURE")!!) }.getOrDefault(Mode.CAPTURE).let { if (it == Mode.FORGE) Mode.CAPTURE else it }
@@ -55,21 +60,21 @@ object Noodler {
         set(v) = prefs.edit().putFloat("sens", v).apply()
     /** How sure the pitch must be before it counts (0.5 catches more, 0.95 only very clear notes). */
     var confidence: Float
-        get() = prefs.getFloat("conf", 0.72f)
+        get() = prefs.getFloat("conf", 0.8f)
         set(v) = prefs.edit().putFloat("conf", v.coerceIn(0.5f, 0.95f)).apply()
     /** How long a note must hold before it counts (ms). */
     var settleMs: Int
-        get() = prefs.getInt("settle", 60)
+        get() = prefs.getInt("settle", 80)
         set(v) = prefs.edit().putInt("settle", v.coerceIn(20, 250)).apply()
     /** How far the voice must move, steadily, to change note (cents): higher holds on through slides and vibrato. */
     var stickCents: Int
-        get() = prefs.getInt("stick", 70)
+        get() = prefs.getInt("stick", 75)
         set(v) = prefs.edit().putInt("stick", v.coerceIn(50, 95)).apply()
     /** The shortest note kept (ms). */
     var shortestMs: Int
-        get() = prefs.getInt("shortest", 110)
+        get() = prefs.getInt("shortest", 130)
         set(v) = prefs.edit().putInt("shortest", v.coerceIn(40, 400)).apply()
-    fun resetDetection() { confidence = 0.72f; settleMs = 60; stickCents = 70; shortestMs = 110 }
+    fun resetDetection() { confidence = 0.8f; settleMs = 80; stickCents = 75; shortestMs = 130 }
     var octave: Int
         get() = prefs.getInt("octave", 0)
         set(v) = prefs.edit().putInt("octave", v.coerceIn(-2, 2)).apply()
@@ -130,6 +135,13 @@ object Noodler {
     private const val MAXF = 36000
     private val fT = DoubleArray(MAXF); private val fM = FloatArray(MAXF); private val fDb = FloatArray(MAXF)
     @Volatile private var fN = 0
+    /** The take, at half the sample rate (up to 2 minutes), and when it started on the listener's clock. */
+    private var take = FloatArray(0)
+    @Volatile private var takeN = 0
+    private var takeStartMs = -1.0
+    /** The careful listen-back: how far through it is (0..1), and whether it's running. */
+    @Volatile var working = false; private set
+    @Volatile var workProgress = 0f; private set
 
     private class N(var note: Int, val startMs: Double, var endMs: Double, val vel: Float) { var pSum = 0.0; var pW = 0.0 }
     private val notes = ArrayList<N>()
@@ -150,6 +162,8 @@ object Noodler {
         runMode = asMode; target = targetEngine()
         notes.clear(); onsets.clear(); phase = 0; beatMs = 0.0; downbeatMs = 0.0
         beatsLit = 0; countHint = ""; levelDb = -120f; peakDb = -120f; fN = 0
+        if (asMode != Mode.LIVE && take.isEmpty()) take = FloatArray((SR / 2) * 120)
+        takeN = 0; takeStartMs = -1.0
         t0 = System.nanoTime()
         Audio.noodleSource = input
         Studio.noodlerListening = true
@@ -181,12 +195,15 @@ object Noodler {
         Audio.noodleSource = -1
         Studio.noodlerListening = false
         noteNow = -1
-        when (runMode) {
-            Mode.CAPTURE -> finishCapture()
-            Mode.FORGE -> finishForge()
-            Mode.LIVE -> Studio.message("Noodler stopped")
-        }
+        if (runMode == Mode.LIVE) { Studio.message("Noodler stopped"); changed(); return }
+        // the careful listen-back takes a moment: off the main thread, with its progress for the screen
+        working = true; workProgress = 0f
         changed()
+        Thread({
+            try { if (runMode == Mode.CAPTURE) finishCapture() else finishForge() }
+            catch (e: Exception) { main.post { if (runMode == Mode.CAPTURE) onCaptured?.invoke(null, "Something went wrong working out the notes. Try again.") else onForged?.invoke(null, "Something went wrong working out the notes. Try again.") } }
+            finally { working = false; changed() }
+        }, "Noodler listen-back").start()
     }
 
     private fun changed() = main.post { onChange?.invoke(); Studio.changed() }
@@ -205,6 +222,7 @@ object Noodler {
         // how far off concert pitch the person is overall (everything a little flat or sharp),
         // as the average of where pitches sit between semitones (on a circle, so +0.5 and -0.5 meet)
         var tx = 0.0; var ty = 0.0
+        var rp = Audio.noodleWrite
         while (active) {
             val now = (System.nanoTime() - t0) / 1e6
             // the newest ~43 ms, at half the sample rate
@@ -214,6 +232,15 @@ object Noodler {
             val rms = sqrt(e / win.size)
             val db = if (rms > 1e-6f) 20f * log10(rms) else -120f
             levelDb = db; if (db > peakDb) peakDb = db
+            // keep the take (Forge: from the end of the count) at half the sample rate
+            if (runMode != Mode.LIVE && (runMode != Mode.FORGE || phase == 1)) {
+                var avail = (w - rp) and 16383
+                if (avail > 16000) { rp = (w - 16000) and 16383; avail = 16000 }
+                if (takeStartMs < 0) takeStartMs = now - avail * 1000.0 / SR
+                var k = takeN
+                while (avail >= 2 && k < take.size) { take[k++] = (Audio.noodleRing[rp] + Audio.noodleRing[(rp + 1) and 16383]) * 0.5f; rp = (rp + 2) and 16383; avail -= 2 }
+                takeN = k
+            } else rp = w
             // Forge's count-in: sudden jumps in loudness are its beats
             if (runMode == Mode.FORGE && phase == 0) {
                 if (db > sensitivity && db - envFloor > 9f && now - lastOnset > 160) { lastOnset = now; onsets += now; checkCount() }
@@ -315,10 +342,19 @@ object Noodler {
     private var lastCents = 0
     /** Work out the notes from the looks taken since `fromMs`, carefully, and make them the notes. */
     private fun settleNotes(fromMs: Double, mask: Int) {
-        val n = fN
-        var s = 0; while (s < n && fT[s] < fromMs) s++
-        val r = NoteSegmenter.segment(fT.copyOfRange(s, n), fM.copyOfRange(s, n), fDb.copyOfRange(s, n), n - s, mask,
-            minMs = shortestMs.toDouble(), settleMs = settleMs.toDouble(), stick = stickCents / 100f)
+        val r = if (takeN > SR) {
+            // the careful way: listen to the whole take again
+            val tr = TakeAnalyzer.track(take, takeN, SR / 2f, takeStartMs, sensitivity, confidence, octave) { workProgress = it * 0.95f }
+            var s = 0; while (s < tr.n && tr.t[s] < fromMs) s++
+            NoteSegmenter.segment(tr.t.copyOfRange(s, tr.n), tr.m.copyOfRange(s, tr.n), tr.db.copyOfRange(s, tr.n), tr.n - s, mask,
+                minMs = shortestMs.toDouble(), settleMs = settleMs.toDouble(), stick = stickCents / 100f)
+        } else {
+            val n = fN
+            var s = 0; while (s < n && fT[s] < fromMs) s++
+            NoteSegmenter.segment(fT.copyOfRange(s, n), fM.copyOfRange(s, n), fDb.copyOfRange(s, n), n - s, mask,
+                minMs = shortestMs.toDouble(), settleMs = settleMs.toDouble(), stick = stickCents / 100f)
+        }
+        workProgress = 1f
         lastCents = r.cents
         synchronized(notes) { notes.clear(); for (x in r.notes) notes += N(x.note, x.startMs, x.endMs, x.vel) }
     }
